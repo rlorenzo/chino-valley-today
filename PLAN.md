@@ -285,6 +285,14 @@ type, status, premises_address, primary_name}. source_url = per-license detail p
 - Chino PD: releases flow through the city CivicAlerts feed (covered by 0.3) - verify
   and note the category ID. If PD has a separate Nixle/social-only channel, note it
   as a gap rather than scraping social platforms.
+  [AMENDED 2026-08-12, decision]: agency-operated notification channels (Nixle)
+  are recognized as PRIMARY sources - they are the department's official press
+  channel, unlike user-generated platforms (Facebook/Nextdoor), which stay
+  excluded. HOWEVER, Everbridge's Nixle ToS expressly prohibits scraping the
+  web pages (search engines excepted), so ingestion is via SUBSCRIPTION
+  (email delivery to a mailbox we control - the service's intended use), not
+  page scraping. Cited source_url = the nixle.us permalink carried in the
+  message. See SOURCES.md sbsheriff-news for the evidence trail.
 - Chino Hills: SB County Sheriff news site (wp.sbcounty.gov/sheriff/news/ or current
   equivalent) - find station-tagged releases, check for WordPress RSS
   (`/feed/` suffix usually works). Filter to Chino Hills station.
@@ -398,7 +406,10 @@ an explicit per-item acknowledgment.
 - Editorial rules file (EDITORIAL.md): Champion and all secondary press link-only
   with at most one-line framing; corrections policy (strikethrough + note, never
   silent edits); private-person naming policy; no characterization of contested
-  CVUSD items - votes, quotes, links only.
+  CVUSD items - votes, quotes, links only. Source-channel policy: agency-operated
+  notification channels (e.g. Sheriff's Nixle) are primary sources ingested via
+  subscription per their ToS; user-generated social platforms remain excluded.
+  All sheriff/PD content is Tier C when it names private individuals.
 
 ## Phase 2 (outline): Static site + droplet
 
