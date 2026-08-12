@@ -60,7 +60,9 @@ export async function chat(
       throw err;
     }
     if ((res.status === 429 || res.status >= 500) && attempt <= 4) {
-      await new Promise((r) => setTimeout(r, attempt * 20_000));
+      // Rate limits are per-minute token windows; short waits burn retries
+      // inside the same window.
+      await new Promise((r) => setTimeout(r, attempt * 45_000));
       continue;
     }
     if (!res.ok) {

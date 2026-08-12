@@ -59,7 +59,17 @@ const gen = await chat(
   ],
   { maxTokens: 4096 }
 );
-let draftMd = gen.content.trim();
+// The generator wobbles between citation syntaxes across samples ([url] vs
+// [label](url)). A bare bracketed URL is an unambiguous citation — normalize
+// it to the required markdown-link syntax rather than holding a good draft
+// over formatting. Gates still verify the URL against the allowlist.
+function normalizeCitations(md: string): string {
+  return md
+    .replace(/\[(https?:\/\/[^\]\s]+)\]\((https?:\/\/[^)\s]+)\)/g, (_m, _a, b) => `[source](${b})`)
+    .replace(/\[(https?:\/\/[^\]\s]+)\](?!\()/g, (_m, url) => `[source](${url})`);
+}
+
+let draftMd = normalizeCitations(gen.content.trim());
 console.log(`Draft: ${draftMd.length} chars from ${gen.model} (${JSON.stringify(gen.usage ?? {})})`);
 
 const slugBody = bundle.bodyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -76,28 +86,33 @@ console.log(`Gate 1: ${gateReport.pass ? 'PASS' : `FAIL (${gateReport.failures.l
 // then re-gate. Still failing after that -> held for human review.
 if (!gateReport.pass) {
   console.log('Repair pass: sending Gate 1 failures back to the generator...');
+  // Slim payload: the repair only needs the draft, the failures, and the
+  // citable URL list — resending the full bundle costs ~75k tokens and trips
+  // per-minute rate limits when it follows the generation call.
   const repair = await chat(
     'generator',
     [
       { role: 'system', content: GENERATOR_SYSTEM },
-      { role: 'user', content: renderBundleForPrompt(bundle) },
-      { role: 'assistant', content: draftMd },
       {
         role: 'user',
         content:
-          'Your draft failed deterministic validation. Fix ONLY the issues listed below and change nothing else. ' +
-          'If a link URL is "not in the allowed source list", replace it with the closest URL that IS in the ' +
-          'citable list, copied character-for-character. If a number "does not appear in the input corpus", ' +
-          'either quote the number exactly as a source writes it or remove the claim. Return the complete ' +
-          'corrected draft in the same format.\n\nFailures:\n' +
-          gateReport.failures.map((f) => `- [${f.gate}] ${f.detail}`).join('\n'),
+          'A draft you wrote failed deterministic validation. Fix ONLY the issues listed below and change ' +
+          'nothing else. If a link URL is "not in the allowed source list", replace it with the closest URL ' +
+          'that IS in the citable list below, copied character-for-character. If a number "does not appear in ' +
+          'the input corpus", remove that claim entirely (you do not have the sources in this message — do not ' +
+          'guess a replacement number). If a block "has no citation link", add a link from the citable list ' +
+          'that the surrounding claims already use, or delete the block. Return the complete corrected draft ' +
+          'in the same format.\n\n' +
+          `Citable URLs:\n${bundle.allowedUrls.map((u) => `- ${u}`).join('\n')}\n\n` +
+          `Failures:\n${gateReport.failures.map((f) => `- [${f.gate}] ${f.detail}`).join('\n')}\n\n` +
+          `DRAFT:\n\n${draftMd}`,
       },
     ],
     { maxTokens: 4096 }
   );
   const originalDraft = draftMd;
   const originalReport = gateReport;
-  draftMd = repair.content.trim();
+  draftMd = normalizeCitations(repair.content.trim());
   gateReport = runGate1();
   console.log(
     `Gate 1 after repair: ${gateReport.pass ? 'PASS' : `FAIL (${gateReport.failures.length} failures)`}`

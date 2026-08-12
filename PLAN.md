@@ -26,9 +26,16 @@ reports/notes/. `npm run poc` regenerates reports/poc.html.
   admin dashboard (`npm run admin` → 127.0.0.1:8787); LLM client on
   DigitalOcean Inference (key in .env, `npm run llm:check`).
 - IN PROGRESS: first live Tier B recap (chino-legistar:2026-07-21 — full
-  bundle: 66 agenda items, 30 votes, 586 transcript segments). Generation +
-  Gate 1 pass reliably; blocked twice on judge-side platform limits
-  (429s), retry/backoff + backup judge now in place.
+  bundle: 66 agenda items, 30 votes, 586 transcript segments). Resume with:
+  `node src/pipeline/recap.ts chino-legistar:2026-07-21` (wait ~5 min after
+  any 429 — per-key per-minute token limits; each run costs ~2-3 cents).
+  Fixed so far across iterations: citation-shorthand prompt bug, keep-best
+  repair guard, slim repair payload, undici headers timeout, 429/network
+  retries, glm-5.2 backup judge, bare-[url] citation normalization before
+  gating. Draft CONTENT has been consistently good since run 1 (motions,
+  vote switches, quotes with timestamps); every hold has been formatting or
+  platform limits. Latest draft is in content/held/ with gate report
+  attached — reviewable in the admin dashboard (`npm run admin`).
 - TODO (Phase 1 remainder): recaps for the other bundle targets (Chino Hills
   7/14, CVUSD 7/16); business-tracker narrative (Tier B); first weekly audit
   pass through the dashboard; Nixle email ingester (waiting on mailbox
