@@ -1,5 +1,5 @@
-// npm run llm:check — verify the DO Gradient catalog against configured models
-// (PLAN.md: "verify catalog at build time - it moves fast").
+// npm run llm:check — verify configured model names against the DigitalOcean
+// Inference catalog.
 import { LLM_TASKS, apiKeyFor } from './config.ts';
 
 const endpoint = LLM_TASKS.generator.endpoint;

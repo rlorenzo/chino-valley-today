@@ -179,8 +179,11 @@ export function assembleBundle(db: Db, sourceKey: string, isoDate: string): Meet
 export function renderBundleForPrompt(b: MeetingBundle, opts: { maxTranscriptChars?: number } = {}): string {
   const lines: string[] = [];
   lines.push(`# Meeting: ${b.bodyName} — ${b.meetingDate}`);
-  lines.push('', '## Citable sources (the ONLY URLs you may link):');
-  b.allowedUrls.forEach((u, i) => lines.push(`[S${i + 1}] ${u}`));
+  lines.push(
+    '',
+    '## Citable source URLs (the ONLY URLs you may link; cite as inline markdown links, never shorthand):'
+  );
+  b.allowedUrls.forEach((u) => lines.push(`- ${u}`));
 
   if (b.agendaItems.length) {
     lines.push('', '## Agenda items (verbatim):');

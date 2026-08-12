@@ -14,13 +14,13 @@ import { createPost, transitionPost } from './posts.ts';
 const GENERATOR_SYSTEM = `You write meeting recaps for Chino Valley Today, a local news brief for Chino and Chino Hills, CA. You are extractive, not creative: you may state ONLY facts present in the provided source materials.
 
 Hard rules (violations are rejected by machine gates downstream):
-1. Every paragraph and every fact-bearing list item ends with one or more markdown links, and every link URL must be copied EXACTLY from the "Citable sources" list. Cite the most specific source for each claim (agenda item permalink for agenda facts, timestamped transcript URL for spoken material).
+1. Every paragraph and every fact-bearing list item ends with one or more INLINE markdown links: [short label](full URL copied EXACTLY from the citable source list). NEVER cite with shorthand — no [S1], no [1], no footnotes; a bare reference tag is not a citation and the draft will be rejected. Cite the most specific source for each claim (agenda item permalink for agenda facts, timestamped transcript URL for spoken material; vote claims cite the vote's own source link).
 2. Numbers (votes, dollar amounts, dates, times, addresses) appear exactly as written in the sources - never compute, convert, or estimate.
 3. Names: use a person's name ONLY if it appears in agenda items or recorded votes. The transcript is machine-generated and garbles names - if a name appears only in the transcript, refer to the speaker by role instead ("a resident", "a staff member"). Never guess spellings.
 4. No characterization: no motives, tone, "sides", or adjectives of controversy. For contested items: what was decided, recorded votes, and direct quotes only.
 5. If the materials do not answer a question a reader would have, omit it - do not infer.
 
-Format: markdown. Start with a one-paragraph lede (what happened, when, which body). Then 2-5 short sections for the most consequential items (### headings, verbatim-faithful). End with a "Votes" section if recorded votes are present. 300-600 words. No title line - the pipeline adds it.`;
+Format: markdown. Start with a one-paragraph lede (what happened, when, which body). Then 2-5 short sections for the most consequential items. ### headings must be verbatim excerpts of the agenda item title (truncation is fine, re-wording and re-capitalizing are not - an invented Title Case phrase reads as a proper name and fails the name gate). End with a "Votes" section if recorded votes are present. 300-600 words. No title line - the pipeline adds it.`;
 
 const args = process.argv.slice(2);
 const db = openDb();
@@ -59,7 +59,7 @@ const gen = await chat(
   ],
   { maxTokens: 4096 }
 );
-const draftMd = gen.content.trim();
+let draftMd = gen.content.trim();
 console.log(`Draft: ${draftMd.length} chars from ${gen.model} (${JSON.stringify(gen.usage ?? {})})`);
 
 const slugBody = bundle.bodyName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -67,12 +67,48 @@ const slug = `${bundle.meetingDate}-${slugBody}-recap`;
 const title = `Recap: ${bundle.bodyName} meeting of ${bundle.meetingDate}`;
 
 // Gate 1 — deterministic validators (fail = hold, no LLM judge needed).
-const gateReport = validateDraft({
-  bodyMd: draftMd,
-  allowedUrls: bundle.allowedUrls,
-  inputCorpus: bundle.inputCorpus,
-});
+const runGate1 = () =>
+  validateDraft({ bodyMd: draftMd, allowedUrls: bundle.allowedUrls, inputCorpus: bundle.inputCorpus });
+let gateReport = runGate1();
 console.log(`Gate 1: ${gateReport.pass ? 'PASS' : `FAIL (${gateReport.failures.length} failures)`}`);
+
+// One repair pass: feed the deterministic failures back to the generator,
+// then re-gate. Still failing after that -> held for human review.
+if (!gateReport.pass) {
+  console.log('Repair pass: sending Gate 1 failures back to the generator...');
+  const repair = await chat(
+    'generator',
+    [
+      { role: 'system', content: GENERATOR_SYSTEM },
+      { role: 'user', content: renderBundleForPrompt(bundle) },
+      { role: 'assistant', content: draftMd },
+      {
+        role: 'user',
+        content:
+          'Your draft failed deterministic validation. Fix ONLY the issues listed below and change nothing else. ' +
+          'If a link URL is "not in the allowed source list", replace it with the closest URL that IS in the ' +
+          'citable list, copied character-for-character. If a number "does not appear in the input corpus", ' +
+          'either quote the number exactly as a source writes it or remove the claim. Return the complete ' +
+          'corrected draft in the same format.\n\nFailures:\n' +
+          gateReport.failures.map((f) => `- [${f.gate}] ${f.detail}`).join('\n'),
+      },
+    ],
+    { maxTokens: 4096 }
+  );
+  const originalDraft = draftMd;
+  const originalReport = gateReport;
+  draftMd = repair.content.trim();
+  gateReport = runGate1();
+  console.log(
+    `Gate 1 after repair: ${gateReport.pass ? 'PASS' : `FAIL (${gateReport.failures.length} failures)`}`
+  );
+  // A repair that makes things worse gets discarded — hold the better draft.
+  if (!gateReport.pass && gateReport.failures.length >= originalReport.failures.length) {
+    console.log('Repair did not improve the draft; keeping the original for review.');
+    draftMd = originalDraft;
+    gateReport = originalReport;
+  }
+}
 
 const post = createPost(db, {
   slug,

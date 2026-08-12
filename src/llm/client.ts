@@ -1,5 +1,11 @@
-// Minimal OpenAI-compatible chat client for DO Gradient serverless inference.
+// Minimal OpenAI-compatible chat client for DigitalOcean serverless inference.
+import { Agent, fetch as undiciFetch } from 'undici';
 import { LLM_TASKS, apiKeyFor, type LlmTask } from './config.ts';
+
+// Non-streaming completions on large prompts can take minutes before the
+// server sends response headers; undici's default headersTimeout (5 min)
+// kills the judge call. One shared agent with generous limits.
+const llmAgent = new Agent({ headersTimeout: 900_000, bodyTimeout: 900_000 });
 
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -15,7 +21,7 @@ export interface ChatResult {
 export async function chat(
   task: LlmTask,
   messages: ChatMessage[],
-  opts: { maxTokens?: number; jsonObject?: boolean } = {}
+  opts: { maxTokens?: number; jsonObject?: boolean; timeoutMs?: number } = {}
 ): Promise<ChatResult> {
   const cfg = LLM_TASKS[task];
   const body: Record<string, unknown> = {
@@ -29,17 +35,32 @@ export async function chat(
   let attempt = 0;
   for (;;) {
     attempt++;
-    const res = await fetch(`${cfg.endpoint}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        authorization: `Bearer ${apiKeyFor(task)}`,
-        'content-type': 'application/json',
-      },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(300_000),
-    });
-    if ((res.status === 429 || res.status >= 500) && attempt <= 2) {
-      await new Promise((r) => setTimeout(r, attempt * 10_000));
+    let res;
+    try {
+      res = await undiciFetch(`${cfg.endpoint}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          authorization: `Bearer ${apiKeyFor(task)}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(opts.timeoutMs ?? 600_000),
+        dispatcher: llmAgent,
+      });
+    } catch (err) {
+      // Network-level failure (connection reset, DNS, TLS read) — retry with
+      // backoff just like an overloaded-platform response.
+      if (attempt <= 4) {
+        console.log(
+          `LLM ${task} network error (attempt ${attempt}): ${err instanceof Error ? (err.cause instanceof Error ? err.cause.message : err.message) : err} — retrying`
+        );
+        await new Promise((r) => setTimeout(r, attempt * 15_000));
+        continue;
+      }
+      throw err;
+    }
+    if ((res.status === 429 || res.status >= 500) && attempt <= 4) {
+      await new Promise((r) => setTimeout(r, attempt * 20_000));
       continue;
     }
     if (!res.ok) {

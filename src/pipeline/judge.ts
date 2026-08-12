@@ -5,6 +5,26 @@ import { chat, parseJsonResponse } from '../llm/client.ts';
 import type { MeetingBundle } from './bundle.ts';
 import { renderBundleForPrompt } from './bundle.ts';
 
+// The judge gets all agenda items and votes, but only the transcript segments
+// the draft actually cites (±1 neighbor for context) — a 397B judge over the
+// full transcript is slow and expensive without adding rigor: uncited claims
+// fail Gate 1 before the judge ever runs, so every claim it must verify
+// already points at a specific source.
+function bundleForJudge(bundle: MeetingBundle, draftMd: string): MeetingBundle {
+  const cited = new Set<string>();
+  for (const m of draftMd.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)) cited.add(m[1]);
+  const keep = new Set<number>();
+  bundle.transcriptSegments.forEach((seg, i) => {
+    if (cited.has(seg.sourceUrl)) {
+      keep.add(i - 1);
+      keep.add(i);
+      keep.add(i + 1);
+    }
+  });
+  const transcriptSegments = bundle.transcriptSegments.filter((_, i) => keep.has(i));
+  return { ...bundle, transcriptSegments };
+}
+
 export interface JudgeVerdict {
   overall: 'pass' | 'fail';
   faithfulness_score: number; // 0..1
@@ -24,6 +44,7 @@ export interface JudgeVerdict {
     legal_matter: boolean;
   };
   reasons: string[];
+  judged_by?: string;
 }
 
 export function anyContentFlag(v: JudgeVerdict): boolean {
@@ -47,18 +68,25 @@ Return ONLY a JSON object:
 overall = "fail" if ANY claim is unsupported or distorted, or faithfulness_score < 0.9.`;
 
 export async function judgeDraft(draftMd: string, bundle: MeetingBundle): Promise<JudgeVerdict> {
-  const res = await chat(
-    'judge',
-    [
-      { role: 'system', content: JUDGE_SYSTEM },
-      {
-        role: 'user',
-        content: `SOURCE MATERIALS:\n\n${renderBundleForPrompt(bundle)}\n\n---\n\nDRAFT:\n\n${draftMd}`,
-      },
-    ],
-    { jsonObject: true, maxTokens: 8192 }
-  );
+  const messages = [
+    { role: 'system' as const, content: JUDGE_SYSTEM },
+    {
+      role: 'user' as const,
+      content: `SOURCE MATERIALS:\n\n${renderBundleForPrompt(bundleForJudge(bundle, draftMd))}\n\n---\n\nDRAFT:\n\n${draftMd}`,
+    },
+  ];
+  const opts = { jsonObject: true, maxTokens: 8192, timeoutMs: 900_000 };
+  let res;
+  try {
+    res = await chat('judge', messages, opts);
+  } catch (err) {
+    console.log(
+      `Primary judge unavailable (${err instanceof Error ? err.message.slice(0, 120) : err}); using backup judge.`
+    );
+    res = await chat('judge_backup', messages, opts);
+  }
   const v = parseJsonResponse<JudgeVerdict>(res.content);
+  v.judged_by = res.model;
   // Defensive normalization — a malformed verdict must fail closed, not open.
   if (v.overall !== 'pass' && v.overall !== 'fail') v.overall = 'fail';
   if (typeof v.faithfulness_score !== 'number' || Number.isNaN(v.faithfulness_score)) v.faithfulness_score = 0;
