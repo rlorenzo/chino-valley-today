@@ -9,6 +9,7 @@ export const SCRAPERS: Record<string, string> = {
   'chinohills-swagit': './scrapers/chinohills-swagit.ts',
   'cvusd-board': './scrapers/cvusd-board.ts',
   'youtube-captions': './scrapers/youtube-captions.ts',
+  'chino-youtube-captions': './scrapers/chino-youtube.ts',
   'nws-alerts': './scrapers/nws-alerts.ts',
   'abc-licenses': './scrapers/abc-licenses.ts',
   'sbsheriff-news': './scrapers/sbsheriff-news.ts',

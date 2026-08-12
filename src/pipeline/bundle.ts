@@ -62,7 +62,8 @@ function itemsFor(db: Db, sourceKey: string, itemType: string, isoDate: string):
 // target declares which source keys feed which section.
 const TARGET_SHAPES: Array<{
   sourceKey: string; // primary key used in targetKey + display
-  bodyName: string;
+  bodyName: string; // default; refined from agenda-item meta when available
+  cityPrefix?: string;
   agenda: { key: string; type: string } | null;
   votes: { key: string; type: string } | null;
   transcript: { key: string; type: string } | null;
@@ -70,13 +71,15 @@ const TARGET_SHAPES: Array<{
   {
     sourceKey: 'chino-legistar',
     bodyName: 'Chino City Council',
+    cityPrefix: 'Chino',
     agenda: { key: 'chino-legistar', type: 'agenda_item' },
     votes: { key: 'chino-legistar', type: 'vote' },
-    transcript: null, // Chino video/captions not ingested in Phase 0
+    transcript: { key: 'chino-youtube-captions', type: 'transcript_segment' }, // chinotv3 channel
   },
   {
     sourceKey: 'chinohills-swagit',
     bodyName: 'Chino Hills City Council',
+    cityPrefix: 'Chino Hills',
     agenda: { key: 'chinohills-agendas', type: 'agenda_item' },
     votes: null, // Chino Hills votes are in minutes (robots-blocked Laserfiche)
     transcript: { key: 'chinohills-swagit', type: 'transcript_segment' },
@@ -134,10 +137,22 @@ export function assembleBundle(db: Db, sourceKey: string, isoDate: string): Meet
     : [];
   if (agendaItems.length === 0 && transcriptSegments.length === 0) return null;
 
+  // The shape's bodyName is a default: a date can belong to a different body
+  // on the same platform (Legistar hosts Planning Commission too), so prefer
+  // the body name the agenda items themselves carry.
+  let bodyName = shape.bodyName;
+  const metaBody = agendaItems[0]?.meta.eventBodyName ?? agendaItems[0]?.meta.body;
+  if (typeof metaBody === 'string' && metaBody.trim()) {
+    const name = metaBody.trim();
+    bodyName = shape.cityPrefix && !name.toLowerCase().includes(shape.cityPrefix.toLowerCase())
+      ? `${shape.cityPrefix} ${name}`
+      : name;
+  }
+
   const allowedUrls = [
     ...new Set([...agendaItems, ...votes, ...transcriptSegments].map((i) => i.sourceUrl)),
   ];
-  const corpusParts: string[] = [shape.bodyName, isoDate];
+  const corpusParts: string[] = [bodyName, isoDate];
   for (const it of [...agendaItems, ...votes, ...transcriptSegments]) {
     if (it.title) corpusParts.push(it.title);
     if (it.body) corpusParts.push(it.body);
@@ -148,7 +163,7 @@ export function assembleBundle(db: Db, sourceKey: string, isoDate: string): Meet
   return {
     targetKey: `${shape.sourceKey}:${isoDate}`,
     sourceKey: shape.sourceKey,
-    bodyName: shape.bodyName,
+    bodyName,
     meetingDate: isoDate,
     agendaItems,
     votes,

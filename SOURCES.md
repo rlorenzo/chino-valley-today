@@ -64,6 +64,13 @@ whenever a source changes behavior.
 - **Link-back depth:** timestamp-level for video, document-level for agenda PDFs (listing-level items).
 - **Reliability guess:** high for YouTube captions; medium for the meetings page (CMS re-platform risk — it already moved once).
 
+### chino-youtube-captions — City of Chino YouTube (chinotv3)
+- **Added 2026-08-12** after reviewing cityofchino.org/167/Stay-Connected: the city's official channel posts full council meetings ("City of Chino Council Meeting - <date>") and study sessions, mixed with promo content (filtered by title). Auto-captions via yt-dlp, same shared machinery as the CVUSD channel (src/scrapers/youtube-shared.ts).
+- **Why it matters:** completes the Chino recap bundle — Legistar gives agenda+votes, this gives the timestamped transcript (e.g. 2026-07-21 council meeting: 66 agenda items + 30 votes + 586 segments).
+- **Quirks:** auto-generated ASR only (no manual caption track) — proper-name garbling applies, Gate 1c is the mitigation; meeting dates parsed from video titles join to Legistar dates.
+- **Link-back depth:** timestamp-level (`watch?v=ID&t=Ns`).
+- **Reliability guess:** high (city-operated channel, consistent title format).
+
 ### nws-alerts — National Weather Service alerts
 - **Method:** api.weather.gov JSON API. **Zone CAZ048 covers BOTH Chino and Chino Hills** (PLAN open question 7 answered: the plan's CAZ560 guess was wrong; verified via `/points/33.99,-117.69` and `/points/33.95,-117.73`). County zone CAC071, fire zone CAZ248.
 - **Quirks:** requires User-Agent header; robots.txt is a blanket crawler Disallow — documented public API, fetched with explicit skipRobots + justification. Supports ETag.
