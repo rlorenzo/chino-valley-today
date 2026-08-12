@@ -2,3 +2,7 @@ node_modules/
 data/
 .env
 *.log
+# pipeline working state; only published content is tracked
+content/queue/
+content/held/
+content/rejected/

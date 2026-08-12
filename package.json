@@ -10,11 +10,17 @@
     "poc": "node src/run-poc.ts",
     "one": "node src/run-one.ts",
     "report": "node src/poc-report.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "llm:check": "node src/llm/check.ts",
+    "tiera": "node src/tiera/run.ts",
+    "recap": "node src/pipeline/recap.ts",
+    "admin": "node src/admin/server.ts",
+    "test": "node --test \"src/gates/**/*.test.ts\""
   },
   "dependencies": {
     "cheerio": "^1.2.0",
     "fast-xml-parser": "^5.10.1",
+    "hono": "^4.13.1",
     "pdf-parse": "^2.4.5"
   },
   "devDependencies": {

@@ -72,6 +72,10 @@ export function openDb(path: string = DB_PATH) {
   );
   if (!docCols.includes('location')) db.exec('ALTER TABLE documents ADD COLUMN location TEXT');
   if (!docCols.includes('event_key')) db.exec('ALTER TABLE documents ADD COLUMN event_key TEXT');
+  const postCols = (db.prepare('PRAGMA table_info(posts)').all() as Array<{ name: string }>).map(
+    (c) => c.name
+  );
+  if (!postCols.includes('published_via')) db.exec('ALTER TABLE posts ADD COLUMN published_via TEXT');
 
   function upsertSource(s: { key: string; name: string; base_url: string; method: string }): number {
     db.prepare(

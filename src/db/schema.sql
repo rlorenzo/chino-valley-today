@@ -25,6 +25,34 @@ CREATE TABLE IF NOT EXISTS documents (
   UNIQUE(url, content_hash)
 );
 
+-- Phase 1: pipeline state. Post CONTENT lives in content/<status>/<slug>.md
+-- (markdown + frontmatter, Astro-ready); these tables hold state + audit.
+CREATE TABLE IF NOT EXISTS posts (
+  id INTEGER PRIMARY KEY,
+  slug TEXT UNIQUE NOT NULL,
+  post_type TEXT NOT NULL,           -- 'meeting_preview','meeting_recap','business_tracker','alert','news_digest'
+  tier TEXT NOT NULL CHECK (tier IN ('A','B','C')),
+  status TEXT NOT NULL DEFAULT 'queued',  -- 'queued','held','published','rejected'
+  file_path TEXT NOT NULL,           -- content/... location (moves with status)
+  meeting_date TEXT,
+  gates JSON,                        -- Gate 1 validator results
+  judge JSON,                        -- Gate 2 structured verdict
+  source_count INTEGER,
+  held_reason TEXT,
+  published_via TEXT,                -- 'auto' | 'manual' (set on publish)
+  created_at TEXT NOT NULL,
+  published_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id INTEGER PRIMARY KEY,
+  post_id INTEGER NOT NULL REFERENCES posts(id),
+  iso_week TEXT NOT NULL,            -- sample seed week, e.g. '2026-W33'
+  verdict TEXT NOT NULL,             -- 'pass','fail'
+  notes TEXT,
+  audited_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS items (
   id INTEGER PRIMARY KEY,
   document_id INTEGER NOT NULL REFERENCES documents(id),
