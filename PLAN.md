@@ -10,6 +10,38 @@ Do not build ahead of the current phase.
 
 ---
 
+## Status (updated 2026-08-12)
+
+**Phase 0: COMPLETE** (commit effdfed). 12 sources ingesting (11 planned + City
+of Chino YouTube captions added after launch), 2,300+ items, all acceptance
+criteria verified, all 7 open questions answered — see SOURCES.md and
+reports/notes/. `npm run poc` regenerates reports/poc.html.
+
+**Phase 1: BUILT, live-tuning in progress** (commits 2598a8d..6bf3f1d).
+- DONE: EDITORIAL.md; post lifecycle (content/{queue,held,published,rejected} +
+  posts/audit_log tables); Tier A generators (`npm run tiera` — 5 real posts
+  published, all passing Gate 1 calibration); Gate 1 validators (34 tests);
+  Gate 2 cross-family judge (qwen3.5 primary, glm-5.2 backup) with Tier C
+  flag routing; Tier B recap pipeline (`npm run recap`) with one repair pass;
+  admin dashboard (`npm run admin` → 127.0.0.1:8787); LLM client on
+  DigitalOcean Inference (key in .env, `npm run llm:check`).
+- IN PROGRESS: first live Tier B recap (chino-legistar:2026-07-21 — full
+  bundle: 66 agenda items, 30 votes, 586 transcript segments). Generation +
+  Gate 1 pass reliably; blocked twice on judge-side platform limits
+  (429s), retry/backoff + backup judge now in place.
+- TODO (Phase 1 remainder): recaps for the other bundle targets (Chino Hills
+  7/14, CVUSD 7/16); business-tracker narrative (Tier B); first weekly audit
+  pass through the dashboard; Nixle email ingester (waiting on mailbox
+  subscription — see amended Task 0.9); investigate DO prompt caching not
+  engaging (cache_read_input_tokens always 0).
+- OPEN DECISIONS: CVUSD agenda-PDF robots exception (scoped skipRobots vs
+  listing-only); 2 stale duplicate item rows (cleanup SQL in
+  reports/notes/chino-news-rss.md).
+
+**Phase 2/3: not started** (static site + droplet; podcast + growth).
+
+---
+
 ## Guiding constraints
 
 1. **Provenance is non-negotiable.** Every published claim links to a primary source
