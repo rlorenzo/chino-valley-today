@@ -390,6 +390,19 @@ describe('Gate 1c — proper-name whitelist', () => {
     assert.ok(failuresFor(report.failures, 'proper_names').some((f) => f.detail.includes('Maria Lopez')));
   });
 
+  test('fails: composite-name bypass via comma after the link (Codex follow-up finding)', () => {
+    // Non-sentence-ending punctuation after a link is a clause continuation,
+    // not citation position — the label must still splice and scan strictly.
+    const input: GateInput = {
+      bodyMd: `Maria [Lopez](https://example.com/a), a resident, spoke during public comment. [Agenda](https://example.com/a)`,
+      allowedUrls: ['https://example.com/a'],
+      inputCorpus: 'Maria attended the workshop. Councilmember Lopez was absent.',
+    };
+    const report = validateDraft(input);
+    assert.equal(report.pass, false);
+    assert.ok(failuresFor(report.failures, 'proper_names').some((f) => f.detail.includes('Maria Lopez')));
+  });
+
   test('fails: garbled name inside a link label is still scanned and caught', () => {
     const input: GateInput = {
       bodyMd: `The board heard the report. [Elise Jukley presentation](https://example.com/a)`,

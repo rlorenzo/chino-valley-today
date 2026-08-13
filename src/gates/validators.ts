@@ -66,9 +66,9 @@ function normalizeUrl(u: string): string {
 //
 // How a label is spliced depends on the link's position, because two failure
 // modes pull in opposite directions:
-// - A link in CITATION position — followed only by punctuation, another
-//   link, or the end of the block — is trailing citation chrome ("...for
-//   six LLMDs [LLMD item](url)."). Its label is set off by newlines (a
+// - A link in CITATION position — followed by SENTENCE-ENDING punctuation
+//   ([.!?]), another link, or the end of the block — is trailing citation
+//   chrome ("...for six LLMDs [LLMD item](url)."). Its label is set off by newlines (a
 //   sentence boundary for the name tokenizer) so it cannot fuse with
 //   adjacent prose into a phantom name like "LLMDs LLMD"; splicing it
 //   seamlessly would erase the bracket the whitespace-gap anti-fusion rule
@@ -77,12 +77,18 @@ function normalizeUrl(u: string): string {
 //   content ("Maria [Lopez](url) spoke"). Its label splices seamlessly so
 //   the reader-visible adjacency stays scanned strictly: a hallucinated
 //   composite name split across a link boundary must still fail as a
-//   whole sequence, not pass on separately-grounded halves.
+//   whole sequence, not pass on separately-grounded halves. This includes
+//   a link followed by a comma/semicolon/colon continuation ("[Lopez](url),
+//   spoke") — non-sentence-ending punctuation means the link is embedded in
+//   the clause, not trailing it (Codex follow-up finding: treating ANY
+//   punctuation as citation position reopened the composite-name bypass).
+//   Nothing is lost by splicing here: post-splice, the surviving punctuation
+//   itself blocks fusion with what FOLLOWS via the whitespace-gap rule.
 // Residual (documented, accepted): a composite name whose final token is a
 // citation-position label ("said Maria [Lopez](url).") scans as separate
 // parts — indistinguishable, without semantics, from the LLMDs false
 // positive. Gate 2's judge still reviews names in the rendered draft.
-const CITATION_TAIL_RE = /^\s*(?:[.,;:!?]|\[|$)/;
+const CITATION_TAIL_RE = /^\s*(?:[.!?]|\[|$)/;
 function stripLinksToText(text: string): string {
   return text
     .replace(/\[([^\]]*)\]\([^)]+\)/g, (m, label: string, offset: number) =>
