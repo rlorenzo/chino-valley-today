@@ -403,6 +403,20 @@ describe('Gate 1c — proper-name whitelist', () => {
     assert.ok(failuresFor(report.failures, 'proper_names').some((f) => f.detail.includes('Maria Lopez')));
   });
 
+  test('fails: composite-name bypass via a decoy second link before a comma (Codex follow-up finding)', () => {
+    // A chain of links is citation position only if the chain TERMINATES
+    // like one; a comma continuation after the chain means the labels are
+    // clause content and must splice and scan strictly.
+    const input: GateInput = {
+      bodyMd: `Maria [Lopez](https://example.com/a) [Source](https://example.com/a), spoke during public comment. [Agenda](https://example.com/a)`,
+      allowedUrls: ['https://example.com/a'],
+      inputCorpus: 'Maria attended the workshop. Councilmember Lopez was absent. Source materials were provided.',
+    };
+    const report = validateDraft(input);
+    assert.equal(report.pass, false);
+    assert.ok(failuresFor(report.failures, 'proper_names').some((f) => f.detail.includes('Maria Lopez')));
+  });
+
   test('fails: garbled name inside a link label is still scanned and caught', () => {
     const input: GateInput = {
       bodyMd: `The board heard the report. [Elise Jukley presentation](https://example.com/a)`,

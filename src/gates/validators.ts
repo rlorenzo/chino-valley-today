@@ -84,15 +84,34 @@ function normalizeUrl(u: string): string {
 //   punctuation as citation position reopened the composite-name bypass).
 //   Nothing is lost by splicing here: post-splice, the surviving punctuation
 //   itself blocks fusion with what FOLLOWS via the whitespace-gap rule.
+//   A chain of links counts as citation position only if the CHAIN
+//   terminates like one — "[A](u) [B](u)." is chrome, but "[A](u) [B](u),
+//   spoke" is not (Codex finding: accepting 'another link' unconditionally
+//   reopened the bypass with a decoy second link).
 // Residual (documented, accepted): a composite name whose final token is a
 // citation-position label ("said Maria [Lopez](url).") scans as separate
 // parts — indistinguishable, without semantics, from the LLMDs false
 // positive. Gate 2's judge still reviews names in the rendered draft.
-const CITATION_TAIL_RE = /^\s*(?:[.!?]|\[|$)/;
+const MD_LINK_HEAD_RE = /^\[[^\]]*\]\([^)]+\)/;
+function isCitationTail(text: string, from: number): boolean {
+  let i = from;
+  for (;;) {
+    while (i < text.length && /\s/.test(text[i])) i++;
+    if (i >= text.length) return true;
+    const ch = text[i];
+    if (ch === '.' || ch === '!' || ch === '?') return true;
+    const link = text.slice(i).match(MD_LINK_HEAD_RE);
+    if (link) {
+      i += link[0].length;
+      continue;
+    }
+    return false;
+  }
+}
 function stripLinksToText(text: string): string {
   return text
     .replace(/\[([^\]]*)\]\([^)]+\)/g, (m, label: string, offset: number) =>
-      CITATION_TAIL_RE.test(text.slice(offset + m.length)) ? `\n${label}\n` : label
+      isCitationTail(text, offset + m.length) ? `\n${label}\n` : label
     )
     .replace(/https?:\/\/\S+/g, '\n');
 }
