@@ -88,10 +88,13 @@ function normalizeUrl(u: string): string {
 //   terminates like one — "[A](u) [B](u)." is chrome, but "[A](u) [B](u),
 //   spoke" is not (Codex finding: accepting 'another link' unconditionally
 //   reopened the bypass with a decoy second link).
-// Residual (documented, accepted): a composite name whose final token is a
-// citation-position label ("said Maria [Lopez](url).") scans as separate
-// parts — indistinguishable, without semantics, from the LLMDs false
-// positive. Gate 2's judge still reviews names in the rendered draft.
+// Residual (documented, accepted): a composite name whose final token(s)
+// are sentence-final citation-position labels scans as separate parts —
+// "said Maria [Lopez](url)." and its chain variant "said Maria
+// [Lopez](url) [source](url)." are indistinguishable, without semantics,
+// from the LLMDs false positive; closing this would mean fusing every
+// trailing label and re-holding good drafts. Gate 2's judge still reviews
+// names in the rendered draft, and Tier B failures fail closed to held/.
 const MD_LINK_HEAD_RE = /^\[[^\]]*\]\([^)]+\)/;
 function isCitationTail(text: string, from: number): boolean {
   let i = from;
