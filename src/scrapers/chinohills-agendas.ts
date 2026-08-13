@@ -227,7 +227,77 @@ function countHtmlTopLevelItems($: cheerio.CheerioAPI): number {
   return maxSeq;
 }
 
-async function run(ctx: ScraperContext): Promise<void> {
+// Fetch one meeting's AgendaQuick page + packet PDF, extract top-level agenda
+// items, cross-check against the HTML rendering, insert. Shared by the default
+// run (most-recent selection) and the targeted backfill mode.
+async function ingestMeeting(ctx: ScraperContext, meeting: AqMeeting): Promise<void> {
+  // Fetch the packet PDF (brief spec: docType 'agenda', meetingDate set, extractPdfText).
+  const detailDoc = await ctx.fetchDocument(meeting.agendaHref, {
+    docType: 'listing',
+    title: `${meeting.bodyName} — ${meeting.dateIso} (Agenda Quick HTML)`,
+    meetingDate: meeting.dateIso,
+  });
+  const $detail = cheerio.load(detailDoc.body.toString('utf8'));
+  const pdfHrefRaw = $detail('a[href$=".pdf"], a[href*=".pdf?"]').attr('href') ?? $detail('a').filter((_, a) => /\.pdf(\?|$)/i.test($detail(a).attr('href') ?? '')).first().attr('href');
+  if (!pdfHrefRaw) {
+    ctx.note(`${meeting.bodyName} ${meeting.dateIso} (seq=${meeting.seq}): no PDF link found on ${meeting.agendaHref} — skipped.`);
+    return;
+  }
+  const pdfUrl = new URL(pdfHrefRaw, meeting.agendaHref).toString();
+  const pdfDoc = await ctx.fetchDocument(pdfUrl, { docType: 'agenda', title: `${meeting.bodyName} — ${meeting.dateIso}`, meetingDate: meeting.dateIso });
+  const { text: pdfText, numPages } = await extractPdfText(pdfDoc.body);
+  const { items, rawMatchCount, stoppedAtNum } = extractSequentialItems(pdfText);
+  const htmlTopLevelCount = countHtmlTopLevelItems($detail);
+
+  ctx.note(
+    `${meeting.bodyName} — ${meeting.dateIso} (seq=${meeting.seq}): packet PDF ${pdfUrl} is ${pdfDoc.body.length.toLocaleString()} bytes / ${numPages} pages (labeled "Agenda" but actually the full packet including backup materials/exhibits — confirmed by comparing size against the much smaller HTML agenda page). Text extraction via pdf-parse is clean prose (no garbling observed; occasional PDF-kerning artifact of extra spaces inside words, e.g. "C ity C ouncil", from certain embedded fonts — cosmetic only). Numbered-item regex found ${rawMatchCount} raw matches total (many are false positives — numbered sub-lists WITHIN backup materials/resolutions restarting their own numbering, e.g. findings "1. 2. 3." inside an attached resolution). Sequential-run heuristic (stop at first non-+1 break) kept only items 1-${stoppedAtNum} as true top-level agenda items. Cross-check against the clean HTML agenda rendering (${meeting.agendaHref}, no backup-material bleed): top-level item count there is ${htmlTopLevelCount}. ${
+      stoppedAtNum === htmlTopLevelCount
+        ? 'MATCH — the heuristic correctly isolated the true top-level item list.'
+        : `MISMATCH (PDF heuristic: ${stoppedAtNum}, HTML: ${htmlTopLevelCount}) — heuristic may be over/under-counting for this meeting; spot-check recommended.`
+    }`
+  );
+
+  for (const item of items) {
+    ctx.insertItem({
+      document_id: pdfDoc.documentId,
+      source_url: `${pdfUrl}#page=${item.page}`,
+      item_type: 'agenda_item',
+      external_id: `${meeting.dateIso}-seq${meeting.seq}-${item.num}`,
+      title: item.title || `Item ${item.num}`,
+      body: item.body,
+      occurred_at: meeting.dateIso,
+      meta: { agendaNumber: item.num, body: meeting.bodyName, seq: meeting.seq, pdfPage: item.page, pdfTotalPages: numPages },
+    });
+  }
+}
+
+// Targeted backfill: `npm run one chinohills-agendas -- YYYY-MM-DD` ingests
+// every meeting with a posted agenda on that exact date, bypassing the default
+// most-recent-council+commission selection. Exists because the selection
+// window is 2 months of listings but only ever ingests the newest meetings —
+// a recap target that has aged out (e.g. rebuilding the data store from
+// scratch after the 2026-08-13 machine reinstall) needs an explicit reach-back.
+async function runBackfill(ctx: ScraperContext, targetDate: string): Promise<void> {
+  const [y, mo] = targetDate.split('-').map((s) => parseInt(s, 10));
+  const listingUrl = `${AQ_BASE}/default.cfm?mt=ALL&month=${mo}&year=${y}`;
+  const listingDoc = await ctx.fetchDocument(listingUrl, { docType: 'listing', title: `Agenda Quick — ${y}-${mo} meetings` });
+  const $listing = cheerio.load(listingDoc.body.toString('utf8'));
+  const matches = parseAqListing($listing).filter((m) => m.dateIso === targetDate);
+  ctx.note(
+    `Backfill ${targetDate}: ${listingUrl} lists ${matches.length} meeting(s) with a posted agenda on that date${
+      matches.length ? ` — ${matches.map((m) => `${m.bodyName} (seq=${m.seq})`).join('; ')}` : ' (nothing to ingest; cancelled meetings and agenda-less rows are excluded by the listing parser)'
+    }.`
+  );
+  for (const meeting of matches) await ingestMeeting(ctx, meeting);
+}
+
+async function run(ctx: ScraperContext, args: string[] = []): Promise<void> {
+  const targetDate = args.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
+  if (targetDate) {
+    await runBackfill(ctx, targetDate);
+    return;
+  }
+
   // --- Step 1: native CivicPlus Agenda Center — confirm it's empty. ---
   const acDoc = await ctx.fetchDocument(AGENDA_CENTER_URL, { docType: 'listing', title: 'Agenda Center (native CivicPlus module)' });
   const $ac = cheerio.load(acDoc.body.toString('utf8'));
@@ -286,44 +356,7 @@ async function run(ctx: ScraperContext): Promise<void> {
   ctx.note(`Selected ${selected.length} meeting(s) for item extraction: ${selected.map((m) => `${m.dateIso} ${m.bodyName} (seq=${m.seq})`).join('; ')}.`);
 
   for (const meeting of selected) {
-    // Fetch the packet PDF (brief spec: docType 'agenda', meetingDate set, extractPdfText).
-    const detailDoc = await ctx.fetchDocument(meeting.agendaHref, {
-      docType: 'listing',
-      title: `${meeting.bodyName} — ${meeting.dateIso} (Agenda Quick HTML)`,
-      meetingDate: meeting.dateIso,
-    });
-    const $detail = cheerio.load(detailDoc.body.toString('utf8'));
-    const pdfHrefRaw = $detail('a[href$=".pdf"], a[href*=".pdf?"]').attr('href') ?? $detail('a').filter((_, a) => /\.pdf(\?|$)/i.test($detail(a).attr('href') ?? '')).first().attr('href');
-    if (!pdfHrefRaw) {
-      ctx.note(`${meeting.bodyName} ${meeting.dateIso} (seq=${meeting.seq}): no PDF link found on ${meeting.agendaHref} — skipped.`);
-      continue;
-    }
-    const pdfUrl = new URL(pdfHrefRaw, meeting.agendaHref).toString();
-    const pdfDoc = await ctx.fetchDocument(pdfUrl, { docType: 'agenda', title: `${meeting.bodyName} — ${meeting.dateIso}`, meetingDate: meeting.dateIso });
-    const { text: pdfText, numPages } = await extractPdfText(pdfDoc.body);
-    const { items, rawMatchCount, stoppedAtNum } = extractSequentialItems(pdfText);
-    const htmlTopLevelCount = countHtmlTopLevelItems($detail);
-
-    ctx.note(
-      `${meeting.bodyName} — ${meeting.dateIso} (seq=${meeting.seq}): packet PDF ${pdfUrl} is ${pdfDoc.body.length.toLocaleString()} bytes / ${numPages} pages (labeled "Agenda" but actually the full packet including backup materials/exhibits — confirmed by comparing size against the much smaller HTML agenda page). Text extraction via pdf-parse is clean prose (no garbling observed; occasional PDF-kerning artifact of extra spaces inside words, e.g. "C ity C ouncil", from certain embedded fonts — cosmetic only). Numbered-item regex found ${rawMatchCount} raw matches total (many are false positives — numbered sub-lists WITHIN backup materials/resolutions restarting their own numbering, e.g. findings "1. 2. 3." inside an attached resolution). Sequential-run heuristic (stop at first non-+1 break) kept only items 1-${stoppedAtNum} as true top-level agenda items. Cross-check against the clean HTML agenda rendering (${meeting.agendaHref}, no backup-material bleed): top-level item count there is ${htmlTopLevelCount}. ${
-        stoppedAtNum === htmlTopLevelCount
-          ? 'MATCH — the heuristic correctly isolated the true top-level item list.'
-          : `MISMATCH (PDF heuristic: ${stoppedAtNum}, HTML: ${htmlTopLevelCount}) — heuristic may be over/under-counting for this meeting; spot-check recommended.`
-      }`
-    );
-
-    for (const item of items) {
-      ctx.insertItem({
-        document_id: pdfDoc.documentId,
-        source_url: `${pdfUrl}#page=${item.page}`,
-        item_type: 'agenda_item',
-        external_id: `${meeting.dateIso}-seq${meeting.seq}-${item.num}`,
-        title: item.title || `Item ${item.num}`,
-        body: item.body,
-        occurred_at: meeting.dateIso,
-        meta: { agendaNumber: item.num, body: meeting.bodyName, seq: meeting.seq, pdfPage: item.page, pdfTotalPages: numPages },
-      });
-    }
+    await ingestMeeting(ctx, meeting);
   }
 
   // --- Step 5: minutes availability + video cross-reference. ---

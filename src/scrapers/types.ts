@@ -67,5 +67,7 @@ export interface ScraperDef {
   name: string;
   baseUrl: string;
   method: FetchMethod;
-  run: (ctx: ScraperContext) => Promise<void>;
+  // args: extra CLI arguments forwarded by run-one.ts (`npm run one <key> -- <args>`),
+  // for scraper-specific modes like targeted backfills. Absent in poc runs.
+  run: (ctx: ScraperContext, args?: string[]) => Promise<void>;
 }

@@ -1,4 +1,4 @@
-// Run a single scraper by key: node src/run-one.ts <key>
+// Run a single scraper by key: node src/run-one.ts <key> [scraper-specific args]
 import { openDb } from './db/index.ts';
 import { buildContext } from './context.ts';
 import { SCRAPERS } from './scrapers/registry.ts';
@@ -18,7 +18,7 @@ const { ctx, notes } = buildContext(db, def);
 const t0 = Date.now();
 let ok = true;
 try {
-  await def.run(ctx);
+  await def.run(ctx, process.argv.slice(3));
 } catch (err) {
   ok = false;
   console.error(`FAILED after ${Date.now() - t0}ms:`, err);
