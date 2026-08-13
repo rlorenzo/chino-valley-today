@@ -360,17 +360,34 @@ describe('Gate 1c — proper-name whitelist', () => {
     assert.equal(failuresFor(report.failures, 'proper_names').length, 0);
   });
 
-  test('does not false-positive: link label does not fuse with a capitalized prose word that follows it', () => {
+  test('does not false-positive: chained citation links do not fuse with prose or each other', () => {
+    // First link is followed by another link (citation position), second by
+    // end punctuation — neither label may fuse with the prose before them.
+    // The two capitalized runs must NOT be adjacent in the corpus (period-
+    // collapsing in corpus normalization would otherwise mask a fusion).
     const input: GateInput = {
-      bodyMd: `Design work is planned at [Ayala Park](https://example.com/a) Marisela Rendon asked about the timeline. [Agenda](https://example.com/a)`,
+      bodyMd: `The assessments were confirmed for six LLMDs [LLMD item](https://example.com/a) [Vote](https://example.com/a).`,
       allowedUrls: ['https://example.com/a'],
-      // The two names must NOT be adjacent in the corpus (even across a
-      // sentence boundary — period-collapsing in corpus normalization would
-      // otherwise ground the fused phrase and mask the fusion bug).
-      inputCorpus: 'Irrigation and Landscape Design Services for Ayala Park were discussed at length. Marisela Rendon asked about the timeline.',
+      inputCorpus:
+        'Adopt Landscape and Lighting Maintenance District (LLMD) Assessment was heard. The six LLMDs cover parkway landscaping citywide.',
     };
     const report = validateDraft(input);
     assert.equal(failuresFor(report.failures, 'proper_names').length, 0);
+  });
+
+  test('fails: hallucinated composite name split across a mid-sentence link boundary (Codex review finding)', () => {
+    // "Maria [Lopez](url) spoke" renders to the reader as the name "Maria
+    // Lopez". A mid-sentence link label is content, not citation chrome —
+    // it must be scanned as one sequence with the adjacent prose, and the
+    // composite must fail when only its halves are separately grounded.
+    const input: GateInput = {
+      bodyMd: `Maria [Lopez](https://example.com/a) spoke during public comment. [Agenda](https://example.com/a)`,
+      allowedUrls: ['https://example.com/a'],
+      inputCorpus: 'Maria attended the workshop. Councilmember Lopez was absent.',
+    };
+    const report = validateDraft(input);
+    assert.equal(report.pass, false);
+    assert.ok(failuresFor(report.failures, 'proper_names').some((f) => f.detail.includes('Maria Lopez')));
   });
 
   test('fails: garbled name inside a link label is still scanned and caught', () => {

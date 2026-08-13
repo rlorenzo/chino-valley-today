@@ -291,10 +291,25 @@ async function runBackfill(ctx: ScraperContext, targetDate: string): Promise<voi
   for (const meeting of matches) await ingestMeeting(ctx, meeting);
 }
 
+// Calendar round-trip validation: "2026-13-40" shape-matches YYYY-MM-DD but
+// would silently request a nonsensical listing month and report a clean
+// zero-item backfill.
+function isValidIsoDate(s: string): boolean {
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) return false;
+  const [y, mo, d] = [parseInt(m[1], 10), parseInt(m[2], 10), parseInt(m[3], 10)];
+  const dt = new Date(Date.UTC(y, mo - 1, d));
+  return dt.getUTCFullYear() === y && dt.getUTCMonth() === mo - 1 && dt.getUTCDate() === d;
+}
+
 async function run(ctx: ScraperContext, args: string[] = []): Promise<void> {
-  const targetDate = args.find((a) => /^\d{4}-\d{2}-\d{2}$/.test(a));
-  if (targetDate) {
-    await runBackfill(ctx, targetDate);
+  if (args.length > 0) {
+    if (args.length > 1 || !isValidIsoDate(args[0])) {
+      throw new Error(
+        `chinohills-agendas: expected a single calendar-valid backfill date (YYYY-MM-DD), got: ${args.join(' ')}`
+      );
+    }
+    await runBackfill(ctx, args[0]);
     return;
   }
 
