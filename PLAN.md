@@ -10,7 +10,36 @@ Do not build ahead of the current phase.
 
 ---
 
-## Status (updated 2026-08-12)
+## Status (updated 2026-08-13)
+
+**2026-08-13 — environment rebuilt after macOS reinstall.** The repo, published
+posts, and reports survived in git; gitignored state did not. Recovery done:
+`npm ci`, yt-dlp reinstalled, full re-scrape (`npm run poc`) rebuilt
+data/cvtoday.db + raw archive — 12/12 sources OK, 2,358 items (vs ~2,300
+pre-wipe), typecheck clean, 34/34 gate tests pass, admin dashboard verified
+booting. The 7/21 Chino council bundle is fully back (66 agenda items, 30
+votes, 586 transcript segments). Losses still outstanding: `.env` LLM key
+(recreate in DO control panel: Inference -> Manage -> Create model access key)
+and the in-progress 7/21 recap draft in content/held/ (regenerate once the key
+exists). The "2 stale duplicate item rows" open decision is resolved — the
+fresh DB was built entirely by fixed scraper code; verified clean. Note for
+the Chino Hills 7/14 recap: the rebuilt chinohills-agendas window (2 most
+recent meetings) no longer covers 7/14, so that bundle currently has the
+Swagit transcript (1,084 segments) but no agenda/vote items.
+
+Same day, after a new DO key was added: 7/21 recap regenerated twice. Run 1
+exposed a real Gate 1c bug — link-stripping spliced citation labels into
+adjacent prose, fusing "six LLMDs [LLMD item](...)" into phantom name
+"LLMDs LLMD" (defeating the whitespace-gap anti-fusion rule). Fixed in
+validators.ts (labels now newline-delimited = sentence boundary; label text
+still scanned); 3 regression tests added (37 total), mutation-verified
+against the old code. Run 2 with the fixed gate: draft HELD on exactly one
+comprehensible, legitimate failure — the model wrote "Adoption of Resolution
+2026-050", dropping the article from the source title "Adoption of a
+Resolution 2026-050" — awaiting one-click review in the admin dashboard.
+Possible prompt tweak if this recurs: require agenda-item titles verbatim
+(articles included) in vote lists. DO prompt caching still not engaging
+(cache_read 0 on both 74k-token runs) — open question stands.
 
 **Phase 0: COMPLETE** (commit effdfed). 12 sources ingesting (11 planned + City
 of Chino YouTube captions added after launch), 2,300+ items, all acceptance

@@ -63,8 +63,13 @@ function normalizeUrl(u: string): string {
 
 // Replace markdown links with just their link text, and strip bare URLs, so
 // numeric/name scanning never trips on IDs or path segments inside a URL.
+// The label is set off by newlines — a sentence boundary for the name
+// tokenizer — because splicing it seamlessly into the surrounding prose
+// erases the brackets that the whitespace-gap anti-fusion rule relies on:
+// "six LLMDs [LLMD item](url)" must not scan as one name "LLMDs LLMD".
+// Label text itself stays fully scanned as its own sentence part.
 function stripLinksToText(text: string): string {
-  return text.replace(/\[([^\]]*)\]\([^)]+\)/g, '$1').replace(/https?:\/\/\S+/g, ' ');
+  return text.replace(/\[([^\]]*)\]\([^)]+\)/g, '\n$1\n').replace(/https?:\/\/\S+/g, '\n');
 }
 
 // ---------------------------------------------------------------------------

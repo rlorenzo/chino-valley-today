@@ -346,6 +346,44 @@ describe('Gate 1c — proper-name whitelist', () => {
     assert.ok(failuresFor(report.failures, 'proper_names').some((f) => f.detail.includes('Maria Lopez')));
   });
 
+  test('does not false-positive: prose word does not fuse with an adjacent link label into one name', () => {
+    // Regression: first live recap was held on phantom name "LLMDs LLMD" —
+    // link-stripping erased the "[" between prose and label, so the
+    // whitespace-gap anti-fusion rule never saw a boundary.
+    const input: GateInput = {
+      bodyMd: `The council confirmed the annual assessments for six LLMDs [LLMD item](https://example.com/a).`,
+      allowedUrls: ['https://example.com/a'],
+      inputCorpus:
+        'Adopt Landscape and Lighting Maintenance District (LLMD) Assessment. The six LLMDs cover parkway landscaping citywide.',
+    };
+    const report = validateDraft(input);
+    assert.equal(failuresFor(report.failures, 'proper_names').length, 0);
+  });
+
+  test('does not false-positive: link label does not fuse with a capitalized prose word that follows it', () => {
+    const input: GateInput = {
+      bodyMd: `Design work is planned at [Ayala Park](https://example.com/a) Marisela Rendon asked about the timeline. [Agenda](https://example.com/a)`,
+      allowedUrls: ['https://example.com/a'],
+      // The two names must NOT be adjacent in the corpus (even across a
+      // sentence boundary — period-collapsing in corpus normalization would
+      // otherwise ground the fused phrase and mask the fusion bug).
+      inputCorpus: 'Irrigation and Landscape Design Services for Ayala Park were discussed at length. Marisela Rendon asked about the timeline.',
+    };
+    const report = validateDraft(input);
+    assert.equal(failuresFor(report.failures, 'proper_names').length, 0);
+  });
+
+  test('fails: garbled name inside a link label is still scanned and caught', () => {
+    const input: GateInput = {
+      bodyMd: `The board heard the report. [Elise Jukley presentation](https://example.com/a)`,
+      allowedUrls: ['https://example.com/a'],
+      inputCorpus: 'The board heard the report from Elise Buckley during the meeting.',
+    };
+    const report = validateDraft(input);
+    assert.equal(report.pass, false);
+    assert.ok(failuresFor(report.failures, 'proper_names').some((f) => f.detail.includes('Elise Jukley')));
+  });
+
   test('does not false-positive: sentence-initial common word is not treated as a name', () => {
     const input: GateInput = {
       bodyMd: `The council approved the item unanimously. [Agenda](https://example.com/a)`,
