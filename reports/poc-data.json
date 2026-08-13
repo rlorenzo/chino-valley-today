@@ -1,5 +1,5 @@
 {
-  "ranAt": "2026-08-12T05:29:21.913Z",
+  "ranAt": "2026-08-13T19:20:46.501Z",
   "results": [
     {
       "key": "chino-legistar",
@@ -9,9 +9,9 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 10,
-        "documentsNew": 3,
+        "documentsNew": 10,
         "itemsSeen": 134,
-        "itemsNew": 0
+        "itemsNew": 134
       },
       "notes": [
         "webapi.legistar.com and chino.legistar.com both return HTTP 404 for /robots.txt (no robots file present); the fetcher fails open in that case, so no skipRobots flag is used for either host. chino.legistar1.com (the agenda-PDF file host) DOES have a robots.txt with a blanket \"User-agent: * / Disallow: /\", which reads as generic search-crawler avoidance on a file server, not a restriction on fetching a specific document whose URL we already have from the official Legistar Web API response (EventAgendaFile). skipRobots: true is used only for those PDF fetches.",
@@ -29,7 +29,7 @@
         "/matters probe (not ingested — this scraper only walks events/eventitems): Chino's Legistar instance contains at least one obvious test/sample matter (e.g. MatterFile \"22-071\", MatterName \"sample memo\", MatterTitle \"TEST 1\"). Because we derive items from real events/eventitems for actual meetings rather than scanning /matters directly, this test data does not appear in our items UNLESS a real agenda item happens to reference a test matter as its EventItemMatterId — we did not observe that in the meetings ingested this run, but a production version should filter matters whose MatterTitle/MatterName look like placeholder text before trusting them in synthesis.",
         "RSS fallback probe: https://chino.legistar.com/Feed.ashx?M=Calendar -> HTTP 200 (feed exists; not ingested — Web API is the primary, richer path for this source)."
       ],
-      "durationMs": 24592
+      "durationMs": 26509
     },
     {
       "key": "chino-agendacenter",
@@ -39,9 +39,9 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 1,
-        "documentsNew": 0,
+        "documentsNew": 1,
         "itemsSeen": 1,
-        "itemsNew": 0
+        "itemsNew": 1
       },
       "notes": [
         "Agenda Center category checkbox list enumerates 1 body that publish here: \"Community Services Commission\" (catID=2).",
@@ -54,7 +54,7 @@
         "Minutes: 0 link(s) to /AgendaCenter/ViewFile/Minutes/ found on the listing page (note only, per task scope — not ingested). The single Community Services Commission row ingested here has an empty \"Minutes\" table cell, i.e. no minutes were ever posted for it.",
         "robots.txt on cityofchino.org disallows /Search and /Search.aspx, ruling out the biglocalnews/civic-scraper CivicPlus pattern (POST to /Search/?...) as a discovery method here under PLAN.md's politeness constraint; used the rendered /agendacenter category+table HTML instead, which robots.txt does not restrict."
       ],
-      "durationMs": 5670
+      "durationMs": 8100
     },
     {
       "key": "chino-news-rss",
@@ -63,30 +63,30 @@
       "ok": true,
       "implemented": true,
       "counts": {
-        "documentsFetched": 13,
-        "documentsNew": 8,
-        "itemsSeen": 7,
-        "itemsNew": 0
+        "documentsFetched": 12,
+        "documentsNew": 12,
+        "itemsSeen": 6,
+        "itemsNew": 6
       },
       "notes": [
         "Feed discovery page /RSS.aspx is blocked by robots.txt (\"Disallow: /RSS.aspx\", confirmed live): robots.txt disallows https://www.cityofchino.org/RSS.aspx. The full feed catalog (7 modules, ~21 category feeds) was hand-enumerated once out-of-band (curl, 2026-08-11) by reading that same disallowed page as a one-time human research step, not via this scraper — see reports/notes/chino-news-rss.md for the complete list. The underlying /RSSFeed.aspx?ModID=...&CID=... endpoints those catalog entries point to are NOT covered by any robots.txt rule and are fetched normally below.",
-        "Newsflash/CivicAlerts \"All\" feed (ModID=1, aggregate) currently has 2 item(s) site-wide: \"Business License Reform & Small Business Protection Measure\", \"Community Academy\".",
+        "Newsflash/CivicAlerts \"All\" feed (ModID=1, aggregate) currently has 1 item(s) site-wide: \"Business License Reform & Small Business Protection Measure\".",
         "Newsflash category \"Community Services Spotlights\" (CID=Community-Services-Spotlights-7) currently has 0 items.",
         "Newsflash category \"Fact Page\" (CID=Fact-Page-10) currently has 0 items.",
+        "Newsflash category \"Police Spotlights\" (CID=Police-Spotlights-8) currently has 0 items.",
         "Newsflash category \"Success Stories\" (CID=Success-Stories-9) currently has 0 items.",
-        "Task 0.9: Chino PD content DOES flow through the CivicAlerts/Newsflash feed via a dedicated \"Police Spotlights\" category (ModID=1, CID=Police-Spotlights-8). Evidence: \"Community Academy\". Content observed is community-outreach/recruiting (academy, events), not incident/crime press releases — Chino PD does not appear to publish incident reports through this channel.",
+        "Task 0.9: the \"Police Spotlights\" CivicAlerts category (ModID=1, CID=Police-Spotlights-8) exists but had 0 items at run time.",
         "Task 0.9: Calendar module also has a \"Police Department\" category (ModID=58, CID=Police-Department-26): 0 event(s) at run time. Combined with Police Spotlights, PD content is well-represented in CivicPlus RSS for outreach/events; no separate PD press-release or incident feed was found anywhere in the RSS.aspx catalog — treated as a GAP (Chino PD publishes incident-level information, if at all, outside this RSS surface; not verified here per scope — social platforms excluded).",
         "Detail page for \"Business License Reform & Small Business Protection Measure\" (https://www.cityofchino.org/1777): RSS <description> teaser is 229 chars; full extracted article via #moduleContent (fallback — generic Pages-module layout, lower confidence) is 17169 chars.",
-        "Detail page for \"Community Academy\" (https://www.cityofchino.org/CivicAlerts.aspx?aid=409): RSS <description> teaser is 155 chars; full extracted article via #main-wrapper .article-content is 839 chars.",
         "Open question 6 answer: the CivicPlus Newsflash/CivicAlerts RSS <description> is TEASER-ONLY (see char-count comparisons above) — full article text requires fetching the item detail page and extracting via cheerio. The separate Calendar feed descriptions ARE effectively complete for their purpose (date/time/location is the whole content of a calendar entry). The numbered NR-series press releases have no RSS description at all (no feed exists) — see below.",
         "NR-series index (https://www.cityofchino.org/597/News-Releases) has NO RSS feed anywhere in the RSS.aspx catalog. Parsed 50 numbered release link(s) from the current page via cheerio (a[href*=\"conta.cc\"]), most recent first: NR26-051, NR26-050, NR26-049, NR26-048, NR26-047... Every link is a conta.cc (Bitly, fronting Constant Contact) shortlink — the true release permalink is OFF cityofchino.org entirely, resolving to myemail.constantcontact.com. This is a real provenance caveat: PLAN.md's item.source_url spec (\"deepest stable link a reader should click\") is satisfied, but it is not an on-domain government URL.",
-        "NR release NR26-051: fetched https://conta.cc/4pJ4bR9 -> archived https://conta.cc/4pJ4bR9 (2400 chars after stripping the Constant Contact email chrome at the \"Unsubscribe\" marker). Dateline parsed from body: July 28, 2026.",
-        "NR release NR26-050: fetched https://conta.cc/4fOHTdp -> archived https://conta.cc/4fOHTdp (4084 chars after stripping the Constant Contact email chrome at the \"Unsubscribe\" marker). Dateline parsed from body: July 22, 2026.",
+        "NR release NR26-051: fetched https://conta.cc/4pJ4bR9 -> archived https://myemail.constantcontact.com/City-of-Chino-News-Release.html?soid=1132744783111&aid=poTjrBGcgnw (2400 chars after stripping the Constant Contact email chrome at the \"Unsubscribe\" marker). Dateline parsed from body: July 28, 2026.",
+        "NR release NR26-050: fetched https://conta.cc/4fOHTdp -> archived https://myemail.constantcontact.com/City-of-Chino-News-Release.html?soid=1132744783111&aid=aZW_8ghb0zg (4084 chars after stripping the Constant Contact email chrome at the \"Unsubscribe\" marker). Dateline parsed from body: July 22, 2026.",
         "Calendar module (ModID=58) categories found in the RSS.aspx catalog: All, Community Services, Events, Meetings, Police Department. Ingesting the \"All\" feed: 3 upcoming event(s).",
         "HTTP behavior: RSSFeed.aspx responses send no ETag and no Last-Modified header (only Content-Type, Content-Length, cache-control: private,no-transform — explicitly non-cacheable). No conditional-GET support observed; idempotency on re-run relies entirely on this fetcher's content-hash dedup in insertDocument, not on server-side 304s. No WAF/bot-blocking behavior observed (no CAPTCHA, no 403s) for a plain descriptive User-Agent at the enforced 2s/host delay; Newsflash item detail pages return standard 301/302 redirects to canonicalized/mobile-template URLs, which undici's redirect:\"follow\" handles transparently.",
         "Platform quirk (relevant to sibling CivicPlus scrapers, e.g. chino-agendacenter.ts, chinohills-*): every RSSFeed.aspx response embeds a live <lastBuildDate> that changes on every request, so the feed *document* never hash-matches across runs — expect documentsNew > 0 for feed URLs on every run, by design of the source, not a bug. Older WebForms pages on this site (e.g. Calendar.aspx?EID=...) similarly embed a live, encrypted __VIEWSTATE and are equally non-reproducible byte-for-byte; the newer \"redesign\" template (Newsflash detail pages, Pages module, /597/News-Releases) has neither and fetches stably. This scraper works around feed volatility for item idempotency via resolveDocumentId() (reuses the document_id an item's external_id was first captured under, queried through ctx.db) rather than trusting the freshly-fetched document each run."
       ],
-      "durationMs": 22037
+      "durationMs": 20121
     },
     {
       "key": "chinohills-agendas",
@@ -96,9 +96,9 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 8,
-        "documentsNew": 0,
+        "documentsNew": 8,
         "itemsSeen": 20,
-        "itemsNew": 0
+        "itemsNew": 20
       },
       "notes": [
         "Step 1 — native CivicPlus Agenda Center (https://www.chinohills.org/AgendaCenter): 0 category checkbox(es) rendered (0 expected if decommissioned). Also POSTed /AgendaCenter/UpdateCategoryList (the module's own AJAX endpoint, not robots-blocked) with catID=1..5,10: every guess returned HTTP 500, this module's behavior for a catID with no configured category. Conclusion: zero categories configured — unlike Chino (Task 0.2), this platform is not in active use here. Not used as a source.",
@@ -112,7 +112,7 @@
         "Step 5 — minutes: checked AgendaQuick monthly listings for City Council across August, June, and February 2026 (a spread of recent and older months) — the \"Minutes\" link slot next to \"Agenda\" is present in the template but empty in every meeting sampled; no minutes PDF is served through AgendaQuick at all. Minutes (per the /60/Agendas-Minutes hub, Step 2) live only on the robots-blocked Laserfiche WebLink host — not ingested, consistent with the brief. Also noted: recent City Council rows include a third link, \"Video\", pointing to chinohillsca.new.swagit.com/videos/<id> (e.g. https://chinohillsca.new.swagit.com/videos/390778 for the June 9, 2026 meeting) — confirms Task 0.5's Swagit host/URL pattern and that it is reachable from this navigation path too; not ingested here (out of scope for this scraper).",
         "Step 6 — alternates ruled out: chinohills.legistar.com -> HTTP 404 (no Legistar instance for Chino Hills, unlike Chino). webapi.legistar.com/v1/chinohills/events -> \"LegistarConnectionString setting is not set up ... for client: chinohills\" (client not provisioned). www.chinohills.org/DocumentCenter/Index -> HTTP 200, not robots-blocked, but is a general-purpose document repository (sampled contents: RFPs, the General Plan, budget/notice PDFs) — not the agenda system."
       ],
-      "durationMs": 13170
+      "durationMs": 20557
     },
     {
       "key": "chinohills-news-rss",
@@ -122,20 +122,20 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 4,
-        "documentsNew": 3,
-        "itemsSeen": 4,
-        "itemsNew": 0
+        "documentsNew": 4,
+        "itemsSeen": 5,
+        "itemsNew": 5
       },
       "notes": [
         "Feed discovery page /RSS.aspx is blocked by robots.txt (\"Disallow: /RSS.aspx\", confirmed live, identical rule to cityofchino.org): robots.txt disallows https://www.chinohills.org/RSS.aspx. The full feed catalog (9 modules, ~30 category feeds) was hand-enumerated once out-of-band (curl, 2026-08-11) by reading that same disallowed page as a one-time human research step, not via this scraper — see reports/notes/chinohills.md for the complete list. The underlying /RSSFeed.aspx?ModID=...&CID=... endpoints those catalog entries point to are NOT covered by any robots.txt rule and are fetched normally below.",
-        "News Flash \"All\" feed (ModID=1, aggregate) currently has 4 item(s): \"Mobile Recreation Program\", \"Teen Activity Center\", \"Local Sales Tax Measure\", \"Blood Drive Tuesday\".",
+        "News Flash \"All\" feed (ModID=1, aggregate) currently has 5 item(s): \"Rec in the Park\", \"Mobile Recreation Program\", \"Teen Activity Center\", \"Local Sales Tax Measure\", \"Blood Drive Tuesday\".",
         "News Flash category \"2025 - Home - Spotlight\" (CID=2025-Home-Spotlight-12) currently has 0 items.",
         "Every item in the \"All\" feed is accounted for by a named category — no uncategorized items this run.",
-        "Open question 6 (Chino Hills data point): detail page for \"Mobile Recreation Program\" (https://www.chinohills.org/CivicAlerts.aspx?aid=3812 -> https://www.chinohills.org/m/newsflash/home/detail/3812): RSS <description> teaser is 117 chars; full extracted article via #main-wrapper .article-content is 1606 chars. Same conclusion as cityofchino.org: the CivicPlus Newsflash/CivicAlerts RSS <description> is TEASER-ONLY — full article text requires fetching the item detail page and extracting via cheerio.",
+        "Open question 6 (Chino Hills data point): detail page for \"Rec in the Park\" (https://www.chinohills.org/CivicAlerts.aspx?aid=3813 -> https://www.chinohills.org/m/newsflash/home/detail/3813): RSS <description> teaser is 172 chars; full extracted article via #main-wrapper .article-content is 623 chars. Same conclusion as cityofchino.org: the CivicPlus Newsflash/CivicAlerts RSS <description> is TEASER-ONLY — full article text requires fetching the item detail page and extracting via cheerio.",
         "HTTP behavior: RSSFeed.aspx responses send no ETag and no Last-Modified header (only Content-Type, Content-Length, cache-control: private,no-transform) — identical to cityofchino.org. No conditional-GET support observed; idempotency on re-run relies on this fetcher's content-hash dedup in insertDocument, not server-side 304s. CivicAlerts.aspx?aid=N detail links 302-redirect to canonicalized /m/newsflash/home/detail/N URLs; undici's redirect:\"follow\" handles this transparently. No WAF/bot-blocking (no CAPTCHA, no 403s) observed for a descriptive User-Agent at the enforced 2s/host delay.",
         "Platform-quirk cross-reference: every RSSFeed.aspx response embeds a live <lastBuildDate> that changes on every request, so the feed *document* never hash-matches across runs — expect documentsNew > 0 for feed URLs on every run, by design of the source, not a bug (same as cityofchino.org, see chino-news-rss.ts). Item idempotency here is handled the same way, via resolveDocumentId() (reuses the document_id an item's external_id was first captured under, queried through ctx.db) rather than trusting the freshly-fetched feed document each run."
       ],
-      "durationMs": 6355
+      "durationMs": 6478
     },
     {
       "key": "chinohills-swagit",
@@ -144,15 +144,16 @@
       "ok": true,
       "implemented": true,
       "counts": {
-        "documentsFetched": 2,
-        "documentsNew": 1,
+        "documentsFetched": 3,
+        "documentsNew": 3,
         "itemsSeen": 1084,
-        "itemsNew": 0
+        "itemsNew": 1084
       },
       "notes": [
         "robots.txt at https://chinohillsca.new.swagit.com/robots.txt is present but every User-agent/Disallow line is commented out (the stock Swagit template with \"# To ban all spiders ... uncomment the next two lines\"); the site is fully open to crawlers. No skipRobots flag is used anywhere in this scraper — nothing is blocked.",
-        "Endpoint discovery: https://chinohillsca.new.swagit.com/views/default/ (redirects to https://chinohillsca.new.swagit.com/views/158) is server-rendered HTML with real <tr> rows — 42 video rows parsed. This is the listing source used, in place of the empty public SPA shell at https://chinohillsca.new.swagit.com/city-council-meeting/.",
-        "Target meeting: video 393508, \"City Council Meeting\", date=2026-07-14 (1 candidate(s) tried before finding one with a transcript). 1084 transcript paragraphs (<p> elements with word-level data-ts anchors) parsed from the embedded HTML.",
+        "Endpoint discovery: https://chinohillsca.new.swagit.com/views/default/ (redirects to https://chinohillsca.new.swagit.com/views/158) is server-rendered HTML with real <tr> rows — 43 video rows parsed. This is the listing source used, in place of the empty public SPA shell at https://chinohillsca.new.swagit.com/city-council-meeting/.",
+        "Video 395879 (\"City Council Meeting\", Aug 11, 2026): fetched the video page but found no #transcript-fragments segments (either no #transcript-fragments element at all, or it has no <p> tags with data-ts anchors) — this meeting has no machine transcript available yet. Trying the next most recent meeting.",
+        "Target meeting: video 393508, \"City Council Meeting\", date=2026-07-14 (2 candidate(s) tried before finding one with a transcript). 1084 transcript paragraphs (<p> elements with word-level data-ts anchors) parsed from the embedded HTML.",
         "Endpoint discovery log (full results, negative and positive, in reports/notes/chinohills-swagit.md): https://chinohillsca.new.swagit.com/videos/393508/transcript (plain-text transcript download) -> HTTP 200, content-type=text/plain | https://chinohillsca.new.swagit.com/videos/393508/captions (guessed \"captions\" alias) -> HTTP 200, content-type=text/html; charset=utf-8 | https://chinohillsca.new.swagit.com/videos/393508.vtt (guessed bare .vtt) -> HTTP 500, content-type=text/html; charset=UTF-8 | https://chinohillsca.new.swagit.com/videos/393508/captions.vtt (guessed captions.vtt) -> HTTP 500, content-type=text/html; charset=UTF-8 | https://chinohillsca.new.swagit.com/videos/393508.json (guessed bare .json) -> HTTP 500, content-type=application/json; charset=UTF-8 | https://chinohillsca.new.swagit.com/videos/393508/transcript.json (guessed transcript.json) -> HTTP 200, content-type=text/plain | https://chinohillsca.new.swagit.com/videos/393508/transcript.vtt (guessed transcript.vtt) -> HTTP 200, content-type=text/plain | https://chinohillsca.new.swagit.com/captions/393508 (guessed /captions/<id> (PLAN.md pattern guess)) -> HTTP 404, content-type=text/html; charset=UTF-8",
         "Format finding: /videos/<id>/transcript.json and /videos/<id>/transcript.vtt both return HTTP 200 but with identical bytes to the plain /videos/<id>/transcript endpoint (same ETag, same Content-Disposition filename ending in .txt) — Rails is ignoring the unrecognized format suffix and serving the default text action, NOT real JSON or VTT. /videos/<id>.vtt, /videos/<id>.json, and /videos/<id>/captions.vtt all 500. /videos/<id>/captions returns 200 but is byte-for-byte the same full video page HTML, not a separate captions resource. No VTT or JSON transcript endpoint exists on this Swagit deployment; the richest available source is the word-level data-ts anchors embedded in the video page HTML itself, which is what this scraper parses.",
         "Archived the plain-text transcript download (https://chinohillsca.new.swagit.com/videos/393508/transcript) as docType 'captions'. Not used as the parse source (see format finding above), but its content_hash IS stable across requests, so this document — not the video HTML page — is what transcript_segment items below attach to via document_id, for correct idempotency across runs (see HTTP/caching note below).",
@@ -163,7 +164,7 @@
         "Bonus/out-of-scope finding (not acted on — outside this scraper's file ownership): /videos/<id>/agenda redirects to agendaquick.chinohills.org:8086/agenda_publish.cfm — a THIRD agenda backend for Chino Hills (distinct from whatever chinohills.org/60/Agendas-Minutes uses for Task 0.4), worth a look when that task is built. /videos/<id>/download redirects to a presigned S3 URL (granicus-aasmp-swagit-video bucket) for the raw MP4 — confirms the video hosting backend but isn't used here.",
         "Volume bound not triggered: 1084 segments is under the ~1500 threshold — storing all of them."
       ],
-      "durationMs": 34790
+      "durationMs": 38806
     },
     {
       "key": "cvusd-board",
@@ -173,9 +174,9 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 2,
-        "documentsNew": 0,
+        "documentsNew": 2,
         "itemsSeen": 19,
-        "itemsNew": 0
+        "itemsNew": 19
       },
       "notes": [
         "Entry point https://www.chino.k12.ca.us/224768_2 (\"Board of Education Home\" -> \"Meetings Agendas, Minutes, and Videos\") redirects to the current-year listing page, which has 1 meeting row(s) so far this board year.",
@@ -188,7 +189,7 @@
         "Agenda PDF fetch BLOCKED for 2026-07-16 (https://files.smartsites.parentsquare.com/7144/07-16-26_agenda.pdf): robots.txt disallows https://files.smartsites.parentsquare.com/7144/07-16-26_agenda.pdf. Not bypassed per this task's politeness instruction (\"a block is a finding, not something to bypass\") — see the robots.txt evidence noted in run() and reports/notes/cvusd.md. No agenda_item rows for this meeting; the meeting-level 'event' item still links readers to this URL.",
         "Agenda PDF fetch BLOCKED for 2026-06-18 (https://files.smartsites.parentsquare.com/7144/06-18-26_agenda.pdf): robots.txt disallows https://files.smartsites.parentsquare.com/7144/06-18-26_agenda.pdf. Not bypassed per this task's politeness instruction (\"a block is a finding, not something to bypass\") — see the robots.txt evidence noted in run() and reports/notes/cvusd.md. No agenda_item rows for this meeting; the meeting-level 'event' item still links readers to this URL."
       ],
-      "durationMs": 2595
+      "durationMs": 2979
     },
     {
       "key": "youtube-captions",
@@ -198,20 +199,42 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 1,
-        "documentsNew": 0,
+        "documentsNew": 1,
         "itemsSeen": 131,
-        "itemsNew": 0
+        "itemsNew": 131
       },
       "notes": [
         "yt-dlp --flat-playlist listed 30 recent upload(s) from the CVUSD Board Videos channel (UCWKinB4PTb_uskobmwBF8pw). Titles are free text (\"CVUSD Meeting of the Board of Education <Month> <Day>, <Year>\"); playlist order is NOT strictly chronological in this channel's default tab (a 46-second April 2026 stub outranked a full-length January 2026 meeting in one listing), so the target video is selected by date parsed out of the title, not by list position.",
         "Chosen video: \"CVUSD Meeting of the Board of Education July 16, 2026\" (hRO51ueaqb4, 42:16, meeting date 2026-07-16). The channel posts a short companion \"closed session\" stub alongside most full meetings (same date, ~1 minute long, e.g. jDPJp9R3mh0 alongside this one); picking max(title date) then max(duration) among same-date candidates reliably selects the substantive open-session recording over the stub. Cross-checked against cvusd-board.ts's listing-page parse: this exact video URL is the one linked from the district's own 2026-07-16 meeting row.",
-        "Captions document already exists for https://www.youtube.com/watch?v=hRO51ueaqb4 (document id 114) — skipping the yt-dlp caption download and re-parsing the already-archived VTT instead (avoids re-hitting YouTube on repeat runs).",
-        "VTT parsing: 939 de-duplicated content cues (rolling two-line auto-caption cues collapsed by keeping only each cue's non-blank last line — see parseRawCues doc comment) merged into 131 transcript_segment item(s) using a 20s / 500-char merge window.",
-        "Inserted 131 transcript_segment item(s) for hRO51ueaqb4.",
+        "Downloaded auto-captions for \"CVUSD Meeting of the Board of Education July 16, 2026\" via yt-dlp (--skip-download --write-auto-sub), archived via saveRaw() + ctx.db.insertDocument() directly — bypasses politeFetch since yt-dlp did its own fetching.",
+        "VTT for hRO51ueaqb4: 939 de-duplicated cues -> 131 segment(s), inserted 131.",
         "Caption quality on proper names (auto-generated ASR only — `yt-dlp --list-subs` for this video reports \"hRO51ueaqb4 has no subtitles\", i.e. no manually-authored/official track exists on this channel, only YouTube's automatic captions): Trustee James Na is transcribed inconsistently within the SAME roll-call sentence read three separate times in one meeting — \"Naw\", then \"N\" (dropped to a single letter), then correctly \"Na\". A staff appointee's name is transcribed as \"Elise Jükley\" (an umlaut inserted mid-name — almost certainly a garbled real surname). The district's Executive Assistant is addressed as \"Megan\" once and then thanked as \"Miss Reagan\" a few lines later — the same person, two different transcribed names. This directly motivates PLAN.md's Gate 1c (proper-name whitelist): these are exactly the kind of transcription-layer errors reports/notes/prior-art.md documents from the CityMeetings.nyc writeup as common and not fully automatable to fix.",
         "Video cadence: the channel uploads roughly one video pair (a ~1-minute closed-session stub plus the full open-session recording, 20 minutes to 2.5 hours) per board meeting, matching the ~2x/month regular-plus-special cadence seen in cvusd-board.ts's listing pages, with uploads going back to at least 2020."
       ],
-      "durationMs": 1168
+      "durationMs": 11169
+    },
+    {
+      "key": "chino-youtube-captions",
+      "name": "City of Chino YouTube captions (chinotv3)",
+      "method": "captions",
+      "ok": true,
+      "implemented": true,
+      "counts": {
+        "documentsFetched": 2,
+        "documentsNew": 2,
+        "itemsSeen": 941,
+        "itemsNew": 941
+      },
+      "notes": [
+        "yt-dlp --flat-playlist listed 17 recent upload(s) from chinotv3. The channel mixes meeting recordings with promo content (Choose Chino, Mayor's Message, Experience Chino) — filtered to /council meeting|study session/i with a parseable \"<Month> <D>, <YYYY>\" title date.",
+        "Ingesting 2 meeting video(s): \"City of Chino Council Meeting - July 21, 2026\" (P97FFJyDua8, 3:01:12, 2026-07-21); \"City of Chino Study Session - July 14, 2026\" (z2wYCCYOZ_g, 1:51:18, 2026-07-14)",
+        "Downloaded auto-captions for \"City of Chino Council Meeting - July 21, 2026\" via yt-dlp (--skip-download --write-auto-sub), archived via saveRaw() + ctx.db.insertDocument() directly — bypasses politeFetch since yt-dlp did its own fetching.",
+        "VTT for P97FFJyDua8: 4413 de-duplicated cues -> 586 segment(s), inserted 586.",
+        "Downloaded auto-captions for \"City of Chino Study Session - July 14, 2026\" via yt-dlp (--skip-download --write-auto-sub), archived via saveRaw() + ctx.db.insertDocument() directly — bypasses politeFetch since yt-dlp did its own fetching.",
+        "VTT for z2wYCCYOZ_g: 2767 de-duplicated cues -> 355 segment(s), inserted 355.",
+        "Meeting dates parsed from titles align with chino-legistar meeting dates (e.g. the 2026-07-21 council meeting exists in both), which is what lets the recap bundle join transcript to agenda+votes by date. Auto-captions only (no manual track) — same proper-name garbling risk as the CVUSD channel; Gate 1c applies."
+      ],
+      "durationMs": 5122
     },
     {
       "key": "nws-alerts",
@@ -221,16 +244,16 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 2,
-        "documentsNew": 1,
+        "documentsNew": 2,
         "itemsSeen": 10,
-        "itemsNew": 0
+        "itemsNew": 10
       },
       "notes": [
         "0 active alert(s) for zone CAZ048",
         "10 recent alert(s) (incl. expired) stored for sample purposes",
         "api.weather.gov requires a User-Agent header; supports ETag (If-None-Match honored)."
       ],
-      "durationMs": 2159
+      "durationMs": 2618
     },
     {
       "key": "abc-licenses",
@@ -240,23 +263,23 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 2,
-        "documentsNew": 0,
+        "documentsNew": 2,
         "itemsSeen": 2,
-        "itemsNew": 0
+        "itemsNew": 2
       },
       "notes": [
         "robots.txt: `Disallow: /wp-admin/` with `Allow: /wp-admin/admin-ajax.php` only. The actual date-selection form POSTs to /wp-admin/admin-post.php, which is NOT covered by that allow carve-out — so it remains disallowed. We never POST there. Both report pages fetched below (/licensing/licensing-reports/...) sit outside /wp-admin/ entirely and are unrestricted.",
         "Date selection is architecturally unavailable to a plain fetcher: the POST-to-admin-post.php flow 302-redirects to a GET URL carrying ?RPTTYPE=&RPTDATE=, but ANY query string on ANY abc.ca.gov URL gets 301-redirected back to the bare URL with the query stripped (verified on the report page, the single-license lookup page, and the homepage; verified again with a fresh cookie + matching Referer replaying the exact request a real browser click would send — still stripped). This reads as a Cloudflare edge-level bot check, not a robots.txt matter. Consequence: no day-walk-back loop is implemented — each run can only see whatever single date the site currently treats as \"current\" (empirically the most recent business day). If that day has zero Chino/Chino Hills rows, this scraper will legitimately store zero items that run; it cannot search further back.",
         "Per-license source_url (\"single-license\" detail page) is blocked by the same query-string redirect, so it cannot be used as items.source_url (see above) — every item below cites the daily report page URL instead, with the intended per-license URL preserved in meta.attempted_detail_url for Phase 1 to revisit.",
-        "new-applications report page rptdate text: \"Report Date: Monday, August 10, 2026\" -> parsed 2026-08-10.",
-        "new-applications: 20 statewide row(s) in this snapshot (report date 2026-08-10), 0 matched Chino/Chino Hills premises city.",
-        "status-changes report page rptdate text: \"Report Date: Monday, August 10, 2026\" -> parsed 2026-08-10.",
-        "status-changes: 96 statewide row(s) in this snapshot (report date 2026-08-10), 2 matched Chino/Chino Hills premises city.",
+        "new-applications report page rptdate text: \"Report Date: Wednesday, August 12, 2026\" -> parsed 2026-08-12.",
+        "new-applications: 21 statewide row(s) in this snapshot (report date 2026-08-12), 0 matched Chino/Chino Hills premises city.",
+        "status-changes report page rptdate text: \"Report Date: Wednesday, August 12, 2026\" -> parsed 2026-08-12.",
+        "status-changes: 410 statewide row(s) in this snapshot (report date 2026-08-12), 2 matched Chino/Chino Hills premises city.",
         "2 Chino/Chino Hills license_event item(s) stored from the single available report date, with zero ability to walk back further days (see date-selection note above).",
         "Open question 5 verdict: YES, premises city is a clean, directly filterable field — both report tables include a hidden (visible:0 in the DataTables config, but present in the raw HTML/DOM) \"City\" column with a plain uppercase city name (e.g. \"CHINO\", \"CHINO HILLS\", \"LOS ANGELES\"), not an address-text blob requiring parsing. Filtering is an exact match against that column; \"Chino\" and \"Chino Hills\" are distinct string values with no substring-overlap risk. A separate \"County\" hidden column exists too, but only as a numeric ABC-internal code (e.g. \"36\"), not a name — City is the field to filter on, County was not decoded.",
         "Response format: server-rendered HTML (a DataTables-driven <table>), not JSON or CSV — despite the plugin enqueuing DataTables' CSV/PDF export buttons client-side, no JSON/CSV endpoint was found or needed; the DOM already carries every column DataTables would export, including the hidden ones."
       ],
-      "durationMs": 2287
+      "durationMs": 7957
     },
     {
       "key": "sbsheriff-news",
@@ -266,9 +289,9 @@
       "implemented": true,
       "counts": {
         "documentsFetched": 4,
-        "documentsNew": 1,
+        "documentsNew": 4,
         "itemsSeen": 5,
-        "itemsNew": 0
+        "itemsNew": 5
       },
       "notes": [
         "Probe: PLAN.md's guessed URL (https://wp.sbcounty.gov/sheriff/news/feed/) -> HTTP 404",
@@ -288,7 +311,7 @@
         "HTTP behavior: robots.txt on wp.sbcounty.gov only disallows /wp-admin/ (with an explicit Allow for admin-ajax.php) — nothing in this scraper's path is blocked, so no skipRobots use was needed anywhere. https://wp.sbcounty.gov/sheriff/feed/ sends both ETag and Last-Modified (W3 Total Cache page caching) and supports conditional GET. https://wp.sbcounty.gov/sheriff/media-center/coroner-press-release/ and https://wp.sbcounty.gov/sheriff/media-center/sheriffs-press-releases/ send only Cache-Control: max-age=3600, no ETag/Last-Modified — this fetcher's content-hash dedup in insertDocument is the only idempotency mechanism for those pages, which is why resolveDocumentId() (borrowed pattern, see chinohills-news-rss.ts) pins items to whichever document_id first captured their external_id.",
         "Full-text vs teaser: N/A in the RSS sense (the feed is empty) — the Coroner page embeds full release text directly in the page body, no separate detail page or teaser/full split exists for this source."
       ],
-      "durationMs": 16107
+      "durationMs": 16840
     }
   ]
 }
