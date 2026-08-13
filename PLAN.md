@@ -38,8 +38,21 @@ comprehensible, legitimate failure — the model wrote "Adoption of Resolution
 2026-050", dropping the article from the source title "Adoption of a
 Resolution 2026-050" — awaiting one-click review in the admin dashboard.
 Possible prompt tweak if this recurs: require agenda-item titles verbatim
-(articles included) in vote lists. DO prompt caching still not engaging
-(cache_read 0 on both 74k-token runs) — open question stands.
+(articles included) in vote lists. Later the same day: the other two
+bundle recaps ran for the first time — chinohills-swagit:2026-07-14
+(agenda recovered via new backfill mode, held on 2 failures: malformed
+?ts= citation + ungroundable "Manager Rod Hill") and
+youtube-captions:2026-07-16 (transcript-only, held on 8 name failures:
+invented Title-Case section labels plus garbled-ASR "Appointment of
+Elise J"). All three recap drafts now sit in the admin held queue for
+human review. Gate 1c was further hardened through two Codex review
+rounds (position-aware link splicing; sentence-ending punctuation only —
+commits 3d3abbb, 25b9737). DO prompt caching: investigated and closed as
+not-caller-fixable — deepseek-4-flash caching is documented as automatic
+(no cache_control needed), our prompt construction is verified
+deterministic, but DO marks the feature "opportunistic" Public Preview
+and doesn't document serverless replica affinity. Remaining move is a DO
+support ticket; until then budget as if caching never engages.
 
 **Phase 0: COMPLETE** (commit effdfed). 12 sources ingesting (11 planned + City
 of Chino YouTube captions added after launch), 2,300+ items, all acceptance
