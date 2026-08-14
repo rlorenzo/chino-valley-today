@@ -30,7 +30,13 @@ export async function chat(
     temperature: cfg.temperature,
     max_tokens: opts.maxTokens ?? 4096,
   };
-  if (opts.jsonObject) body.response_format = { type: 'json_object' };
+  if (opts.jsonObject) {
+    body.response_format = { type: 'json_object' };
+    // DO Gradient rejects max_tokens combined with json_object (HTTP 400,
+    // "omit max token limits for structured outputs to avoid truncated JSON
+    // responses") — observed 2026-08-14 on both judge models.
+    delete body.max_tokens;
+  }
 
   let attempt = 0;
   for (;;) {
