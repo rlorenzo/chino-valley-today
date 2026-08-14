@@ -1,6 +1,6 @@
 # DigitalOcean support ticket draft: prompt caching never engages
 
-Status: DRAFT, not yet filed (2026-08-13). File under Product: Gradient / Serverless Inference. Everything between the SEND markers is the email; paragraphs are single lines so your email client wraps them.
+Status: FILED with DO support 2026-08-13. Kept for the record. File under Product: Gradient / Serverless Inference. Everything between the SEND markers is the email; paragraphs are single lines so your email client wraps them.
 
 ---- SEND FROM HERE ----
 
