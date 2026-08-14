@@ -1,4 +1,4 @@
-# DigitalOcean support ticket draft — prompt caching never engages
+# DigitalOcean support ticket draft: prompt caching never engages
 
 Status: DRAFT, not yet filed (2026-08-13). File under Product: Gradient / Serverless Inference. Everything between the SEND markers is the email; paragraphs are single lines so your email client wraps them.
 
@@ -6,7 +6,7 @@ Status: DRAFT, not yet filed (2026-08-13). File under Product: Gradient / Server
 
 **Subject:** Prompt caching never engages for deepseek-4-flash on Serverless Inference
 
-Hi — per the docs (https://docs.digitalocean.com/products/inference/how-to/use-prompt-caching/), prompt caching is automatic for open-source models. But calling `deepseek-4-flash` via `https://inference.do-ai.run/v1/chat/completions` with byte-identical ~74k-token prompts (fully static content, verified deterministic), I have never seen a cache hit — and `cache_created_input_tokens` is also always 0, so no cache entry is ever even written. This has held across dozens of calls over multiple days.
+Hi. Per the docs (https://docs.digitalocean.com/products/inference/how-to/use-prompt-caching/), prompt caching is automatic for open-source models. But calling `deepseek-4-flash` via `https://inference.do-ai.run/v1/chat/completions` with byte-identical ~74k-token prompts (fully static content, verified deterministic), I have never seen a cache hit, and `cache_created_input_tokens` is also always 0, so no cache entry is ever even written. This has held across dozens of calls over multiple days.
 
 Two identical requests, ~2 hours apart (note the identical prompt_tokens):
 
@@ -18,7 +18,7 @@ Two identical requests, ~2 hours apart (note the identical prompt_tokens):
 I understand caching is best-effort, but a 0% write rate on ideal input looks like the feature isn't operating for this model at all. Questions:
 
 1. Is caching actually live for `deepseek-4-flash` during the Public Preview? (The caching doc's example names DeepSeek V3.2; only the models catalog lists 4-flash as caching-capable.)
-2. If it is live, what explains zero cache writes on identical prompts — e.g., no replica affinity on serverless routing, or something required from the caller that the docs don't mention?
+2. If it is live, what explains zero cache writes on identical prompts? For example, no replica affinity on serverless routing, or something required from the caller that the docs don't mention?
 3. Do cache hits reduce consumption against the per-minute token rate limit? That limit is my main pain point with repeated large prompts.
 
 Happy to provide request IDs or run instrumented repros. Thanks!
