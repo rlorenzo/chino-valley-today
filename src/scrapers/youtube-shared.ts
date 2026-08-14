@@ -121,8 +121,9 @@ export function parseRawCues(vtt: string): RawCue[] {
     const contentLines = lines.slice(lines.indexOf(tsLine) + 1);
     // Strips VTT's per-word timing tags (<00:01:02.345>, <c>) to recover the
     // plain caption text. This is markup removal for text extraction, NOT
-    // sanitization: cue text is plain text all the way through, and the only
-    // HTML sink in this repo (esc() in src/poc-report.ts) escapes it at render.
+    // sanitization: cue text stays plain text, and both HTML sinks escape at
+    // render — esc() in src/poc-report.ts, and esc()/inline() in
+    // src/admin/render.ts (which escapes before applying markdown transforms).
     // Any future HTML sink must escape it too rather than trust this strip.
     const stripped = contentLines.map((l) => decodeVttEntities(l.replace(/<[^>]*>/g, '')).trim());
     const nonEmpty = stripped.filter((l) => l.length > 0);
