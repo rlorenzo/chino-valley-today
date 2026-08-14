@@ -29,8 +29,16 @@ Reproduction:
   2026-08-12). Sample usage block from an actual response:
   `{"cache_created_input_tokens":0,"cache_read_input_tokens":0,"completion_tokens":1914,"prompt_tokens":74671,"prompt_tokens_details":{"cached_tokens":0}}`
 
-Since the prompt is well above any minimum cacheable prefix length and exactly
-repeated, I'd expect at least occasional cache hits. Questions:
+I understand the same page describes caching as best-effort/opportunistic, so
+zero hits on any single request is within documented behavior — but a 0%
+rate across dozens of exact repeats over multiple days, with
+`cache_created_input_tokens` also always 0 (i.e., no cache entry is ever even
+written), suggests the feature is effectively not operating for this model
+rather than merely missing sometimes. I also note the caching doc's
+open-source example names DeepSeek V3.2 specifically, while it's the models
+catalog page that lists deepseek-4-flash as caching-capable — so a
+model-coverage gap during the Public Preview would fully explain what we see.
+Questions:
 
 1. Is prompt caching actually live for `deepseek-4-flash` on the serverless
    endpoint, or only for certain models/deployments during the Public Preview?
