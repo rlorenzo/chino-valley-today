@@ -10,84 +10,60 @@ Do not build ahead of the current phase.
 
 ---
 
-## Status (updated 2026-08-13)
-
-**2026-08-13 — environment rebuilt after macOS reinstall.** The repo, published
-posts, and reports survived in git; gitignored state did not. Recovery done:
-`npm ci`, yt-dlp reinstalled, full re-scrape (`npm run poc`) rebuilt
-data/cvtoday.db + raw archive — 12/12 sources OK, 2,358 items (vs ~2,300
-pre-wipe), typecheck clean, 34/34 gate tests pass, admin dashboard verified
-booting. The 7/21 Chino council bundle is fully back (66 agenda items, 30
-votes, 586 transcript segments). Losses still outstanding: `.env` LLM key
-(recreate in DO control panel: Inference -> Manage -> Create model access key)
-and the in-progress 7/21 recap draft in content/held/ (regenerate once the key
-exists). The "2 stale duplicate item rows" open decision is resolved — the
-fresh DB was built entirely by fixed scraper code; verified clean. Note for
-the Chino Hills 7/14 recap: the rebuilt chinohills-agendas window (2 most
-recent meetings) no longer covers 7/14, so that bundle currently has the
-Swagit transcript (1,084 segments) but no agenda/vote items.
-
-Same day, after a new DO key was added: 7/21 recap regenerated twice. Run 1
-exposed a real Gate 1c bug — link-stripping spliced citation labels into
-adjacent prose, fusing "six LLMDs [LLMD item](...)" into phantom name
-"LLMDs LLMD" (defeating the whitespace-gap anti-fusion rule). Fixed in
-validators.ts (labels now newline-delimited = sentence boundary; label text
-still scanned); 3 regression tests added (37 total), mutation-verified
-against the old code. Run 2 with the fixed gate: draft HELD on exactly one
-comprehensible, legitimate failure — the model wrote "Adoption of Resolution
-2026-050", dropping the article from the source title "Adoption of a
-Resolution 2026-050" — awaiting one-click review in the admin dashboard.
-Possible prompt tweak if this recurs: require agenda-item titles verbatim
-(articles included) in vote lists. Later the same day: the other two
-bundle recaps ran for the first time — chinohills-swagit:2026-07-14
-(agenda recovered via new backfill mode, held on 2 failures: malformed
-?ts= citation + ungroundable "Manager Rod Hill") and
-youtube-captions:2026-07-16 (transcript-only, held on 8 name failures:
-invented Title-Case section labels plus garbled-ASR "Appointment of
-Elise J"). All three recap drafts now sit in the admin held queue for
-human review. Gate 1c was further hardened through two Codex review
-rounds (position-aware link splicing; sentence-ending punctuation only —
-commits 3d3abbb, 25b9737). DO prompt caching: investigated and closed as
-not-caller-fixable — deepseek-4-flash caching is documented as automatic
-(no cache_control needed), our prompt construction is verified
-deterministic, but DO marks the feature "opportunistic" Public Preview
-and doesn't document serverless replica affinity. Remaining move is a DO
-support ticket; until then budget as if caching never engages.
+## Status (updated 2026-08-13, end of day)
 
 **Phase 0: COMPLETE** (commit effdfed). 12 sources ingesting (11 planned + City
-of Chino YouTube captions added after launch), 2,300+ items, all acceptance
-criteria verified, all 7 open questions answered — see SOURCES.md and
-reports/notes/. `npm run poc` regenerates reports/poc.html.
+of Chino YouTube captions added after launch), all acceptance criteria
+verified, all 7 open questions answered — see SOURCES.md and reports/notes/.
+`npm run poc` regenerates reports/poc.html.
 
-**Phase 1: BUILT, live-tuning in progress** (commits 2598a8d..6bf3f1d).
-- DONE: EDITORIAL.md; post lifecycle (content/{queue,held,published,rejected} +
-  posts/audit_log tables); Tier A generators (`npm run tiera` — 5 real posts
-  published, all passing Gate 1 calibration); Gate 1 validators (34 tests);
-  Gate 2 cross-family judge (qwen3.5 primary, glm-5.2 backup) with Tier C
-  flag routing; Tier B recap pipeline (`npm run recap`) with one repair pass;
-  admin dashboard (`npm run admin` → 127.0.0.1:8787); LLM client on
-  DigitalOcean Inference (key in .env, `npm run llm:check`).
-- IN PROGRESS: first live Tier B recap (chino-legistar:2026-07-21 — full
-  bundle: 66 agenda items, 30 votes, 586 transcript segments). Resume with:
-  `node src/pipeline/recap.ts chino-legistar:2026-07-21` (wait ~5 min after
-  any 429 — per-key per-minute token limits; each run costs ~2-3 cents).
-  Fixed so far across iterations: citation-shorthand prompt bug, keep-best
-  repair guard, slim repair payload, undici headers timeout, 429/network
-  retries, glm-5.2 backup judge, bare-[url] citation normalization before
-  gating. Draft CONTENT has been consistently good since run 1 (motions,
-  vote switches, quotes with timestamps); every hold has been formatting or
-  platform limits. Latest draft is in content/held/ with gate report
-  attached — reviewable in the admin dashboard (`npm run admin`).
-- TODO (Phase 1 remainder): recaps for the other bundle targets (Chino Hills
-  7/14, CVUSD 7/16); business-tracker narrative (Tier B); first weekly audit
-  pass through the dashboard; Nixle email ingester (waiting on mailbox
-  subscription — see amended Task 0.9); investigate DO prompt caching not
-  engaging (cache_read_input_tokens always 0).
+**2026-08-13 — environment rebuilt after a macOS reinstall.** Git survived;
+gitignored state (data/, .env, content/held/) did not. Full re-scrape rebuilt
+the DB + raw archive: 12/12 sources, 2,358 items (≥ pre-wipe baseline); new DO
+Inference key created; yt-dlp reinstalled. The old "2 stale duplicate item
+rows" open decision dissolved with the rebuild (verified clean). Lesson
+banked: the raw archive has no backup until Phase 2 — interim backup job is a
+recommended next step.
+
+**Phase 1: functionally COMPLETE except business-tracker narrative.**
+- Infrastructure (commits 2598a8d..6bf3f1d): EDITORIAL.md; post lifecycle +
+  posts/audit_log; Tier A generators (5 real posts); Gate 1 validators;
+  Gate 2 cross-family judge (qwen3.5, glm-5.2 backup) with Tier C routing;
+  recap pipeline with keep-best repair; admin dashboard; LLM client.
+- **First full Tier B lifecycle completed 2026-08-13**: all three bundle
+  recaps (Chino 7/21, Chino Hills 7/14 — agenda recovered via the new
+  `npm run one chinohills-agendas -- YYYY-MM-DD` backfill mode — and CVUSD
+  7/16) generated, held at Gate 1 on legitimate failures, human-reviewed in
+  the dashboard, and PUBLISHED (posts.status=published, published_via=manual).
+  Every hold was the designed protection working: verbatim-title drift,
+  malformed citation URLs, ASR-garbled names ("Appointment of Elise J").
+- **Gate 1c hardened via adversarial review** (commits 4a05921, 3d3abbb,
+  25b9737, 50649bf): fixed real link-label/prose fusion false positives
+  without loosening — three Codex review rounds each found a genuine bypass
+  in the previous fix (mid-sentence splits, comma continuations, decoy
+  chained links); all closed with mutation-verified regression tests
+  (44 tests). Documented accepted residual: sentence-final citation-label
+  names, covered by the Gate 2 judge.
+- **Nixle email ingester LIVE** (sbsheriff-nixle-mail, commits c61185e,
+  639c7d6) — completes amended Task 0.9. Mailbox
+  chinovalleytoday+nixle@gmail.com subscribed; IMAP read-only polling;
+  ingests only nixle.us-permalink-carrying messages (provenance rule),
+  everything Tier C. First live poll verified; first real alert (~1-2 wk
+  cadence) will validate email-template assumptions.
+- **DO prompt caching: closed as not-caller-fixable.** Docs say automatic for
+  deepseek-4-flash; our prompts are verified deterministic; feature is
+  "opportunistic" Public Preview with undocumented replica affinity. Support
+  ticket drafted. Budget as if caching never engages (~2-3¢/recap).
+- TODO (Phase 1 remainder): business-tracker narrative (Tier B); first weekly
+  audit pass through the dashboard; possible prompt tweaks only if failure
+  classes recur (verbatim titles incl. articles; no invented Title-Case
+  section labels on transcript-only bundles).
 - OPEN DECISIONS: CVUSD agenda-PDF robots exception (scoped skipRobots vs
-  listing-only); 2 stale duplicate item rows (cleanup SQL in
-  reports/notes/chino-news-rss.md).
+  listing-only); item idempotency across packet re-uploads (external_id is
+  document-scoped; see vault task).
 
 **Phase 2/3: not started** (static site + droplet; podcast + growth).
+Interim backup of data/ recommended before Phase 2's proper backup job.
 
 ---
 
