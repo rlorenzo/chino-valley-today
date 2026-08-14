@@ -76,7 +76,11 @@ recommended next step.
   document-scoped; see vault task).
 
 **Phase 2/3: not started** (static site + droplet; podcast + growth).
-Interim backup of data/ recommended before Phase 2's proper backup job.
+Interim backup landed 2026-08-14: `npm run backup` (scripts/interim-backup.sh)
+snapshots the DB (WAL-safe .backup + integrity check), data/raw, .env, and
+content/ working state to ~/Backups/chino-valley-today/<date>/ (override with
+CVT_BACKUP_DIR; point it at a cloud-synced folder for offsite). Run it after
+scrape/review sessions. Phase 2 still owes the proper nightly offsite job.
 
 ---
 

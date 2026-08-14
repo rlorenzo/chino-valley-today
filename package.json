@@ -16,6 +16,7 @@
     "recap": "node src/pipeline/recap.ts",
     "tracker": "node src/pipeline/business-tracker.ts",
     "admin": "node src/admin/server.ts",
+    "backup": "bash scripts/interim-backup.sh",
     "test": "node --test \"src/**/*.test.ts\""
   },
   "dependencies": {
