@@ -1,5 +1,12 @@
-import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { createHash, randomUUID } from 'node:crypto';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  unlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -16,9 +23,26 @@ export function saveRaw(body: Uint8Array, ext: string): { hash: string; rawPath:
   const hash = sha256(body);
   const rel = join('data', 'raw', hash.slice(0, 2), `${hash}.${ext}`);
   const abs = join(ROOT, rel);
+  // The store is content-addressed, so an entry that already exists holds these
+  // exact bytes and the write can be skipped. The write itself goes to a unique
+  // temp file in the same directory and is renamed into place: writing straight
+  // to `abs` lets a crashed or concurrent run leave a truncated file there,
+  // which every later existsSync check then accepts as a complete archive entry.
+  // rename(2) within one directory is atomic, so `abs` only ever appears whole.
   if (!existsSync(abs)) {
     mkdirSync(dirname(abs), { recursive: true });
-    writeFileSync(abs, body);
+    const tmp = `${abs}.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(tmp, body);
+      renameSync(tmp, abs);
+    } catch (err) {
+      try {
+        unlinkSync(tmp);
+      } catch {
+        // Best-effort cleanup; the temp file may never have been created.
+      }
+      throw err;
+    }
   }
   return { hash, rawPath: rel };
 }
@@ -37,6 +61,10 @@ const EXT_BY_TYPE: Array<[RegExp, string]> = [
   [/text\/plain/, 'txt'],
 ];
 
+// The returned value is used as the filename extension in saveRaw, so it must
+// never carry path separators or traversal: every branch returns either a
+// hardcoded literal or a /[a-z0-9]{2,5}/ match, keeping the archive path
+// entirely to <hex>/<hex>.<alnum> even though `url` is untrusted network input.
 export function extFor(contentType: string | null, url: string): string {
   if (contentType) {
     for (const [re, ext] of EXT_BY_TYPE) if (re.test(contentType)) return ext;

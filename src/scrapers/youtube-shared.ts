@@ -68,13 +68,19 @@ export async function listRecentUploads(channelUrl: string, limit: number): Prom
     });
 }
 
+const VTT_ENTITIES: Record<string, string> = {
+  '&gt;': '>',
+  '&lt;': '<',
+  '&amp;': '&',
+  '&#39;': "'",
+  '&quot;': '"',
+};
+
+// One pass, not a chain of .replace() calls: chaining decodes the output of the
+// earlier replacements, so a caption containing the literal text "&#39;"
+// (encoded on the wire as "&amp;#39;") came out as "'" instead of "&#39;".
 function decodeVttEntities(s: string): string {
-  return s
-    .replace(/&gt;/g, '>')
-    .replace(/&lt;/g, '<')
-    .replace(/&amp;/g, '&')
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"');
+  return s.replace(/&(?:gt|lt|amp|#39|quot);/g, (m) => VTT_ENTITIES[m]);
 }
 
 export interface RawCue {
@@ -113,6 +119,11 @@ export function parseRawCues(vtt: string): RawCue[] {
     if (!tsLine) continue;
     const [startRaw, endRaw] = tsLine.split('-->').map((s) => s.trim().split(' ')[0]);
     const contentLines = lines.slice(lines.indexOf(tsLine) + 1);
+    // Strips VTT's per-word timing tags (<00:01:02.345>, <c>) to recover the
+    // plain caption text. This is markup removal for text extraction, NOT
+    // sanitization: cue text is plain text all the way through, and the only
+    // HTML sink in this repo (esc() in src/poc-report.ts) escapes it at render.
+    // Any future HTML sink must escape it too rather than trust this strip.
     const stripped = contentLines.map((l) => decodeVttEntities(l.replace(/<[^>]*>/g, '')).trim());
     const nonEmpty = stripped.filter((l) => l.length > 0);
     const text = nonEmpty.at(-1) ?? '';
