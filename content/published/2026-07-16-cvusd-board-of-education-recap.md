@@ -1,0 +1,166 @@
+---
+title: "Recap: CVUSD Board of Education meeting of 2026-07-16"
+post_type: meeting_recap
+tier: B
+date: "2026-08-13T22:39:08.709Z"
+meeting_date: "2026-07-16"
+sources:
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=21s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=40s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=59s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=78s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=98s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=117s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=134s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=153s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=172s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=192s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=211s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=230s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=246s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=266s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=282s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=300s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=317s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=337s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=357s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=376s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=391s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=478s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=495s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=514s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=534s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=554s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=573s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=592s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=611s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=631s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=637s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=664s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=683s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=686s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=753s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=768s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=786s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=804s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=823s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=839s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=856s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=872s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=891s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=910s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=929s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=947s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=964s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=982s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1002s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1022s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1040s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1059s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1074s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1093s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1110s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1129s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1148s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1167s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1187s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1206s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1226s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1244s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1263s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1283s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1302s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1321s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1340s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1359s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1379s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1398s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1417s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1436s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1455s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1474s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1493s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1512s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1527s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1546s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1565s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1582s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1600s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1619s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1638s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1658s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1678s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1696s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1715s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1733s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1751s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1771s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1789s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1807s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1827s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1845s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1864s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1883s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1901s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1919s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1939s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1956s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1974s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=1991s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2011s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2028s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2047s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2066s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2084s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2100s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2118s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2137s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2156s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2176s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2194s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2213s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2232s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2249s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2268s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2285s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2304s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2321s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2338s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2358s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2372s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2390s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2408s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2427s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2444s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2464s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2484s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2504s"
+  - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2522s"
+---
+
+The Chino Valley Unified School District (CVUSD) Board of Education held its regular meeting on July 16, 2026, with all five members present — President Shaw, and members Cervantes, Cruz, Naw, and Smith [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=21s). The meeting included closed session actions, recognitions, public comments, and the adoption of consent items.
+
+### Closed Session Actions
+The board met in closed session from 4:15 PM to 5:39 PM concerning conference with legal counsel (anticipated litigation — one possible case; existing litigation — five cases), a student readmission matter, a student discipline matter, public employee appointments, discipline/dismissal/release, and performance evaluation of the superintendent [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=40s). The board took the following actions:
+- Appointed Elise Jükley as coordinator of special education, effective date to be determined, by unanimous vote of 5-0 with Cervantes, Cruz, Naw, Shaw, and Smith voting yes [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=59s).
+- Approved the following appointments effective July 17th, 2026 by unanimous vote of 5-0 with Cervantes, Cruz, Naw, Shaw, and Smith voting yes: Amber Fellows as assistant principal at Briggs K8, Serita Lopez as assistant principal at Canyon Hills Junior High School, Aaro Karuvius as assistant principal at Chino High School, and Mark Wear as assistant principal at Chino Hills High School [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=78s).
+- Upheld the superintendent's decision regarding the complaint filed against employee number 29826 with a vote of 5-0 with Cervantes, Cruz, Naw, Shaw, and Smith voting yes [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=98s).
+
+### Recognitions
+The board recognized a $10,000 donation from Good Shepherd Presbyterian Church in support of school site Christian clubs [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=172s). The board also honored security officer Donald “Donnie” Shankle for his 37-year career with CVUSD (since 1988), including more than 30 years providing security at board meetings [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=495s). Board members and the superintendent spoke in appreciation of his service [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=753s).
+
+### Public Comments
+Five members of the public addressed the board. Three speakers (Lisa G, Christy H, and JR) commented on the departure of teacher Natalie Cooney, an American Sign Language instructor at Ayala High School, alleging retaliation and harm to students [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=1527s) [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=1696s) [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=2118s). One speaker (Jim Gallagher) raised concerns about facility infrastructure, including the lack of a podium, poor sound system, and meeting conduct [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=1864s). One speaker (Lucky Sang) requested that the district resign a contract with the Chino Valley Chamber of Commerce for a career readiness initiative [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=2028s).
+
+### Consent Items
+The board voted 5-0 to approve the consent items [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=2194s).
+
+### Votes
+- Appointment of Elise Jükley as coordinator of special education: 5-0 [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=59s).
+- Approval of assistant principal appointments: 5-0 [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=78s).
+- Upholding superintendent's decision on employee complaint: 5-0 [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=98s).
+- Adoption of consent items: 5-0 [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=2194s).
+
+---
+
+*Generated from public records with automated review; see sources linked above. Corrections: see About page.*

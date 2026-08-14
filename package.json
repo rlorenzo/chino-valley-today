@@ -15,16 +15,19 @@
     "tiera": "node src/tiera/run.ts",
     "recap": "node src/pipeline/recap.ts",
     "admin": "node src/admin/server.ts",
-    "test": "node --test \"src/gates/**/*.test.ts\""
+    "test": "node --test \"src/**/*.test.ts\""
   },
   "dependencies": {
     "cheerio": "^1.2.0",
     "fast-xml-parser": "^5.10.1",
     "hono": "^4.13.1",
+    "imapflow": "^1.6.5",
+    "mailparser": "^3.9.14",
     "pdf-parse": "^2.4.5",
     "undici": "^8.10.0"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.4.6",
     "@types/node": "^26.2.0",
     "typescript": "^7.0.2"
   }

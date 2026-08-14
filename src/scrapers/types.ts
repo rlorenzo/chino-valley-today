@@ -1,7 +1,7 @@
 import type { Db } from '../db/index.ts';
 import type { FetchOpts, RawResult } from '../fetch.ts';
 
-export type FetchMethod = 'api' | 'rss' | 'html' | 'pdf' | 'captions';
+export type FetchMethod = 'api' | 'rss' | 'html' | 'pdf' | 'captions' | 'email';
 
 // Recommended doc_type values: 'agenda','minutes','packet','video','captions',
 // 'news_release','alert','license_report','feed','listing'

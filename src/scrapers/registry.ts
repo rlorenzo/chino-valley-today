@@ -13,4 +13,5 @@ export const SCRAPERS: Record<string, string> = {
   'nws-alerts': './scrapers/nws-alerts.ts',
   'abc-licenses': './scrapers/abc-licenses.ts',
   'sbsheriff-news': './scrapers/sbsheriff-news.ts',
+  'sbsheriff-nixle-mail': './scrapers/sbsheriff-nixle-mail.ts',
 };
