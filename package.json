@@ -14,6 +14,7 @@
     "llm:check": "node src/llm/check.ts",
     "tiera": "node src/tiera/run.ts",
     "recap": "node src/pipeline/recap.ts",
+    "tracker": "node src/pipeline/business-tracker.ts",
     "admin": "node src/admin/server.ts",
     "test": "node --test \"src/**/*.test.ts\""
   },
