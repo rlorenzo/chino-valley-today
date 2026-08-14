@@ -33,10 +33,19 @@
 // Without user+password the scraper notes the gap and returns cleanly, so
 // `npm run poc` stays green on machines without mailbox credentials.
 
+import { join } from 'node:path';
 import { ImapFlow } from 'imapflow';
 import { simpleParser, type ParsedMail } from 'mailparser';
-import { saveRaw } from '../store.ts';
+import { ROOT, saveRaw } from '../store.ts';
 import type { ScraperContext, ScraperDef } from './types.ts';
+
+// Same .env loading as src/llm/config.ts — the scraper runners don't load it,
+// and mailbox credentials live there alongside the LLM key.
+try {
+  process.loadEnvFile(join(ROOT, '.env'));
+} catch {
+  // no .env — the credential guard in run() reports the gap
+}
 
 const CHANNEL_URL = 'https://local.nixle.com/sbsd---chino-hills-police-department/';
 
