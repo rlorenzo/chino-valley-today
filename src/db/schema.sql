@@ -67,8 +67,8 @@ CREATE TABLE IF NOT EXISTS items (
   UNIQUE(document_id, external_id, item_type)
 );
 
--- insertItem() resolves item identity as (source, item_type, external_id) so a
--- re-uploaded document doesn't duplicate its items (see the comment there). The
--- UNIQUE constraint above leads with document_id, so its autoindex can't serve
--- that lookup; this one can.
+-- insertItem() resolves item identity as (document url, item_type, external_id)
+-- so a re-uploaded document doesn't duplicate its items (see the comment there).
+-- The UNIQUE constraint above leads with document_id, so its autoindex can't
+-- serve that lookup; this one can.
 CREATE INDEX IF NOT EXISTS idx_items_external_id ON items(external_id, item_type);

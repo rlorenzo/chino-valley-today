@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { type Db, type NewItem, openDb } from "./index.ts";
 
-// Item identity is (source, item_type, external_id), NOT (document_id, ...).
+// Item identity is (document URL, item_type, external_id), NOT (document_id, ...).
 // `documents` is content-addressed, so a source re-uploading a changed document
-// mints a new documents row; keying items on document_id would re-insert every
-// item as a duplicate under the new id even though its source-native
-// external_id never changed. bundle.ts's itemsFor() has no DISTINCT, so those
-// duplicates would land in the same recap.
+// mints a new documents row AT THE SAME URL; keying items on document_id would
+// re-insert every item as a duplicate under the new id even though its
+// source-native external_id never changed. bundle.ts's itemsFor() has no
+// DISTINCT, so those duplicates would land in the same recap.
+//
+// Keyed on the url rather than the source, deliberately: several sources hold
+// more than one meeting on a date (cvusd-board's Regular/Special, a separate
+// chino-agendacenter series per commission), so a source-scoped key merges
+// genuinely different items. See the "two documents from ONE source" test below.
 
 function freshDb(): Db {
 	return openDb(":memory:");
