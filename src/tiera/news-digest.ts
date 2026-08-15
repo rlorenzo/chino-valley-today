@@ -56,7 +56,7 @@ export function generateNewsDigest(db: Db, now: Date): GenResult {
 		const label = CITY_LABEL[row.source_key] ?? row.source_key;
 		const dateLabel = (row.occurred_at ?? "").slice(0, 10);
 		const head = `- ${mdLink((row.title ?? "").trim(), row.source_url)} — ${dateLabel} (${label})`;
-		if (row.body && row.body.trim()) {
+		if (row.body?.trim()) {
 			return `${head}\n  ${mdEscape(truncateTeaser(row.body))}`;
 		}
 		return head;

@@ -41,7 +41,7 @@ export async function chat(
 	let attempt = 0;
 	for (;;) {
 		attempt++;
-		let res;
+		let res: Awaited<ReturnType<typeof undiciFetch>>;
 		try {
 			res = await undiciFetch(`${cfg.endpoint}/chat/completions`, {
 				method: "POST",

@@ -92,7 +92,7 @@ const NIXLE_CHINO_HILLS_URL =
 const CHINO_HILLS_RE = /chino hills/i;
 const MAX_FALLBACK_ITEMS = 5;
 
-function stripHtml(input: string | undefined | null): string {
+function _stripHtml(input: string | undefined | null): string {
 	if (!input) return "";
 	return cheerio
 		.load(`<div>${input}</div>`)("div")

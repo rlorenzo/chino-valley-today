@@ -105,9 +105,7 @@ const TARGET_SHAPES: Array<{
 	},
 ];
 
-export function listRecapTargets(
-	db: Db,
-): Array<{
+export function listRecapTargets(db: Db): Array<{
 	targetKey: string;
 	bodyName: string;
 	meetingDate: string;
@@ -228,7 +226,7 @@ export function renderBundleForPrompt(
 		"",
 		"## Citable source URLs (the ONLY URLs you may link; cite as inline markdown links, never shorthand):",
 	);
-	b.allowedUrls.forEach((u) => lines.push(`- ${u}`));
+	for (const u of b.allowedUrls) lines.push(`- ${u}`);
 
 	if (b.agendaItems.length) {
 		lines.push("", "## Agenda items (verbatim):");
@@ -345,9 +343,7 @@ function weekItemsFor(
 		.map(toBundleItem);
 }
 
-export function listBusinessWeeks(
-	db: Db,
-): Array<{
+export function listBusinessWeeks(db: Db): Array<{
 	isoWeek: string;
 	counts: { licenseEvents: number; planningItems: number };
 }> {
@@ -499,7 +495,7 @@ export function renderBusinessBundleForPrompt(b: BusinessBundle): string {
 		"",
 		"## Citable source URLs (the ONLY URLs you may link; cite as inline markdown links, never shorthand):",
 	);
-	b.allowedUrls.forEach((u) => lines.push(`- ${u}`));
+	for (const u of b.allowedUrls) lines.push(`- ${u}`);
 
 	const pushItem = (it: BundleItem) => {
 		lines.push(`- ${it.title ?? "(untitled)"}`);

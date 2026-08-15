@@ -1,7 +1,7 @@
 // Gate 2: LLM judge on a different model FAMILY than the generator
 // (uncorrelated failure modes). Returns a structured verdict; any flag or
 // faithfulness failure routes the draft to held/.
-import { chat, parseJsonResponse } from "../llm/client.ts";
+import { type ChatResult, chat, parseJsonResponse } from "../llm/client.ts";
 import type { MeetingBundle } from "./bundle.ts";
 import { renderBundleForPrompt } from "./bundle.ts";
 
@@ -88,7 +88,7 @@ export async function judgeDraft(
 		},
 	];
 	const opts = { jsonObject: true, maxTokens: 8192, timeoutMs: 900_000 };
-	let res;
+	let res: ChatResult;
 	try {
 		res = await chat("judge", messages, opts);
 	} catch (err) {

@@ -178,8 +178,8 @@ function extractSequentialItems(rawText: string): {
 	const text = rawText.replace(/^\d{1,4}\/\d{1,4}[ \t]*$/gm, "");
 	const pageMarkerRe = /^-- (\d+) of \d+ --[ \t]*$/gm;
 	const pageMarkers: Array<{ idx: number }> = [];
-	let pm: RegExpExecArray | null;
-	while ((pm = pageMarkerRe.exec(text))) pageMarkers.push({ idx: pm.index });
+	for (const pm of text.matchAll(pageMarkerRe))
+		pageMarkers.push({ idx: pm.index });
 
 	function pageForIndex(idx: number): number {
 		let count = 0;
@@ -192,12 +192,12 @@ function extractSequentialItems(rawText: string): {
 
 	const itemRe = /^(\d{1,3})\.[ \t]+/gm;
 	const rawMatches: Array<{ num: number; start: number; end: number }> = [];
-	let im: RegExpExecArray | null;
-	while ((im = itemRe.exec(text))) {
+	for (const im of text.matchAll(itemRe)) {
 		rawMatches.push({
 			num: parseInt(im[1], 10),
 			start: im.index,
-			end: itemRe.lastIndex,
+			// matchAll exposes no lastIndex; this is the same end offset.
+			end: im.index + im[0].length,
 		});
 	}
 

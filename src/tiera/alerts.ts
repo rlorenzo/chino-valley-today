@@ -55,7 +55,7 @@ export function generateAlerts(db: Db, now: Date): GenResult {
 			lines.push(`- **Effective:** ${mdEscape(meta.effective)}`);
 		lines.push(`- **Ends:** ${mdEscape(ends)}`);
 		lines.push("");
-		if (row.body && row.body.trim()) {
+		if (row.body?.trim()) {
 			lines.push(`> ${mdEscape(row.body.replace(/\s+/g, " ").trim())}`, "");
 		}
 		lines.push(

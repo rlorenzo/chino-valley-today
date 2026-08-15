@@ -440,7 +440,7 @@ async function run(ctx: ScraperContext): Promise<void> {
 		ctx.note(
 			`NR release ${nr.nrNumber}: fetched ${nr.url} -> archived ${relDoc.finalUrl} (${bodyText.length} chars after stripping the Constant Contact email chrome at the "Unsubscribe" marker). ${
 				occurredAt
-					? `Dateline parsed from body: ${dateline![1]}.`
+					? `Dateline parsed from body: ${dateline?.[1]}.`
 					: "No dateline found in extracted text — occurred_at left null."
 			}`,
 		);

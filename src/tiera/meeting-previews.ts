@@ -320,7 +320,7 @@ function genLegistarPreviews(
 			);
 			continue;
 		}
-		const meta0 = parseMeta(rows[0]!.meta);
+		const meta0 = parseMeta(rows[0]?.meta);
 		const eventBodyName =
 			typeof meta0.eventBodyName === "string"
 				? meta0.eventBodyName
@@ -328,14 +328,14 @@ function genLegistarPreviews(
 
 		const agendaMd = agendaListMarkdown(rows);
 		const lines: string[] = [
-			`- **Date:** ${mdEscape(humanDateFromLocal(localDate))} (${mdLink("meeting record", rows[0]!.source_url)})`,
+			`- **Date:** ${mdEscape(humanDateFromLocal(localDate))} (${mdLink("meeting record", rows[0]?.source_url)})`,
 			"",
 		];
 		if (agendaMd) {
 			lines.push("### Agenda", "", agendaMd);
 		} else {
 			lines.push(
-				`_No agenda items are in our records for this meeting yet (${mdLink("meeting record", rows[0]!.source_url)})._`,
+				`_No agenda items are in our records for this meeting yet (${mdLink("meeting record", rows[0]?.source_url)})._`,
 			);
 		}
 
@@ -394,20 +394,20 @@ function genChinohillsAgendaPreviews(
 		futureGroups++;
 
 		const localDate = occurredAt as string; // already a bare YYYY-MM-DD
-		const meta0 = parseMeta(rows[0]!.meta);
+		const meta0 = parseMeta(rows[0]?.meta);
 		const bodyName =
 			typeof meta0.body === "string" ? meta0.body : `Meeting seq ${seq}`;
 
 		const agendaMd = agendaListMarkdown(rows);
 		const lines: string[] = [
-			`- **Date:** ${mdEscape(humanDateFromLocal(localDate))} (${mdLink("agenda packet", rows[0]!.source_url)})`,
+			`- **Date:** ${mdEscape(humanDateFromLocal(localDate))} (${mdLink("agenda packet", rows[0]?.source_url)})`,
 			"",
 		];
 		if (agendaMd) {
 			lines.push("### Agenda", "", agendaMd);
 		} else {
 			lines.push(
-				`_No agenda items are in our records for this meeting yet (${mdLink("agenda packet", rows[0]!.source_url)})._`,
+				`_No agenda items are in our records for this meeting yet (${mdLink("agenda packet", rows[0]?.source_url)})._`,
 			);
 		}
 

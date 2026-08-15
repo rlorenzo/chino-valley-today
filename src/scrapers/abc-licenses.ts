@@ -92,7 +92,7 @@ function headerIndex(
 }
 
 function cellText(
-	$: cheerio.CheerioAPI,
+	_$: cheerio.CheerioAPI,
 	cells: cheerio.Cheerio<AnyNode>,
 	idx: number | undefined,
 ): string {
@@ -105,7 +105,7 @@ function cellText(
 // "Primary Owner and Premises Addr." cell and the "Status Changed From/To"
 // cell, both of which pack multiple logical lines into one <td> via <br>.
 function cellLines(
-	$: cheerio.CheerioAPI,
+	_$: cheerio.CheerioAPI,
 	cells: cheerio.Cheerio<AnyNode>,
 	idx: number | undefined,
 ): string[] {

@@ -117,8 +117,7 @@ interface AgendaItem {
 function pageForIndex(text: string, idx: number): number {
 	const marker = /--\s*\d+\s*of\s*\d+\s*--/g;
 	let count = 0;
-	let m: RegExpExecArray | null;
-	while ((m = marker.exec(text.slice(0, idx))) !== null) count++;
+	for (const _ of text.slice(0, idx).matchAll(marker)) count++;
 	return count + 1;
 }
 
@@ -144,8 +143,7 @@ function splitAgendaItems(fullText: string): {
 
 	const itemRe = /^\s*(\d{1,2})\.\s+/gm;
 	const matches: Array<{ n: string; idx: number; contentStart: number }> = [];
-	let m: RegExpExecArray | null;
-	while ((m = itemRe.exec(region)) !== null) {
+	for (const m of region.matchAll(itemRe)) {
 		matches.push({
 			n: m[1],
 			idx: m.index,

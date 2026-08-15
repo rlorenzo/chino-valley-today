@@ -39,7 +39,9 @@ async function sendFetchResponse(
 	fres: Response,
 ): Promise<void> {
 	res.statusCode = fres.status;
-	fres.headers.forEach((value, key) => res.setHeader(key, value));
+	fres.headers.forEach((value, key) => {
+		res.setHeader(key, value);
+	});
 	if (!fres.body) {
 		res.end();
 		return;

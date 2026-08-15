@@ -185,7 +185,7 @@ export function mergeCuesIntoSegments(
 			cur = { start: c.start, end: c.end, text: c.text };
 		} else {
 			cur.end = c.end;
-			cur.text += " " + c.text;
+			cur.text += ` ${c.text}`;
 		}
 	}
 	if (cur) segs.push(cur);

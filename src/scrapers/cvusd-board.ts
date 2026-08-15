@@ -168,8 +168,7 @@ function splitAgendaItems(fullText: string): {
 
 	const itemRe = /^([IVXLC]+\.[A-Z]\.\d+)\.\s*$/gm;
 	const matches: Array<{ n: string; idx: number; contentStart: number }> = [];
-	let m: RegExpExecArray | null;
-	while ((m = itemRe.exec(region)) !== null) {
+	for (const m of region.matchAll(itemRe)) {
 		matches.push({
 			n: m[1],
 			idx: m.index,
@@ -295,7 +294,7 @@ const scraper: ScraperDef = {
 
 		// --- Open question 4: BoardDocs/Simbli verdict, with evidence ---
 		const agendaHosts = new Set(
-			allRows.filter((r) => r.agendaUrl).map((r) => new URL(r.agendaUrl!).host),
+			allRows.flatMap((r) => (r.agendaUrl ? [new URL(r.agendaUrl).host] : [])),
 		);
 		ctx.note(
 			`Open question 4 verdict: agenda PDF host(s) across ${allRows.length} meeting rows: ${

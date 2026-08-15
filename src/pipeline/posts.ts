@@ -286,5 +286,10 @@ export function transitionPost(
 			nowIso(),
 			row.id,
 		);
-	return getPost(db, slug)!;
+	const updated = getPost(db, slug);
+	// The UPDATE above matched row.id, so this is unreachable; assert rather than
+	// silence it, so a genuine desync surfaces instead of a confusing downstream undefined.
+	if (!updated)
+		throw new Error(`post ${slug} disappeared during transition to ${to}`);
+	return updated;
 }

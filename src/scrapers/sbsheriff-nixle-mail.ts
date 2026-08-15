@@ -179,6 +179,10 @@ async function run(ctx: ScraperContext): Promise<void> {
 					{ source: true },
 					{ uid: true },
 				);
+				// NOT `!msg?.source`: msg is `false | FetchMessageObject`, and optional
+				// chaining short-circuits only on null/undefined, so it neither narrows
+				// `false` out nor type-checks. Biome's autofix here breaks tsc.
+				// biome-ignore lint/complexity/useOptionalChain: union member is `false`, not null/undefined
 				if (!msg || !msg.source) continue;
 				const mail = await simpleParser(msg.source);
 				const fromText = (mail.from?.text ?? "").toLowerCase();

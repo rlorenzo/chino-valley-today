@@ -88,7 +88,7 @@ function patternMatches(pattern: string, path: string): boolean {
 		.split("*")
 		.map((s) => s.replace(/[.+?^${}()|[\]\\]/g, "\\$&"))
 		.join(".*");
-	return new RegExp("^" + escaped + (anchorEnd ? "$" : "")).test(path);
+	return new RegExp(`^${escaped}${anchorEnd ? "$" : ""}`).test(path);
 }
 
 function isAllowed(groups: RobotGroup[], path: string): boolean {
@@ -121,7 +121,7 @@ async function getRobots(origin: string): Promise<RobotGroup[] | null> {
 	if (robotsCache.has(origin)) return robotsCache.get(origin) ?? null;
 	let groups: RobotGroup[] | null = null;
 	try {
-		const res = await fetch(origin + "/robots.txt", {
+		const res = await fetch(`${origin}/robots.txt`, {
 			headers: { "user-agent": USER_AGENT },
 			signal: AbortSignal.timeout(15000),
 		});
@@ -160,7 +160,7 @@ export async function politeFetch(
 	await politeDelay(u.host);
 
 	const headers: Record<string, string> = { "user-agent": USER_AGENT };
-	if (opts.accept) headers["accept"] = opts.accept;
+	if (opts.accept) headers.accept = opts.accept;
 	if (opts.etag) headers["if-none-match"] = opts.etag;
 	if (opts.lastModified) headers["if-modified-since"] = opts.lastModified;
 

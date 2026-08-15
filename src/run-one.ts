@@ -32,7 +32,7 @@ console.log(
 );
 console.log("counts:", JSON.stringify(ctx.counts));
 if (notes.length)
-	console.log("notes:\n" + notes.map((n) => `  - ${n}`).join("\n"));
+	console.log(`notes:\n${notes.map((n) => `  - ${n}`).join("\n")}`);
 
 const samples = db.raw
 	.prepare(
