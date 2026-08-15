@@ -126,6 +126,34 @@ describe('licenseEventDetail', () => {
     assert.equal(/https?:\/\//.test(detail), false);
   });
 
+  test('licensee and DBA are bound in one clause, in that order', () => {
+    // The 2026-W33 re-run inverted these when they were two adjacent sentences,
+    // publishing "LATIMEX MARKET, doing business as STOOPS, JEFFREY D". Gate 1
+    // cannot catch it — both names are in the corpus, only the relationship is
+    // wrong — so the corpus must not permit the reading in the first place.
+    const detail = licenseEventDetail(META) ?? '';
+    assert.match(detail, /Licensee: STOOPS, JEFFREY D, doing business as LATIMEX MARKET\./);
+    assert.doesNotMatch(
+      detail,
+      /LATIMEX MARKET, doing business as/,
+      'the business must never be rendered as operating under the person'
+    );
+    // The licensee must precede the DBA in the text, not merely coexist with it.
+    assert.ok(detail.indexOf('STOOPS, JEFFREY D') < detail.indexOf('LATIMEX MARKET'));
+  });
+
+  test('a licensee with no DBA renders alone, without a dangling clause', () => {
+    const detail = licenseEventDetail({ ...META, dba: '' }) ?? '';
+    assert.match(detail, /Licensee: STOOPS, JEFFREY D\./);
+    assert.doesNotMatch(detail, /doing business as/i);
+  });
+
+  test('a DBA with no licensee is a labelled field, not a floating verb phrase', () => {
+    const detail = licenseEventDetail({ ...META, primary_name: '' }) ?? '';
+    assert.match(detail, /Doing business as: LATIMEX MARKET\./);
+    assert.doesNotMatch(detail, /Licensee:/);
+  });
+
   test('new-application reports are labeled as such', () => {
     const detail = licenseEventDetail({ ...META, report_type: 'new_applications' });
     assert.ok(detail?.includes('new-applications report'));
