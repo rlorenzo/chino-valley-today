@@ -79,6 +79,7 @@
 
 import * as cheerio from "cheerio";
 import { XMLParser } from "fast-xml-parser";
+import { resolveDocumentId } from "./document-linkage.ts";
 import type { ScraperContext, ScraperDef } from "./types.ts";
 
 const BASE = "https://wp.sbcounty.gov/sheriff";
@@ -169,30 +170,6 @@ function parseCoronerItems($: cheerio.CheerioAPI): CoronerItem[] {
 		items.push({ externalId: idMatch[1], body: fullText });
 	});
 	return items;
-}
-
-// Mirrors chinohills-news-rss.ts's resolveDocumentId(): the coroner page's list
-// rotates (new deaths added, old ones roll off) so its content_hash — and
-// therefore its documents row — changes most runs. Items must stay pinned to
-// whichever document_id first captured their external_id, or every surviving
-// item looks "new" again on every re-run.
-function resolveDocumentId(
-	ctx: ScraperContext,
-	freshDocumentId: number,
-	externalId: string,
-	itemType: string,
-): number {
-	const row = ctx.db.raw
-		.prepare(
-			`SELECT i.document_id AS documentId FROM items i
-       JOIN documents d ON i.document_id = d.id
-       WHERE i.external_id = ? AND i.item_type = ? AND d.source_id = ?
-       ORDER BY i.id DESC LIMIT 1`,
-		)
-		.get(externalId, itemType, ctx.sourceId) as
-		| { documentId: number }
-		| undefined;
-	return row?.documentId ?? freshDocumentId;
 }
 
 async function run(ctx: ScraperContext): Promise<void> {
