@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancel superseded runs on the same branch; the whole suite takes seconds, but
+# there is no reason to burn minutes on a commit that has already been replaced.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck · lint · test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # fallow's health analysis reads git history for churn/hotspot signals;
+          # the default shallow clone would leave it with a single commit.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          # Must stay >=24: package.json engines requires it, the tests are run by
+          # node --test, and the .ts sources are executed via native type-stripping.
+          node-version: 24
+          cache: npm
+
+      # `npm ci` runs the "prepare" script, which only sets git config
+      # core.hooksPath — harmless on a runner, and it keeps install identical
+      # to a developer machine.
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint and format check
+        # Non-writing: fails if anything is unformatted or violates a lint rule,
+        # rather than quietly reformatting in CI.
+        run: npm run lint
+
+      - name: Test with coverage
+        run: npm run coverage
+
+  analyze:
+    name: fallow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      # Blocking: an unreachable file, an unused export, or an undeclared
+      # dependency is a concrete defect. This is what caught `domhandler` being
+      # imported without being declared in package.json.
+      - name: Dead code and dependency hygiene
+        run: npx fallow dead-code --format github-annotations
+
+      # Advisory: duplication and complexity describe existing code rather than
+      # anything this PR introduced, so they report without failing the build.
+      # `|| true` keeps a finding from turning into a red X; the job summary is
+      # where the signal lives.
+      - name: Duplication (advisory)
+        if: always()
+        run: |
+          npx fallow dupes --format github-summary >> "$GITHUB_STEP_SUMMARY" || true
+
+      - name: Complexity and maintainability (advisory)
+        if: always()
+        run: |
+          npx fallow health --format github-summary >> "$GITHUB_STEP_SUMMARY" || true

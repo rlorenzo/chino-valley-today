@@ -6,3 +6,4 @@ data/
 content/queue/
 content/held/
 content/rejected/
+.fallow/

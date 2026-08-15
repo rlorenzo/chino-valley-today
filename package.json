@@ -1,36 +1,47 @@
 {
-  "name": "chino-valley-today",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "engines": {
-    "node": ">=24"
-  },
-  "scripts": {
-    "poc": "node src/run-poc.ts",
-    "one": "node src/run-one.ts",
-    "report": "node src/poc-report.ts",
-    "typecheck": "tsc --noEmit",
-    "llm:check": "node src/llm/check.ts",
-    "tiera": "node src/tiera/run.ts",
-    "recap": "node src/pipeline/recap.ts",
-    "tracker": "node src/pipeline/business-tracker.ts",
-    "admin": "node src/admin/server.ts",
-    "backup": "bash scripts/interim-backup.sh",
-    "test": "node --test \"src/**/*.test.ts\""
-  },
-  "dependencies": {
-    "cheerio": "^1.2.0",
-    "fast-xml-parser": "^5.10.1",
-    "hono": "^4.13.1",
-    "imapflow": "^1.6.5",
-    "mailparser": "^3.9.14",
-    "pdf-parse": "^2.4.5",
-    "undici": "^8.10.0"
-  },
-  "devDependencies": {
-    "@types/mailparser": "^3.4.6",
-    "@types/node": "^26.2.0",
-    "typescript": "^7.0.2"
-  }
+	"name": "chino-valley-today",
+	"version": "0.1.0",
+	"private": true,
+	"type": "module",
+	"engines": {
+		"node": ">=24"
+	},
+	"scripts": {
+		"poc": "node src/run-poc.ts",
+		"one": "node src/run-one.ts",
+		"report": "node src/poc-report.ts",
+		"typecheck": "tsc --noEmit",
+		"llm:check": "node src/llm/check.ts",
+		"tiera": "node src/tiera/run.ts",
+		"recap": "node src/pipeline/recap.ts",
+		"tracker": "node src/pipeline/business-tracker.ts",
+		"admin": "node src/admin/server.ts",
+		"backup": "bash scripts/interim-backup.sh",
+		"test": "node --test \"src/**/*.test.ts\"",
+		"lint": "biome check",
+		"lint:fix": "biome check --write",
+		"format": "biome format --write",
+		"analyze": "fallow dead-code && fallow dupes && fallow health",
+		"coverage": "node --test --experimental-test-coverage \"src/**/*.test.ts\"",
+		"check": "npm run typecheck && npm run lint && npm run analyze && npm test",
+		"prepare": "git config core.hooksPath .githooks"
+	},
+	"dependencies": {
+		"cheerio": "^1.2.0",
+		"fast-xml-parser": "^5.10.1",
+		"hono": "^4.13.1",
+		"imapflow": "^1.6.5",
+		"mailparser": "^3.9.14",
+		"pdf-parse": "^2.4.5",
+		"rtf-stream-parser": "4.0.0",
+		"undici": "^8.10.0"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "2.5.7",
+		"@types/mailparser": "^3.4.6",
+		"@types/node": "^26.2.0",
+		"domhandler": "5.0.3",
+		"fallow": "3.14.0",
+		"typescript": "^7.0.2"
+	}
 }

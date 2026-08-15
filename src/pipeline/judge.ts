@@ -1,9 +1,9 @@
 // Gate 2: LLM judge on a different model FAMILY than the generator
 // (uncorrelated failure modes). Returns a structured verdict; any flag or
 // faithfulness failure routes the draft to held/.
-import { chat, parseJsonResponse } from '../llm/client.ts';
-import type { MeetingBundle } from './bundle.ts';
-import { renderBundleForPrompt } from './bundle.ts';
+import { type ChatResult, chat, parseJsonResponse } from "../llm/client.ts";
+import type { MeetingBundle } from "./bundle.ts";
+import { renderBundleForPrompt } from "./bundle.ts";
 
 // The judge gets all agenda items and votes, but only the transcript segments
 // the draft actually cites (±1 neighbor for context) — a 397B judge over the
@@ -11,49 +11,58 @@ import { renderBundleForPrompt } from './bundle.ts';
 // fail Gate 1 before the judge ever runs, so every claim it must verify
 // already points at a specific source.
 function bundleForJudge(bundle: MeetingBundle, draftMd: string): MeetingBundle {
-  const cited = new Set<string>();
-  for (const m of draftMd.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g)) cited.add(m[1]);
-  const keep = new Set<number>();
-  bundle.transcriptSegments.forEach((seg, i) => {
-    if (cited.has(seg.sourceUrl)) {
-      keep.add(i - 1);
-      keep.add(i);
-      keep.add(i + 1);
-    }
-  });
-  const transcriptSegments = bundle.transcriptSegments.filter((_, i) => keep.has(i));
-  return { ...bundle, transcriptSegments };
+	const cited = new Set<string>();
+	for (const m of draftMd.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g))
+		cited.add(m[1]);
+	const keep = new Set<number>();
+	bundle.transcriptSegments.forEach((seg, i) => {
+		if (cited.has(seg.sourceUrl)) {
+			keep.add(i - 1);
+			keep.add(i);
+			keep.add(i + 1);
+		}
+	});
+	const transcriptSegments = bundle.transcriptSegments.filter((_, i) =>
+		keep.has(i),
+	);
+	return { ...bundle, transcriptSegments };
 }
 
 export interface JudgeVerdict {
-  overall: 'pass' | 'fail';
-  faithfulness_score: number; // 0..1
-  claims: Array<{
-    text: string;
-    verdict: 'supported' | 'unsupported' | 'distorted';
-    source_url?: string;
-    reason?: string;
-  }>;
-  flags: {
-    allegation: boolean;
-    crime: boolean;
-    private_individual: boolean;
-    minor: boolean;
-    personnel: boolean;
-    characterization: boolean;
-    legal_matter: boolean;
-  };
-  reasons: string[];
-  judged_by?: string;
+	overall: "pass" | "fail";
+	faithfulness_score: number; // 0..1
+	claims: Array<{
+		text: string;
+		verdict: "supported" | "unsupported" | "distorted";
+		source_url?: string;
+		reason?: string;
+	}>;
+	flags: {
+		allegation: boolean;
+		crime: boolean;
+		private_individual: boolean;
+		minor: boolean;
+		personnel: boolean;
+		characterization: boolean;
+		legal_matter: boolean;
+	};
+	reasons: string[];
+	judged_by?: string;
 }
 
 export function anyContentFlag(v: JudgeVerdict): boolean {
-  return Object.values(v.flags).some(Boolean);
+	return Object.values(v.flags).some(Boolean);
 }
 
 // Flags that force Tier C (human always, judge cannot override the hold).
 export function isTierC(v: JudgeVerdict): boolean {
-  return v.flags.private_individual || v.flags.minor || v.flags.crime || v.flags.personnel || v.flags.legal_matter;
+	return (
+		v.flags.private_individual ||
+		v.flags.minor ||
+		v.flags.crime ||
+		v.flags.personnel ||
+		v.flags.legal_matter
+	);
 }
 
 const JUDGE_SYSTEM = `You are a strict fact-checking judge for a local news pipeline. You receive a DRAFT article and the SOURCE MATERIALS it was generated from. Your verdict gates automatic publication; when uncertain, fail the claim.
@@ -67,39 +76,46 @@ Return ONLY a JSON object:
 
 overall = "fail" if ANY claim is unsupported or distorted, or faithfulness_score < 0.9.`;
 
-export async function judgeDraft(draftMd: string, bundle: MeetingBundle): Promise<JudgeVerdict> {
-  const messages = [
-    { role: 'system' as const, content: JUDGE_SYSTEM },
-    {
-      role: 'user' as const,
-      content: `SOURCE MATERIALS:\n\n${renderBundleForPrompt(bundleForJudge(bundle, draftMd))}\n\n---\n\nDRAFT:\n\n${draftMd}`,
-    },
-  ];
-  const opts = { jsonObject: true, maxTokens: 8192, timeoutMs: 900_000 };
-  let res;
-  try {
-    res = await chat('judge', messages, opts);
-  } catch (err) {
-    console.log(
-      `Primary judge unavailable (${err instanceof Error ? err.message.slice(0, 120) : err}); using backup judge.`
-    );
-    res = await chat('judge_backup', messages, opts);
-  }
-  const v = parseJsonResponse<JudgeVerdict>(res.content);
-  v.judged_by = res.model;
-  // Defensive normalization — a malformed verdict must fail closed, not open.
-  if (v.overall !== 'pass' && v.overall !== 'fail') v.overall = 'fail';
-  if (typeof v.faithfulness_score !== 'number' || Number.isNaN(v.faithfulness_score)) v.faithfulness_score = 0;
-  v.claims ??= [];
-  v.reasons ??= [];
-  v.flags = {
-    allegation: !!v.flags?.allegation,
-    crime: !!v.flags?.crime,
-    private_individual: !!v.flags?.private_individual,
-    minor: !!v.flags?.minor,
-    personnel: !!v.flags?.personnel,
-    characterization: !!v.flags?.characterization,
-    legal_matter: !!v.flags?.legal_matter,
-  };
-  return v;
+export async function judgeDraft(
+	draftMd: string,
+	bundle: MeetingBundle,
+): Promise<JudgeVerdict> {
+	const messages = [
+		{ role: "system" as const, content: JUDGE_SYSTEM },
+		{
+			role: "user" as const,
+			content: `SOURCE MATERIALS:\n\n${renderBundleForPrompt(bundleForJudge(bundle, draftMd))}\n\n---\n\nDRAFT:\n\n${draftMd}`,
+		},
+	];
+	const opts = { jsonObject: true, maxTokens: 8192, timeoutMs: 900_000 };
+	let res: ChatResult;
+	try {
+		res = await chat("judge", messages, opts);
+	} catch (err) {
+		console.log(
+			`Primary judge unavailable (${err instanceof Error ? err.message.slice(0, 120) : err}); using backup judge.`,
+		);
+		res = await chat("judge_backup", messages, opts);
+	}
+	const v = parseJsonResponse<JudgeVerdict>(res.content);
+	v.judged_by = res.model;
+	// Defensive normalization — a malformed verdict must fail closed, not open.
+	if (v.overall !== "pass" && v.overall !== "fail") v.overall = "fail";
+	if (
+		typeof v.faithfulness_score !== "number" ||
+		Number.isNaN(v.faithfulness_score)
+	)
+		v.faithfulness_score = 0;
+	v.claims ??= [];
+	v.reasons ??= [];
+	v.flags = {
+		allegation: !!v.flags?.allegation,
+		crime: !!v.flags?.crime,
+		private_individual: !!v.flags?.private_individual,
+		minor: !!v.flags?.minor,
+		personnel: !!v.flags?.personnel,
+		characterization: !!v.flags?.characterization,
+		legal_matter: !!v.flags?.legal_matter,
+	};
+	return v;
 }
