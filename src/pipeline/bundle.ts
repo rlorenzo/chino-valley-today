@@ -336,10 +336,19 @@ export function licenseEventDetail(meta: Record<string, unknown>): string | null
       `Status: ${status}, per the California ABC ${reportKind} report${reportDate ? ` dated ${reportDate}` : ''}.`
     );
   }
+  // Licensee and DBA go in ONE clause, never two adjacent sentences. Rendered
+  // as "Licensee: X. Doing business as Y." a generator read the second sentence
+  // as attaching to the nearest noun phrase and inverted the relationship,
+  // publishing "LATIMEX MARKET, doing business as STOOPS, JEFFREY D" — the
+  // business named as the operator of the person. No Gate 1 validator catches
+  // that: both names are in the corpus and only their relationship is wrong.
+  // Binding them syntactically makes the inversion unavailable rather than
+  // merely discouraged.
   const primary = s('primary_name');
-  if (primary) parts.push(`Licensee: ${primary}.`);
   const dba = s('dba');
-  if (dba) parts.push(`Doing business as ${dba}.`);
+  if (primary && dba) parts.push(`Licensee: ${primary}, doing business as ${dba}.`);
+  else if (primary) parts.push(`Licensee: ${primary}.`);
+  else if (dba) parts.push(`Doing business as: ${dba}.`);
   const premises = s('premises_address');
   if (premises) parts.push(`Premises: ${premises}.`);
   const issued = s('original_issue_date');
