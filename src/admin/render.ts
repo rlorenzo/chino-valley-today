@@ -4,19 +4,26 @@
 // parser for the frontmatter format written by pipeline/posts.ts's
 // renderPostFile(), and a schema-agnostic pretty-printer for gates/judge
 // JSON that highlights pass/fail where it can detect one.
-import type { Tier } from '../pipeline/posts.ts';
+import type { Tier } from "../pipeline/posts.ts";
 
 export function esc(s: unknown): string {
-  return String(s ?? '')
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;');
+	return String(s ?? "")
+		.replaceAll("&", "&amp;")
+		.replaceAll("<", "&lt;")
+		.replaceAll(">", "&gt;")
+		.replaceAll('"', "&quot;");
 }
 
 export function tierBadge(tier: Tier | string): string {
-  const cls = tier === 'A' ? 'badge-a' : tier === 'B' ? 'badge-b' : tier === 'C' ? 'badge-c' : '';
-  return `<span class="badge ${cls}">Tier ${esc(tier)}</span>`;
+	const cls =
+		tier === "A"
+			? "badge-a"
+			: tier === "B"
+				? "badge-b"
+				: tier === "C"
+					? "badge-c"
+					: "";
+	return `<span class="badge ${cls}">Tier ${esc(tier)}</span>`;
 }
 
 // --- Frontmatter parsing ---------------------------------------------------
@@ -28,63 +35,63 @@ export function tierBadge(tier: Tier | string): string {
 // This is intentionally a parser for THAT format, not general YAML.
 
 export interface ParsedPost {
-  title: string;
-  postType: string;
-  tier: string;
-  date: string;
-  meetingDate: string | null;
-  sources: string[];
-  body: string;
+	title: string;
+	postType: string;
+	tier: string;
+	date: string;
+	meetingDate: string | null;
+	sources: string[];
+	body: string;
 }
 
 function scalar(raw: string): string {
-  const t = raw.trim();
-  if (t.startsWith('"')) {
-    try {
-      return JSON.parse(t) as string;
-    } catch {
-      return t;
-    }
-  }
-  return t;
+	const t = raw.trim();
+	if (t.startsWith('"')) {
+		try {
+			return JSON.parse(t) as string;
+		} catch {
+			return t;
+		}
+	}
+	return t;
 }
 
 export function parsePostFile(raw: string): ParsedPost {
-  const lines = raw.split('\n');
-  const result: ParsedPost = {
-    title: '',
-    postType: '',
-    tier: '',
-    date: '',
-    meetingDate: null,
-    sources: [],
-    body: raw,
-  };
-  if (lines[0]?.trim() !== '---') return result;
-  let i = 1;
-  for (; i < lines.length; i++) {
-    const line = lines[i];
-    if (line.trim() === '---') {
-      i++;
-      break;
-    }
-    const kv = line.match(/^([a-zA-Z_]+):\s*(.*)$/);
-    if (kv) {
-      const key = kv[1];
-      const rest = kv[2];
-      if (key === 'sources') continue; // list items follow on subsequent lines
-      if (key === 'title') result.title = scalar(rest);
-      else if (key === 'post_type') result.postType = scalar(rest);
-      else if (key === 'tier') result.tier = scalar(rest);
-      else if (key === 'date') result.date = scalar(rest);
-      else if (key === 'meeting_date') result.meetingDate = scalar(rest);
-      continue;
-    }
-    const item = line.match(/^\s*-\s+(.*)$/);
-    if (item) result.sources.push(scalar(item[1]));
-  }
-  result.body = lines.slice(i).join('\n');
-  return result;
+	const lines = raw.split("\n");
+	const result: ParsedPost = {
+		title: "",
+		postType: "",
+		tier: "",
+		date: "",
+		meetingDate: null,
+		sources: [],
+		body: raw,
+	};
+	if (lines[0]?.trim() !== "---") return result;
+	let i = 1;
+	for (; i < lines.length; i++) {
+		const line = lines[i];
+		if (line.trim() === "---") {
+			i++;
+			break;
+		}
+		const kv = line.match(/^([a-zA-Z_]+):\s*(.*)$/);
+		if (kv) {
+			const key = kv[1];
+			const rest = kv[2];
+			if (key === "sources") continue; // list items follow on subsequent lines
+			if (key === "title") result.title = scalar(rest);
+			else if (key === "post_type") result.postType = scalar(rest);
+			else if (key === "tier") result.tier = scalar(rest);
+			else if (key === "date") result.date = scalar(rest);
+			else if (key === "meeting_date") result.meetingDate = scalar(rest);
+			continue;
+		}
+		const item = line.match(/^\s*-\s+(.*)$/);
+		if (item) result.sources.push(scalar(item[1]));
+	}
+	result.body = lines.slice(i).join("\n");
+	return result;
 }
 
 // --- Minimal hand-rolled markdown -> HTML -----------------------------------
@@ -94,75 +101,80 @@ export function parsePostFile(raw: string): ParsedPost {
 // disclosure footer, not a general CommonMark implementation.
 
 function inline(text: string): string {
-  let s = esc(text);
-  s = s.replace(/\[([^\]]+)\]\((https?:[^\s)]+)\)/g, '<a href="$2" rel="noopener noreferrer">$1</a>');
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  return s;
+	let s = esc(text);
+	s = s.replace(
+		/\[([^\]]+)\]\((https?:[^\s)]+)\)/g,
+		'<a href="$2" rel="noopener noreferrer">$1</a>',
+	);
+	s = s.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+	s = s.replace(/\*([^*]+)\*/g, "<em>$1</em>");
+	return s;
 }
 
 export function renderMarkdown(md: string): string {
-  const lines = md.replace(/\r\n/g, '\n').split('\n');
-  const out: string[] = [];
-  let para: string[] = [];
-  let listType: 'ul' | 'ol' | null = null;
-  let listItems: string[] = [];
+	const lines = md.replace(/\r\n/g, "\n").split("\n");
+	const out: string[] = [];
+	let para: string[] = [];
+	let listType: "ul" | "ol" | null = null;
+	let listItems: string[] = [];
 
-  const flushPara = (): void => {
-    if (para.length) {
-      out.push(`<p>${inline(para.join(' '))}</p>`);
-      para = [];
-    }
-  };
-  const flushList = (): void => {
-    if (listType) {
-      out.push(`<${listType}>${listItems.map((it) => `<li>${inline(it)}</li>`).join('')}</${listType}>`);
-      listType = null;
-      listItems = [];
-    }
-  };
+	const flushPara = (): void => {
+		if (para.length) {
+			out.push(`<p>${inline(para.join(" "))}</p>`);
+			para = [];
+		}
+	};
+	const flushList = (): void => {
+		if (listType) {
+			out.push(
+				`<${listType}>${listItems.map((it) => `<li>${inline(it)}</li>`).join("")}</${listType}>`,
+			);
+			listType = null;
+			listItems = [];
+		}
+	};
 
-  for (const line of lines) {
-    if (/^\s*$/.test(line)) {
-      flushPara();
-      flushList();
-      continue;
-    }
-    const h = line.match(/^(#{1,6})\s+(.*)$/);
-    if (h) {
-      flushPara();
-      flushList();
-      out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`);
-      continue;
-    }
-    if (/^-{3,}\s*$/.test(line.trim())) {
-      flushPara();
-      flushList();
-      out.push('<hr>');
-      continue;
-    }
-    const ul = line.match(/^\s*[-*]\s+(.*)$/);
-    if (ul) {
-      flushPara();
-      if (listType && listType !== 'ul') flushList();
-      listType = 'ul';
-      listItems.push(ul[1]);
-      continue;
-    }
-    const ol = line.match(/^\s*\d+\.\s+(.*)$/);
-    if (ol) {
-      flushPara();
-      if (listType && listType !== 'ol') flushList();
-      listType = 'ol';
-      listItems.push(ol[1]);
-      continue;
-    }
-    flushList();
-    para.push(line.trim());
-  }
-  flushPara();
-  flushList();
-  return out.join('\n');
+	for (const line of lines) {
+		if (/^\s*$/.test(line)) {
+			flushPara();
+			flushList();
+			continue;
+		}
+		const h = line.match(/^(#{1,6})\s+(.*)$/);
+		if (h) {
+			flushPara();
+			flushList();
+			out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`);
+			continue;
+		}
+		if (/^-{3,}\s*$/.test(line.trim())) {
+			flushPara();
+			flushList();
+			out.push("<hr>");
+			continue;
+		}
+		const ul = line.match(/^\s*[-*]\s+(.*)$/);
+		if (ul) {
+			flushPara();
+			if (listType && listType !== "ul") flushList();
+			listType = "ul";
+			listItems.push(ul[1]);
+			continue;
+		}
+		const ol = line.match(/^\s*\d+\.\s+(.*)$/);
+		if (ol) {
+			flushPara();
+			if (listType && listType !== "ol") flushList();
+			listType = "ol";
+			listItems.push(ol[1]);
+			continue;
+		}
+		flushList();
+		para.push(line.trim());
+	}
+	flushPara();
+	flushList();
+	return out.join("\n");
 }
 
 // --- Generic gates/judge JSON -> readable reasons ---------------------------
@@ -173,74 +185,89 @@ export function renderMarkdown(md: string): string {
 // structure otherwise — never throws on an unexpected shape.
 
 function passFail(v: unknown): boolean | null {
-  if (typeof v !== 'object' || v === null || Array.isArray(v)) return null;
-  const o = v as Record<string, unknown>;
-  for (const key of ['pass', 'ok', 'passed', 'valid']) {
-    if (key in o && typeof o[key] === 'boolean') return o[key] as boolean;
-  }
-  return null;
+	if (typeof v !== "object" || v === null || Array.isArray(v)) return null;
+	const o = v as Record<string, unknown>;
+	for (const key of ["pass", "ok", "passed", "valid"]) {
+		if (key in o && typeof o[key] === "boolean") return o[key] as boolean;
+	}
+	return null;
 }
 
 function jsonNode(v: unknown): string {
-  if (Array.isArray(v)) {
-    if (v.length === 0) return '<span class="muted">[]</span>';
-    return `<ul>${v.map((it) => `<li>${jsonNode(it)}</li>`).join('')}</ul>`;
-  }
-  if (v && typeof v === 'object') {
-    const entries = Object.entries(v as Record<string, unknown>);
-    if (entries.length === 0) return '<span class="muted">{}</span>';
-    return `<div class="jsontree">${entries
-      .map(([k, val]) => {
-        const pf = passFail(val);
-        const badge =
-          pf === true
-            ? '<span class="badge badge-pass">PASS</span> '
-            : pf === false
-              ? '<span class="badge badge-fail">FAIL</span> '
-              : '';
-        const rowCls = pf === false ? 'jsonrow fail' : pf === true ? 'jsonrow pass' : 'jsonrow';
-        const rendered = val && typeof val === 'object' ? jsonNode(val) : `<span>${esc(String(val))}</span>`;
-        return `<div class="${rowCls}">${badge}<b>${esc(k)}</b>: ${rendered}</div>`;
-      })
-      .join('')}</div>`;
-  }
-  return esc(String(v));
+	if (Array.isArray(v)) {
+		if (v.length === 0) return '<span class="muted">[]</span>';
+		return `<ul>${v.map((it) => `<li>${jsonNode(it)}</li>`).join("")}</ul>`;
+	}
+	if (v && typeof v === "object") {
+		const entries = Object.entries(v as Record<string, unknown>);
+		if (entries.length === 0) return '<span class="muted">{}</span>';
+		return `<div class="jsontree">${entries
+			.map(([k, val]) => {
+				const pf = passFail(val);
+				const badge =
+					pf === true
+						? '<span class="badge badge-pass">PASS</span> '
+						: pf === false
+							? '<span class="badge badge-fail">FAIL</span> '
+							: "";
+				const rowCls =
+					pf === false
+						? "jsonrow fail"
+						: pf === true
+							? "jsonrow pass"
+							: "jsonrow";
+				const rendered =
+					val && typeof val === "object"
+						? jsonNode(val)
+						: `<span>${esc(String(val))}</span>`;
+				return `<div class="${rowCls}">${badge}<b>${esc(k)}</b>: ${rendered}</div>`;
+			})
+			.join("")}</div>`;
+	}
+	return esc(String(v));
 }
 
 export function renderJsonReasons(label: string, raw: string | null): string {
-  if (raw == null) return `<p class="muted">${esc(label)}: none</p>`;
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return `<p class="muted">${esc(label)} (unparseable JSON):</p><pre>${esc(raw)}</pre>`;
-  }
-  return `<div class="jsonblock"><h4>${esc(label)}</h4>${jsonNode(parsed)}</div>`;
+	if (raw == null) return `<p class="muted">${esc(label)}: none</p>`;
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return `<p class="muted">${esc(label)} (unparseable JSON):</p><pre>${esc(raw)}</pre>`;
+	}
+	return `<div class="jsonblock"><h4>${esc(label)}</h4>${jsonNode(parsed)}</div>`;
 }
 
 // Duck-types a faithfulness score and content flags out of judge JSON for the
 // Published feed's glanceable summary. Returns nulls/[] on anything
 // unrecognized (including null input, which is normal for Tier A).
-export function summarizeJudge(raw: string | null): { score: string | null; flags: string[] } {
-  if (raw == null) return { score: null, flags: [] };
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(raw);
-  } catch {
-    return { score: null, flags: [] };
-  }
-  if (typeof parsed !== 'object' || parsed === null) return { score: null, flags: [] };
-  const obj = parsed as Record<string, unknown>;
-  const scoreKey = ['faithfulness', 'faithfulness_score', 'score'].find((k) => k in obj);
-  const score = scoreKey ? String(obj[scoreKey]) : null;
-  const flags: string[] = [];
-  const flagsVal = obj.flags ?? obj.content_flags;
-  if (Array.isArray(flagsVal)) {
-    for (const f of flagsVal) flags.push(String(f));
-  } else if (flagsVal && typeof flagsVal === 'object') {
-    for (const [k, v] of Object.entries(flagsVal as Record<string, unknown>)) if (v) flags.push(k);
-  }
-  return { score, flags };
+export function summarizeJudge(raw: string | null): {
+	score: string | null;
+	flags: string[];
+} {
+	if (raw == null) return { score: null, flags: [] };
+	let parsed: unknown;
+	try {
+		parsed = JSON.parse(raw);
+	} catch {
+		return { score: null, flags: [] };
+	}
+	if (typeof parsed !== "object" || parsed === null)
+		return { score: null, flags: [] };
+	const obj = parsed as Record<string, unknown>;
+	const scoreKey = ["faithfulness", "faithfulness_score", "score"].find(
+		(k) => k in obj,
+	);
+	const score = scoreKey ? String(obj[scoreKey]) : null;
+	const flags: string[] = [];
+	const flagsVal = obj.flags ?? obj.content_flags;
+	if (Array.isArray(flagsVal)) {
+		for (const f of flagsVal) flags.push(String(f));
+	} else if (flagsVal && typeof flagsVal === "object") {
+		for (const [k, v] of Object.entries(flagsVal as Record<string, unknown>))
+			if (v) flags.push(k);
+	}
+	return { score, flags };
 }
 
 // --- Page shell --------------------------------------------------------------
@@ -288,7 +315,7 @@ const CSS = `
 `;
 
 export function layout(title: string, body: string): string {
-  return `<!doctype html>
+	return `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
