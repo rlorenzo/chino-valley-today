@@ -120,12 +120,19 @@ export function parseRawCues(vtt: string): RawCue[] {
     const [startRaw, endRaw] = tsLine.split('-->').map((s) => s.trim().split(' ')[0]);
     const contentLines = lines.slice(lines.indexOf(tsLine) + 1);
     // Strips VTT's per-word timing tags (<00:01:02.345>, <c>) to recover the
-    // plain caption text. This is markup removal for text extraction, NOT
-    // sanitization: cue text stays plain text, and both HTML sinks escape at
-    // render — esc() in src/poc-report.ts, and esc()/inline() in
-    // src/admin/render.ts (which escapes before applying markdown transforms).
-    // Any future HTML sink must escape it too rather than trust this strip.
-    const stripped = contentLines.map((l) => decodeVttEntities(l.replace(/<[^>]*>/g, '')).trim());
+    // plain caption text. The `(?:>|$)` arm also drops a tag truncated at
+    // end-of-line, which a `<[^>]*>` alone leaves behind as visible junk
+    // ("and <c.colorE5E5"). Discarding it is correct rather than lossy: WebVTT
+    // escapes a literal angle bracket in caption TEXT as &lt;/&gt; — which is
+    // why entity decoding runs after this — so a bare `<` in a cue is always
+    // markup.
+    //
+    // This is markup removal for text extraction, NOT sanitization: cue text
+    // stays plain text, and both HTML sinks escape at render — esc() in
+    // src/poc-report.ts, and esc()/inline() in src/admin/render.ts (which
+    // escapes before applying markdown transforms). Any future HTML sink must
+    // escape it too rather than trust this strip.
+    const stripped = contentLines.map((l) => decodeVttEntities(l.replace(/<[^>]*(?:>|$)/g, '')).trim());
     const nonEmpty = stripped.filter((l) => l.length > 0);
     const text = nonEmpty.at(-1) ?? '';
     if (!text || text === lastText) continue;
