@@ -157,11 +157,17 @@ export function openDb(path: string = DB_PATH) {
   // not every version. Prior versions remain recoverable from the raw archive
   // and the superseded documents row, which is where the byte-level history is
   // meant to live.
-  function insertItem(i: NewItem): { id: number; isNew: boolean } {
-    if (!i.source_url) {
-      throw new Error(`item missing source_url (item_type=${i.item_type}, title=${i.title ?? ''})`);
-    }
-    const meta = i.meta === undefined || i.meta === null ? null : JSON.stringify(i.meta);
+  // The match-then-write below has to be atomic. Each entry point (npm run
+  // poc/one/tiera/recap/tracker) is its own process, so a hand-run scrape
+  // overlapping a scheduled one — routine once Phase 2's systemd timers land —
+  // puts two writers on this DB. Both would miss the lookup, then both insert
+  // under different document_ids, which the retained
+  // UNIQUE(document_id, external_id, item_type) accepts happily, reintroducing
+  // exactly the duplicate this function exists to prevent. BEGIN IMMEDIATE takes
+  // the write lock up front, so the second writer blocks on busy_timeout (10s)
+  // and its lookup then sees the first's committed row. This costs nothing
+  // extra: every insert here was already its own implicit transaction.
+  function insertItemAtomic(i: NewItem, meta: string | null): { id: number; isNew: boolean } {
     if (i.external_id != null) {
       // Oldest row wins the match, so repeated re-uploads keep collapsing onto
       // one row instead of fanning out.
@@ -207,6 +213,25 @@ export function openDb(path: string = DB_PATH) {
         i.occurred_at ?? null
       );
     return { id: Number(res.lastInsertRowid), isNew: true };
+  }
+
+  function insertItem(i: NewItem): { id: number; isNew: boolean } {
+    if (!i.source_url) {
+      throw new Error(`item missing source_url (item_type=${i.item_type}, title=${i.title ?? ''})`);
+    }
+    const meta = i.meta === undefined || i.meta === null ? null : JSON.stringify(i.meta);
+    // Respect an outer transaction if a caller ever opens one to batch inserts;
+    // BEGIN inside a transaction is an error.
+    if (db.isTransaction) return insertItemAtomic(i, meta);
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = insertItemAtomic(i, meta);
+      db.exec('COMMIT');
+      return result;
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   return { raw: db, path, upsertSource, latestDocument, touchDocument, insertDocument, insertItem };

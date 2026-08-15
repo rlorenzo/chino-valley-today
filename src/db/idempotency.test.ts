@@ -215,6 +215,47 @@ describe('item idempotency across document re-uploads', () => {
     assert.equal(countItems(db), 2);
   });
 
+  test('the match-then-write leaves no transaction open', () => {
+    // insertItem wraps its lookup and write in BEGIN IMMEDIATE so two writer
+    // processes can't both miss the lookup and then both insert. Leaking that
+    // transaction would hold the write lock for the rest of the process.
+    const db = freshDb();
+    const sourceId = addSource(db, 'chinohills-agendas');
+    const doc = addDocument(db, sourceId, 'a'.repeat(64));
+    assert.equal(db.raw.isTransaction, false, 'precondition: not in a transaction');
+
+    db.insertItem({
+      document_id: doc,
+      source_url: 'https://example.test/packet.pdf#1',
+      item_type: 'agenda_item',
+      external_id: '2026-07-14-seq1155-1',
+    });
+    assert.equal(db.raw.isTransaction, false, 'the transaction must be committed, not left open');
+  });
+
+  test('an outer transaction is respected rather than nested', () => {
+    // BEGIN inside a transaction is an error, so a caller batching many inserts
+    // in one transaction must still work.
+    const db = freshDb();
+    const sourceId = addSource(db, 'chinohills-agendas');
+    const doc = addDocument(db, sourceId, 'a'.repeat(64));
+
+    db.raw.exec('BEGIN IMMEDIATE');
+    for (let n = 1; n <= 3; n++) {
+      db.insertItem({
+        document_id: doc,
+        source_url: `https://example.test/packet.pdf#${n}`,
+        item_type: 'agenda_item',
+        external_id: `2026-07-14-seq1155-${n}`,
+      });
+    }
+    assert.equal(db.raw.isTransaction, true, 'the caller still owns its transaction');
+    db.raw.exec('COMMIT');
+
+    assert.equal(countItems(db), 3);
+    assert.equal(db.raw.isTransaction, false);
+  });
+
   test('the lookup index that serves this exists', () => {
     const db = freshDb();
     const idx = db.raw
