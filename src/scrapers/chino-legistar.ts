@@ -3,6 +3,7 @@
 // See reports/notes/chino-legistar.md for the full writeup: endpoint patterns,
 // agenda-status semantics, the votes-endpoint quirk, and open-question evidence.
 import * as cheerio from "cheerio";
+import { rtfToText } from "./rtf.ts";
 import type { ScraperContext, ScraperDef } from "./types.ts";
 
 const API = "https://webapi.legistar.com/v1/chino";
@@ -62,116 +63,6 @@ interface LegistarVote {
 // no embedded objects), so a small brace-depth-aware stripper is sufficient;
 // this is not a general-purpose RTF parser. Verified against real samples
 // during the probe (see report).
-const RTF_IGNORABLE_DESTINATIONS = new Set([
-	"fonttbl",
-	"colortbl",
-	"stylesheet",
-	"info",
-	"generator",
-	"pict",
-	"object",
-	"themedata",
-	"colorschememapping",
-	"latentstyles",
-	"rsid",
-	"listtable",
-	"listoverridetable",
-	"panose",
-	"falt",
-	"nonshppict",
-	"shpinst",
-]);
-
-function rtfToText(rtf: string | null): string | null {
-	if (!rtf) return null;
-	if (!rtf.startsWith("{\\rtf")) return rtf.trim() || null;
-	let out = "";
-	let i = 0;
-	const n = rtf.length;
-	let depth = 0;
-	let skipping = false;
-	let skipDepth = -1;
-
-	while (i < n) {
-		const ch = rtf[i];
-		if (ch === "{") {
-			depth++;
-			i++;
-			continue;
-		}
-		if (ch === "}") {
-			if (skipping && depth === skipDepth) {
-				skipping = false;
-				skipDepth = -1;
-			}
-			depth--;
-			i++;
-			continue;
-		}
-		if (ch === "\\") {
-			i++;
-			if (i >= n) break;
-			const c2 = rtf[i];
-			if (/[a-zA-Z]/.test(c2)) {
-				const start = i;
-				while (i < n && /[a-zA-Z]/.test(rtf[i])) i++;
-				const word = rtf.slice(start, i);
-				let numStr = "";
-				if (rtf[i] === "-") {
-					numStr += "-";
-					i++;
-				}
-				while (i < n && /[0-9]/.test(rtf[i])) {
-					numStr += rtf[i];
-					i++;
-				}
-				if (rtf[i] === " ") i++;
-
-				if (!skipping && RTF_IGNORABLE_DESTINATIONS.has(word)) {
-					skipping = true;
-					skipDepth = depth;
-					continue;
-				}
-				if (skipping) continue;
-
-				if (word === "par" || word === "line") {
-					out += "\n";
-				} else if (word === "tab") {
-					out += "\t";
-				} else if (word === "u") {
-					const code = parseInt(numStr || "0", 10);
-					out += String.fromCodePoint(code < 0 ? code + 65536 : code);
-					if (rtf[i] === "?") i++;
-				}
-				continue;
-			} else {
-				if (c2 === "'") {
-					const hex = rtf.slice(i + 1, i + 3);
-					i += 3;
-					if (!skipping) {
-						const code = parseInt(hex, 16);
-						if (!Number.isNaN(code))
-							out += Buffer.from([code]).toString("latin1");
-					}
-					continue;
-				} else {
-					if (!skipping) out += c2;
-					i++;
-					continue;
-				}
-			}
-		}
-		if (!skipping) out += ch;
-		i++;
-	}
-	return (
-		out
-			.replace(/[ \t]+\n/g, "\n")
-			.replace(/\n{2,}/g, "\n\n")
-			.trim() || null
-	);
-}
-
 // ---- helpers ----
 
 // IMPORTANT, hard-won finding (see reports/notes/chino-legistar.md): the Web

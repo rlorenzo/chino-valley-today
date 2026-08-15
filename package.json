@@ -33,6 +33,7 @@
 		"imapflow": "^1.6.5",
 		"mailparser": "^3.9.14",
 		"pdf-parse": "^2.4.5",
+		"rtf-stream-parser": "4.0.0",
 		"undici": "^8.10.0"
 	},
 	"devDependencies": {
