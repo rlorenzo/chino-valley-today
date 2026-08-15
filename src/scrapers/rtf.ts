@@ -66,6 +66,36 @@ function tokenize(rtf: string): RtfToken[] {
 	return tokens;
 }
 
+// Text produced by a control word or control symbol, or null when it emits
+// nothing. Splitting this out keeps the token loop to control flow only.
+function controlText(word: string, param: number | undefined): string | null {
+	switch (word) {
+		case "par":
+		case "line":
+			return "\n";
+		case "tab":
+			return "\t";
+		// Control SYMBOLS, not words: `\{`, `\}` and `\\` are escaped literals and
+		// arrive as a control token whose word IS the character. Dropping them would
+		// silently delete braces and backslashes from minutes text.
+		case "{":
+		case "}":
+		case "\\":
+			return word;
+		case "~":
+			return " "; // non-breaking space
+		case "_":
+			return "-"; // non-breaking hyphen
+		case "u": {
+			const code = param ?? 0;
+			// Negative params are 16-bit signed overflow for codepoints > 32767.
+			return String.fromCodePoint(code < 0 ? code + 65536 : code);
+		}
+		default:
+			return null; // formatting-only control word
+	}
+}
+
 export function rtfToText(rtf: string | null): string | null {
 	if (!rtf) return null;
 	// Legistar populates these fields with plain text as often as RTF.
@@ -104,24 +134,11 @@ export function rtfToText(rtf: string | null): string | null {
 			}
 			if (skipping) continue;
 
-			if (t.word === "par" || t.word === "line") out += "\n";
-			else if (t.word === "tab") out += "\t";
-			// Control SYMBOLS, not words: `\{`, `\}` and `\\` are escaped literals,
-			// and arrive here as a control token whose word is the character itself.
-			// Dropping them would silently delete braces and backslashes from
-			// minutes text.
-			else if (t.word === "{" || t.word === "}" || t.word === "\\") {
-				out += t.word;
-			}
-			// Non-breaking space, and the two hyphen forms.
-			else if (t.word === "~") out += " ";
-			else if (t.word === "_") out += "-";
-			else if (t.word === "u") {
-				const code = t.param ?? 0;
-				// Negative params are 16-bit signed overflow for codepoints > 32767.
-				out += String.fromCodePoint(code < 0 ? code + 65536 : code);
-				pendingFallback = 1;
-			}
+			const emitted = controlText(t.word ?? "", t.param);
+			if (emitted !== null) out += emitted;
+			// \uN is followed by `uc` fallback characters for readers without Unicode
+			// support; having taken the real codepoint, drop the fallback.
+			if (t.word === "u") pendingFallback = 1;
 			continue;
 		}
 
