@@ -42,8 +42,70 @@ const DIR_BY_STATUS: Record<PostStatus, string> = {
   rejected: join('content', 'rejected'),
 };
 
-export const DISCLOSURE_FOOTER =
-  '\n\n---\n\n*Generated from public records with automated review; see sources linked above. Corrections: see About page.*\n';
+const DISCLOSURE_LINE =
+  '*Generated from public records with automated review; see sources linked above. Corrections: see About page.*';
+
+export const DISCLOSURE_FOOTER = `\n\n---\n\n${DISCLOSURE_LINE}\n`;
+
+// Reader glossary for the record codes that ABC posts carry verbatim. These
+// posts quote source records literally and never characterize them (see the
+// generator rules in business-tracker.ts), which keeps them accurate but leaves
+// "Type 20 — ACTIVE -> REVPEN" meaningless to a reader.
+//
+// Two constraints shape this:
+//   1. It is emitted deterministically here, NOT written by the model. A
+//      generated gloss could hallucinate a meaning for a legal status code.
+//   2. It lands AFTER the footer's `---`, inside the region validators.ts
+//      exempts from every gate. Putting expansions in the body instead would
+//      hold the draft on Gate 1c: "California Department of Alcoholic Beverage
+//      Control" is a proper name that appears nowhere in the corpus, the same
+//      failure that held 2026-W33 on "Two ABC".
+//
+// Definitions state what a code stands for and stop there. Anything implying an
+// outcome ("the license is being revoked") would be both wrong — REVPEN is
+// pending, not final — and a characterization the records do not support.
+//
+// VERIFY AGAINST https://www.abc.ca.gov/licensing/license-types/ BEFORE RELYING
+// ON THESE IN PUBLISHED COPY; they are hand-authored, not scraped.
+const GLOSSARY: Array<{ match: RegExp; term: string; definition: string }> = [
+  {
+    match: /\bABC\b/,
+    term: 'ABC',
+    definition: 'California Department of Alcoholic Beverage Control, the state agency that licenses alcohol sales',
+  },
+  { match: /\bType 20\b/, term: 'Type 20', definition: 'a license to sell beer and wine for consumption off the premises' },
+  {
+    match: /\bType 21\b/,
+    term: 'Type 21',
+    definition: 'a license to sell beer, wine, and distilled spirits for consumption off the premises',
+  },
+  {
+    match: /\bType 41\b/,
+    term: 'Type 41',
+    definition: 'a license to sell beer and wine for consumption on the premises of a restaurant',
+  },
+  { match: /\bACTIVE\b/, term: 'ACTIVE', definition: 'the license is in force' },
+  {
+    match: /\bREVPEN\b/,
+    term: 'REVPEN',
+    definition:
+      'revocation pending: the state has started a process that may end the license. The license is not revoked, and the record does not give a reason',
+  },
+  { match: /\bPEND\b/, term: 'PEND', definition: 'pending — the application or transfer has not been completed' },
+  { match: /\bCANCEL\b/, term: 'CANCEL', definition: 'the license has been cancelled' },
+  { match: /\bSURREND\b/, term: 'SURREND', definition: 'the license has been surrendered by its holder' },
+];
+
+// Only the codes a given post actually uses, in the order defined above.
+export function glossaryFor(bodyMd: string): string {
+  const hits = GLOSSARY.filter((g) => g.match.test(bodyMd));
+  if (hits.length === 0) return '';
+  return [
+    '*What the record codes mean:*',
+    '',
+    ...hits.map((g) => `- *${g.term} — ${g.definition}.*`),
+  ].join('\n');
+}
 
 // JSON string literals are valid YAML scalars — safe without a YAML dep.
 function y(s: string): string {
@@ -62,7 +124,14 @@ export function renderPostFile(p: NewPost, createdAt: string): string {
     ...p.sources.map((s) => `  - ${y(s)}`),
     '---',
   ].join('\n');
-  return `${fm}\n\n${p.bodyMd.trim()}${DISCLOSURE_FOOTER}`;
+  // The glossary shares the footer's exempt region: it must sit after the last
+  // `---` and must not introduce an hr of its own, or it would become the last
+  // hr and push the disclosure line out of the matched trailing text.
+  const glossary = glossaryFor(p.bodyMd);
+  const footer = glossary
+    ? `\n\n---\n\n${glossary}\n\n${DISCLOSURE_LINE}\n`
+    : DISCLOSURE_FOOTER;
+  return `${fm}\n\n${p.bodyMd.trim()}${footer}`;
 }
 
 function writePostFile(relPath: string, content: string): void {
