@@ -135,16 +135,23 @@ export function openDb(path: string = DB_PATH) {
   // provide a stable external_id; derive one (e.g. a hash of title+date) when
   // the source has no native ID, or re-runs will duplicate rows.
   //
-  // Identity is (source, item_type, external_id) — deliberately NOT scoped to
-  // document_id, even though the table's UNIQUE constraint is. `documents` is
-  // content-addressed (UNIQUE(url, content_hash)), so a source re-uploading a
-  // changed document — AgendaQuick re-rendering a packet PDF, say — mints a new
-  // documents row, and a document-scoped lookup would re-insert every item as a
-  // duplicate under the new document_id despite an unchanged source-native
-  // external_id. Nothing downstream dedupes: bundle.ts's itemsFor() selects by
-  // (source, item_type, date) with no DISTINCT, so both copies would land in the
-  // same recap. Matching across the source's documents and repointing
-  // document_id to the newest one keeps exactly one row per logical item.
+  // Identity is (document URL, item_type, external_id) — scoped to the URL
+  // rather than to document_id, even though the table's UNIQUE constraint uses
+  // document_id. `documents` is content-addressed (UNIQUE(url, content_hash)),
+  // so a source re-uploading a changed document — AgendaQuick re-rendering a
+  // packet PDF, say — mints a new documents row at the SAME url, and a
+  // document-scoped lookup would re-insert every item as a duplicate under the
+  // new document_id despite an unchanged source-native external_id. Nothing
+  // downstream dedupes: bundle.ts's itemsFor() selects by (source, item_type,
+  // date) with no DISTINCT, so both copies would land in the same recap.
+  //
+  // Keying on the url is what makes this safe. A re-upload is by definition the
+  // same url with new bytes, so it matches; two genuinely different documents
+  // have different urls, so they never merge. Widening to the whole source
+  // would be wrong: chino-agendacenter builds external_id as `<date>-<n>` per
+  // Agenda Center CATEGORY and cvusd-board as `<date>-<n>` per meeting type, so
+  // two commissions (or a Regular and a Special meeting) sharing a date collide
+  // on external_id and would be silently merged into one item.
   //
   // This narrows what a row means: items holds the CURRENT version of each item,
   // not every version. Prior versions remain recoverable from the raw archive
@@ -162,7 +169,7 @@ export function openDb(path: string = DB_PATH) {
         .prepare(
           `SELECT i.id FROM items i
              JOIN documents d ON d.id = i.document_id
-            WHERE d.source_id = (SELECT source_id FROM documents WHERE id = ?)
+            WHERE d.url = (SELECT url FROM documents WHERE id = ?)
               AND i.external_id = ?
               AND i.item_type = ?
             ORDER BY i.id

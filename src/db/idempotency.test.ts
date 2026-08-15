@@ -111,6 +111,38 @@ describe('item idempotency across document re-uploads', () => {
     assert.equal(countItems(db), 2, 'item_type is part of item identity');
   });
 
+  test('two documents from ONE source with a colliding external_id stay separate', () => {
+    // The reason identity is keyed on the document url and not on the source.
+    // chino-agendacenter builds external_id as `<date>-<n>` per Agenda Center
+    // category, and cvusd-board as `<date>-<n>` per meeting type — so two
+    // commissions meeting on the same date, or a Regular plus a Special
+    // meeting, produce the SAME external_id from the same source. Widening the
+    // match to the source would silently merge them into one item.
+    const db = freshDb();
+    const sourceId = addSource(db, 'chino-agendacenter');
+    const council = addDocument(db, sourceId, 'a'.repeat(64), 'https://example.test/council-2026-07-14.pdf');
+    const planning = addDocument(db, sourceId, 'b'.repeat(64), 'https://example.test/planning-2026-07-14.pdf');
+
+    const a = db.insertItem({
+      document_id: council,
+      source_url: 'https://example.test/council-2026-07-14.pdf#1',
+      item_type: 'agenda_item',
+      external_id: '2026-07-14-1',
+      title: 'City Council item 1',
+    });
+    const b = db.insertItem({
+      document_id: planning,
+      source_url: 'https://example.test/planning-2026-07-14.pdf#1',
+      item_type: 'agenda_item',
+      external_id: '2026-07-14-1',
+      title: 'Planning Commission item 1',
+    });
+
+    assert.equal(b.isNew, true, 'a different document must not match, even within one source');
+    assert.notEqual(b.id, a.id);
+    assert.equal(countItems(db), 2, 'two same-date meetings must not collapse into one item');
+  });
+
   test('the same external_id from a different source stays a separate item', () => {
     // Matching on external_id alone would merge these: short source-native ids
     // (a bare sequence number, say) are only unique within their own source.
