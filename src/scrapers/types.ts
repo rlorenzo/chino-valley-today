@@ -27,7 +27,10 @@ export interface NewItemInput {
 	document_id: number;
 	source_url: string; // the deepest stable link a READER should click; never empty
 	item_type: string;
-	external_id?: string | null; // stable ID for idempotent re-runs; derive one if the source lacks it
+	// Required — see NewItem in db/index.ts. Item identity is (document url,
+	// item_type, external_id); without one an item duplicates on every run.
+	// Derive a stable id if the source lacks a native one.
+	external_id: string;
 	title?: string | null;
 	body?: string | null;
 	meta?: unknown; // JSON-serializable

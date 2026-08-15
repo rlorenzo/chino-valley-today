@@ -265,24 +265,29 @@ describe("item idempotency across document re-uploads", () => {
 		);
 	});
 
-	test("items without an external_id are not deduped (documented sharp edge)", () => {
-		// external_id is nullable, and SQLite treats NULLs as distinct in UNIQUE.
-		// insertItem skips the match entirely when it is null, so every re-run
-		// inserts another row. Every current scraper sets one; this pins the
-		// behavior so the gap is visible rather than surprising.
+	test("an item without an external_id is rejected, not silently duplicated", () => {
+		// external_id used to be optional, and SQLite treats NULLs as distinct in
+		// UNIQUE, so an item without one re-inserted on every single run. It is now
+		// required by the type; this pins the runtime guard for JS callers and for
+		// values that are empty rather than absent.
 		const db = freshDb();
 		const sourceId = addSource(db, "chinohills-agendas");
 		const doc = addDocument(db, sourceId, "a".repeat(64));
-		for (let n = 0; n < 2; n++) {
-			db.insertItem({
-				document_id: doc,
-				source_url: "https://example.test/packet.pdf",
-				item_type: "agenda_item",
-				external_id: null,
-				title: "untitled",
-			});
-		}
-		assert.equal(countItems(db), 2);
+		const bad = {
+			document_id: doc,
+			source_url: "https://example.test/packet.pdf",
+			item_type: "agenda_item",
+			title: "untitled",
+		};
+		assert.throws(
+			() => db.insertItem({ ...bad, external_id: "" }),
+			/missing external_id/,
+		);
+		assert.equal(
+			countItems(db),
+			0,
+			"nothing may be written when identity is absent",
+		);
 	});
 
 	test("the match-then-write leaves no transaction open", () => {

@@ -38,6 +38,7 @@
 // we never fetched the PDF bytes ourselves.
 import * as cheerio from "cheerio";
 import { extractPdfText } from "../pdf.ts";
+import { meetingScopedId } from "./external-id.ts";
 import type { ScraperContext, ScraperDef } from "./types.ts";
 
 const BASE = "https://www.chino.k12.ca.us";
@@ -239,7 +240,7 @@ async function ingestAgendaPdf(
 				? `${row.agendaUrl}#page=${item.page}`
 				: row.agendaUrl,
 			item_type: "agenda_item",
-			external_id: `${row.date}-${item.n}`,
+			external_id: meetingScopedId(row.date, row.type, item.n),
 			title: item.title,
 			body: item.body,
 			occurred_at: row.date,
@@ -339,7 +340,7 @@ const scraper: ScraperDef = {
 				document_id: row.documentId,
 				source_url: sourceUrl,
 				item_type: "event",
-				external_id: `${row.date}-meeting`,
+				external_id: meetingScopedId(row.date, row.type, "meeting"),
 				title: `Board of Education ${row.type} Meeting — ${row.date}`,
 				occurred_at: row.date,
 				meta: {

@@ -23,6 +23,7 @@
 // reused verbatim below (parseAnchorDate).
 import * as cheerio from "cheerio";
 import { extractPdfText } from "../pdf.ts";
+import { meetingScopedId } from "./external-id.ts";
 import type { ScraperContext, ScraperDef } from "./types.ts";
 
 const BASE = "https://www.cityofchino.org";
@@ -202,7 +203,7 @@ async function ingestAgenda(
 			document_id: doc.documentId,
 			source_url: `${row.url}#page=${item.page}`,
 			item_type: "agenda_item",
-			external_id: `${row.meetingDate}-${item.n}`,
+			external_id: meetingScopedId(row.meetingDate, row.category.name, item.n),
 			title: item.title,
 			body: item.body,
 			occurred_at: row.meetingDate,

@@ -42,7 +42,10 @@ interface NewItem {
 	document_id: number;
 	source_url: string;
 	item_type: string;
-	external_id?: string | null;
+	// Required: item identity is (document url, item_type, external_id). SQLite
+	// treats NULLs as distinct in UNIQUE, and a null here would skip the identity
+	// lookup entirely, so an item without one duplicates on every single run.
+	external_id: string;
 	title?: string | null;
 	body?: string | null;
 	meta?: unknown;
@@ -175,7 +178,7 @@ export function openDb(path: string = DB_PATH) {
 		i: NewItem,
 		meta: string | null,
 	): { id: number; isNew: boolean } {
-		if (i.external_id != null) {
+		{
 			// Oldest row wins the match, so repeated re-uploads keep collapsing onto
 			// one row instead of fanning out.
 			const existing = db
@@ -228,6 +231,14 @@ export function openDb(path: string = DB_PATH) {
 		if (!i.source_url) {
 			throw new Error(
 				`item missing source_url (item_type=${i.item_type}, title=${i.title ?? ""})`,
+			);
+		}
+		// Fail loudly rather than silently duplicating on every run. The type makes
+		// this unreachable from TypeScript callers; the check catches JS callers and
+		// values that are empty at runtime.
+		if (!i.external_id) {
+			throw new Error(
+				`item missing external_id (item_type=${i.item_type}, title=${i.title ?? ""})`,
 			);
 		}
 		const meta =
