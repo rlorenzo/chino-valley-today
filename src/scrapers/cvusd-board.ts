@@ -61,7 +61,9 @@ interface MeetingRow {
 function classifyHost(url: string): MinutesHost {
   const host = new URL(url).host;
   if (host === 'files.smartsites.parentsquare.com') return 'smartsites';
-  if (host.endsWith('sharepoint.com')) return 'sharepoint';
+  // Suffix match must be on a domain-label boundary: bare endsWith would also
+  // classify an unrelated host like "notsharepoint.com" as SharePoint.
+  if (host === 'sharepoint.com' || host.endsWith('.sharepoint.com')) return 'sharepoint';
   return 'other';
 }
 

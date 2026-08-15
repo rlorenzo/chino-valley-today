@@ -3,6 +3,7 @@
 // every element carries a source_url. The bundle is the ONLY material the
 // generator may draw from, and its URL set is the only citable set.
 import type { Db } from '../db/index.ts';
+import { isoWeekOf } from '../tiera/util.ts';
 
 export interface BundleItem {
   title: string | null;
@@ -215,6 +216,201 @@ export function renderBundleForPrompt(b: MeetingBundle, opts: { maxTranscriptCha
       }
       lines.push(line);
     }
+  }
+  return lines.join('\n');
+}
+
+// ---------------------------------------------------------------------------
+// Business-tracker bundle (Tier B weekly narrative): ABC license events plus
+// business-relevant chino-legistar planning items for one ISO week. The shape
+// extends MeetingBundle so the existing Gate 2 judge path works unchanged —
+// all week items ride in agendaItems for the judge's render; the generator
+// gets its own renderBusinessBundleForPrompt with honest section labels.
+// ---------------------------------------------------------------------------
+
+export interface BusinessBundle extends MeetingBundle {
+  isoWeek: string;
+  licenseEvents: BundleItem[];
+  planningItems: BundleItem[];
+}
+
+// ISO week of a stored occurred_at, computed on UTC calendar fields (a
+// date-only string parses as UTC midnight, so it maps to its own week).
+// A naive datetime (no zone suffix) would parse as machine-LOCAL time and
+// shift items into adjacent weeks depending on the server's timezone, so it
+// is anchored to UTC before parsing.
+const NAIVE_DATETIME_RE = /^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?$/;
+
+export function isoWeekOfOccurredAt(occurredAt: string | null): string | null {
+  if (!occurredAt) return null;
+  const anchored = NAIVE_DATETIME_RE.test(occurredAt)
+    ? `${occurredAt.replace(' ', 'T')}Z`
+    : occurredAt;
+  const d = new Date(anchored);
+  if (Number.isNaN(d.getTime())) return null;
+  return isoWeekOf(d);
+}
+
+// Planning items that bear on local business activity. Deliberately narrow:
+// a miss keeps an item out of one weekly roundup, but a loose match drags
+// unrelated council business into the synthesis input.
+const BUSINESS_RELEVANCE_RES = [
+  /conditional use permit/i,
+  /\bzoning\b/i,
+  /\bzone change\b/i,
+  /\brezon\w*/i,
+  /\blicens\w*/i,
+  /development agreement/i,
+];
+
+export function isBusinessRelevant(title: string | null, body: string | null): boolean {
+  const text = `${title ?? ''}\n${body ?? ''}`;
+  return BUSINESS_RELEVANCE_RES.some((re) => re.test(text));
+}
+
+const BUSINESS_SOURCES = {
+  licenses: { key: 'abc-licenses', type: 'license_event' },
+  planning: { key: 'chino-legistar', type: 'agenda_item' },
+} as const;
+
+function weekItemsFor(db: Db, sourceKey: string, itemType: string, isoWeek: string): BundleItem[] {
+  const rows = db.raw
+    .prepare(
+      `SELECT i.item_type, i.title, i.body, i.source_url, i.meta, i.occurred_at
+       FROM items i JOIN documents d ON i.document_id = d.id JOIN sources s ON d.source_id = s.id
+       WHERE s.key = ? AND i.item_type = ? ORDER BY i.occurred_at, i.id`
+    )
+    .all(sourceKey, itemType) as unknown as RawItemRow[];
+  return rows.filter((r) => isoWeekOfOccurredAt(r.occurred_at) === isoWeek).map(toBundleItem);
+}
+
+export function listBusinessWeeks(
+  db: Db
+): Array<{ isoWeek: string; counts: { licenseEvents: number; planningItems: number } }> {
+  const counts = new Map<string, { licenseEvents: number; planningItems: number }>();
+  const bump = (week: string | null, field: 'licenseEvents' | 'planningItems') => {
+    if (!week) return;
+    const c = counts.get(week) ?? { licenseEvents: 0, planningItems: 0 };
+    c[field]++;
+    counts.set(week, c);
+  };
+  const all = (k: { key: string; type: string }) =>
+    db.raw
+      .prepare(
+        `SELECT i.item_type, i.title, i.body, i.source_url, i.meta, i.occurred_at
+         FROM items i JOIN documents d ON i.document_id = d.id JOIN sources s ON d.source_id = s.id
+         WHERE s.key = ? AND i.item_type = ? ORDER BY i.id`
+      )
+      .all(k.key, k.type) as unknown as RawItemRow[];
+  for (const r of all(BUSINESS_SOURCES.licenses)) bump(isoWeekOfOccurredAt(r.occurred_at), 'licenseEvents');
+  for (const r of all(BUSINESS_SOURCES.planning)) {
+    if (isBusinessRelevant(r.title, r.body)) bump(isoWeekOfOccurredAt(r.occurred_at), 'planningItems');
+  }
+  return [...counts.entries()]
+    .map(([isoWeek, c]) => ({ isoWeek, counts: c }))
+    .sort((a, b) => (a.isoWeek < b.isoWeek ? 1 : -1));
+}
+
+// Natural-language rendering of a license_event's meta record. This text
+// becomes the item's BODY, which is (a) the generator's source detail,
+// (b) the judge's only view of the record (renderBundleForPrompt shows
+// title/source/body, never meta), and (c) grounding for the name/number
+// gates via inputCorpus — all three must see the same facts, so the text is
+// built once here. URL-valued meta (attempted_detail_url) is deliberately
+// excluded: the only URLs in any prompt must be the citable ones.
+export function licenseEventDetail(meta: Record<string, unknown>): string | null {
+  const s = (k: string): string | null => {
+    const v = meta[k];
+    if (typeof v === 'number') return String(v);
+    return typeof v === 'string' && v.trim() ? v.trim() : null;
+  };
+  const parts: string[] = [];
+  const licenseNo = s('license_no');
+  const licenseType = s('license_type');
+  if (licenseNo) parts.push(`License ${licenseNo}${licenseType ? ` (Type ${licenseType})` : ''}.`);
+  const status = s('status');
+  if (status) {
+    const reportKind = meta.report_type === 'new_applications' ? 'new-applications' : 'status-change';
+    const reportDate = s('report_date');
+    parts.push(
+      `Status: ${status}, per the California ABC ${reportKind} report${reportDate ? ` dated ${reportDate}` : ''}.`
+    );
+  }
+  const primary = s('primary_name');
+  if (primary) parts.push(`Licensee: ${primary}.`);
+  const dba = s('dba');
+  if (dba) parts.push(`Doing business as ${dba}.`);
+  const premises = s('premises_address');
+  if (premises) parts.push(`Premises: ${premises}.`);
+  const issued = s('original_issue_date');
+  if (issued) parts.push(`Original issue date ${issued}.`);
+  const expiry = s('expiry_date');
+  if (expiry) parts.push(`Expiration date ${expiry}.`);
+  const transfer = s('transfer_from_to');
+  if (transfer) parts.push(`Transfer from/to: ${transfer}.`);
+  return parts.length ? parts.join(' ') : null;
+}
+
+export function assembleBusinessBundle(db: Db, isoWeek: string): BusinessBundle | null {
+  const licenseEvents = weekItemsFor(db, BUSINESS_SOURCES.licenses.key, BUSINESS_SOURCES.licenses.type, isoWeek)
+    .map((it) => (it.body ? it : { ...it, body: licenseEventDetail(it.meta) }));
+  const planningItems = weekItemsFor(db, BUSINESS_SOURCES.planning.key, BUSINESS_SOURCES.planning.type, isoWeek)
+    .filter((it) => isBusinessRelevant(it.title, it.body));
+  if (licenseEvents.length === 0 && planningItems.length === 0) return null;
+
+  const allItems = [...licenseEvents, ...planningItems];
+  const allowedUrls = [...new Set(allItems.map((i) => i.sourceUrl))];
+  const bodyName = 'Chino Valley business activity';
+  const corpusParts: string[] = [bodyName, isoWeek];
+  for (const it of allItems) {
+    if (it.title) corpusParts.push(it.title);
+    if (it.body) corpusParts.push(it.body);
+    for (const v of Object.values(it.meta)) {
+      if (typeof v === 'string' || typeof v === 'number') corpusParts.push(String(v));
+    }
+  }
+  return {
+    targetKey: `business:${isoWeek}`,
+    sourceKey: 'business-tracker',
+    bodyName,
+    meetingDate: isoWeek, // week label rides in the MeetingBundle date slot
+    agendaItems: allItems,
+    votes: [],
+    transcriptSegments: [],
+    allowedUrls,
+    inputCorpus: corpusParts.join('\n'),
+    isoWeek,
+    licenseEvents,
+    planningItems,
+  };
+}
+
+// Generator payload for the weekly narrative. Record facts arrive via each
+// item's body (license events carry the synthesized licenseEventDetail text);
+// raw meta is never rendered — its snake_case keys are not in inputCorpus and
+// the generator echoing one as prose ("License No.") trips the name gate —
+// and the only URLs the generator ever sees are the citable ones.
+export function renderBusinessBundleForPrompt(b: BusinessBundle): string {
+  const lines: string[] = [];
+  lines.push(`# Chino Valley business activity — ISO week ${b.isoWeek}`);
+  lines.push(
+    '',
+    '## Citable source URLs (the ONLY URLs you may link; cite as inline markdown links, never shorthand):'
+  );
+  b.allowedUrls.forEach((u) => lines.push(`- ${u}`));
+
+  const pushItem = (it: BundleItem) => {
+    lines.push(`- ${it.title ?? '(untitled)'}`);
+    lines.push(`  source: ${it.sourceUrl}`);
+    if (it.body) lines.push(`  detail: ${it.body.slice(0, 500)}`);
+  };
+  if (b.licenseEvents.length) {
+    lines.push('', '## ABC license events (verbatim record fields):');
+    b.licenseEvents.forEach(pushItem);
+  }
+  if (b.planningItems.length) {
+    lines.push('', '## Business-relevant planning/agenda items (verbatim):');
+    b.planningItems.forEach(pushItem);
   }
   return lines.join('\n');
 }

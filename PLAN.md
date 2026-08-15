@@ -10,7 +10,7 @@ Do not build ahead of the current phase.
 
 ---
 
-## Status (updated 2026-08-13, end of day)
+## Status (updated 2026-08-14)
 
 **Phase 0: COMPLETE** (commit effdfed). 12 sources ingesting (11 planned + City
 of Chino YouTube captions added after launch), all acceptance criteria
@@ -25,7 +25,7 @@ rows" open decision dissolved with the rebuild (verified clean). Lesson
 banked: the raw archive has no backup until Phase 2 — interim backup job is a
 recommended next step.
 
-**Phase 1: functionally COMPLETE except business-tracker narrative.**
+**Phase 1: functionally COMPLETE.**
 - Infrastructure (commits 2598a8d..6bf3f1d): EDITORIAL.md; post lifecycle +
   posts/audit_log; Tier A generators (5 real posts); Gate 1 validators;
   Gate 2 cross-family judge (qwen3.5, glm-5.2 backup) with Tier C routing;
@@ -54,16 +54,33 @@ recommended next step.
   deepseek-4-flash; our prompts are verified deterministic; feature is
   "opportunistic" Public Preview with undocumented replica affinity. Support
   ticket drafted. Budget as if caching never engages (~2-3¢/recap).
-- TODO (Phase 1 remainder): business-tracker narrative (Tier B); first weekly
-  audit pass through the dashboard; possible prompt tweaks only if failure
-  classes recur (verbatim titles incl. articles; no invented Title-Case
-  section labels on transcript-only bundles).
+- **Business-tracker narrative (Tier B) built 2026-08-14** (`npm run tracker`,
+  src/pipeline/business-tracker.ts): weekly synthesis of ABC license events +
+  business-relevant Legistar planning items per ISO week (UTC), same gate path
+  as recaps. License-event facts are rendered once into a synthesized item
+  body so generator, judge, and gate corpus all see identical text (an
+  adversarial-verifier finding: raw meta keys leaked into the prompt but not
+  the corpus, and the judge never saw meta at all). First live run (2026-W33)
+  HELD at Gate 1 on one proper-name fusion ("Two ABC" — generator lede
+  counting) — designed behavior, awaiting dashboard review.
+- **DO API change caught 2026-08-14**: Gradient now rejects max_tokens
+  combined with response_format json_object (HTTP 400, both judge models) —
+  would have broken every Gate 2 call. llm client omits max_tokens in JSON
+  mode per the platform's error guidance.
+- TODO (Phase 1 remainder): first weekly audit pass through the dashboard;
+  possible prompt tweaks only if failure classes recur (verbatim titles incl.
+  articles; no invented Title-Case section labels on transcript-only bundles;
+  narrative ledes that count events).
 - OPEN DECISIONS: CVUSD agenda-PDF robots exception (scoped skipRobots vs
   listing-only); item idempotency across packet re-uploads (external_id is
   document-scoped; see vault task).
 
 **Phase 2/3: not started** (static site + droplet; podcast + growth).
-Interim backup of data/ recommended before Phase 2's proper backup job.
+Interim backup landed 2026-08-14: `npm run backup` (scripts/interim-backup.sh)
+snapshots the DB (WAL-safe .backup + integrity check), data/raw, .env, and
+content/ working state to ~/Backups/chino-valley-today/<date>/ (override with
+CVT_BACKUP_DIR; point it at a cloud-synced folder for offsite). Run it after
+scrape/review sessions. Phase 2 still owes the proper nightly offsite job.
 
 ---
 
