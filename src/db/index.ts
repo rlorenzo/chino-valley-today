@@ -134,17 +134,59 @@ export function openDb(path: string = DB_PATH) {
   // Idempotent when external_id is provided (re-runs update in place). Always
   // provide a stable external_id; derive one (e.g. a hash of title+date) when
   // the source has no native ID, or re-runs will duplicate rows.
-  function insertItem(i: NewItem): { id: number; isNew: boolean } {
-    if (!i.source_url) {
-      throw new Error(`item missing source_url (item_type=${i.item_type}, title=${i.title ?? ''})`);
-    }
-    const meta = i.meta === undefined || i.meta === null ? null : JSON.stringify(i.meta);
+  //
+  // Identity is (document URL, item_type, external_id) — scoped to the URL
+  // rather than to document_id, even though the table's UNIQUE constraint uses
+  // document_id. `documents` is content-addressed (UNIQUE(url, content_hash)),
+  // so a source re-uploading a changed document — AgendaQuick re-rendering a
+  // packet PDF, say — mints a new documents row at the SAME url, and a
+  // document-scoped lookup would re-insert every item as a duplicate under the
+  // new document_id despite an unchanged source-native external_id. Nothing
+  // downstream dedupes: bundle.ts's itemsFor() selects by (source, item_type,
+  // date) with no DISTINCT, so both copies would land in the same recap.
+  //
+  // Keying on the url is what makes this safe. A re-upload is by definition the
+  // same url with new bytes, so it matches; two genuinely different documents
+  // have different urls, so they never merge. Widening to the whole source
+  // would be wrong: chino-agendacenter builds external_id as `<date>-<n>` per
+  // Agenda Center CATEGORY and cvusd-board as `<date>-<n>` per meeting type, so
+  // two commissions (or a Regular and a Special meeting) sharing a date collide
+  // on external_id and would be silently merged into one item.
+  //
+  // This narrows what a row means: items holds the CURRENT version of each item,
+  // not every version. Prior versions remain recoverable from the raw archive
+  // and the superseded documents row, which is where the byte-level history is
+  // meant to live.
+  // The match-then-write below has to be atomic. Each entry point (npm run
+  // poc/one/tiera/recap/tracker) is its own process, so a hand-run scrape
+  // overlapping a scheduled one — routine once Phase 2's systemd timers land —
+  // puts two writers on this DB. Both would miss the lookup, then both insert
+  // under different document_ids, which the retained
+  // UNIQUE(document_id, external_id, item_type) accepts happily, reintroducing
+  // exactly the duplicate this function exists to prevent. BEGIN IMMEDIATE takes
+  // the write lock up front, so the second writer blocks on busy_timeout (10s)
+  // and its lookup then sees the first's committed row. This costs nothing
+  // extra: every insert here was already its own implicit transaction.
+  function insertItemAtomic(i: NewItem, meta: string | null): { id: number; isNew: boolean } {
     if (i.external_id != null) {
+      // Oldest row wins the match, so repeated re-uploads keep collapsing onto
+      // one row instead of fanning out.
       const existing = db
-        .prepare('SELECT id FROM items WHERE document_id = ? AND external_id = ? AND item_type = ?')
+        .prepare(
+          `SELECT i.id FROM items i
+             JOIN documents d ON d.id = i.document_id
+            WHERE d.url = (SELECT url FROM documents WHERE id = ?)
+              AND i.external_id = ?
+              AND i.item_type = ?
+            ORDER BY i.id
+            LIMIT 1`
+        )
         .get(i.document_id, i.external_id, i.item_type) as unknown as { id: number } | undefined;
       if (existing) {
-        db.prepare('UPDATE items SET source_url = ?, title = ?, body = ?, meta = ?, occurred_at = ? WHERE id = ?').run(
+        db.prepare(
+          'UPDATE items SET document_id = ?, source_url = ?, title = ?, body = ?, meta = ?, occurred_at = ? WHERE id = ?'
+        ).run(
+          i.document_id,
           i.source_url,
           i.title ?? null,
           i.body ?? null,
@@ -171,6 +213,25 @@ export function openDb(path: string = DB_PATH) {
         i.occurred_at ?? null
       );
     return { id: Number(res.lastInsertRowid), isNew: true };
+  }
+
+  function insertItem(i: NewItem): { id: number; isNew: boolean } {
+    if (!i.source_url) {
+      throw new Error(`item missing source_url (item_type=${i.item_type}, title=${i.title ?? ''})`);
+    }
+    const meta = i.meta === undefined || i.meta === null ? null : JSON.stringify(i.meta);
+    // Respect an outer transaction if a caller ever opens one to batch inserts;
+    // BEGIN inside a transaction is an error.
+    if (db.isTransaction) return insertItemAtomic(i, meta);
+    db.exec('BEGIN IMMEDIATE');
+    try {
+      const result = insertItemAtomic(i, meta);
+      db.exec('COMMIT');
+      return result;
+    } catch (err) {
+      db.exec('ROLLBACK');
+      throw err;
+    }
   }
 
   return { raw: db, path, upsertSource, latestDocument, touchDocument, insertDocument, insertItem };
