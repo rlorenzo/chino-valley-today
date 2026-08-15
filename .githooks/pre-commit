@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Fast gate on every commit: formatting/lint of the staged files, then a
+# whole-project typecheck. Both run in ~2s on this repo, which is the budget a
+# pre-commit hook gets before people start reaching for --no-verify.
+#
+# The heavier suite (tests + fallow analysis) runs in .githooks/pre-push.
+#
+# Wired up by the "prepare" script in package.json (git config core.hooksPath
+# .githooks), so a fresh clone gets it from npm install with no extra dependency.
+# Bypass a single commit with: git commit --no-verify
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+# Nothing staged (e.g. `git commit` during a merge resolution) — nothing to check.
+if git diff --cached --quiet --diff-filter=ACMR; then
+  exit 0
+fi
+
+echo "pre-commit: biome (staged)"
+# --staged limits work to what is actually being committed; --no-errors-on-unmatched
+# keeps commits of only non-JS files (markdown, sql) from failing here.
+npx --no-install biome check --staged --no-errors-on-unmatched
+
+echo "pre-commit: typecheck"
+# Whole-project: a staged file can break types in a file that is not staged.
+npx --no-install tsc --noEmit
+
+echo "pre-commit: ok"

@@ -1,0 +1,35 @@
+{
+	// This file is JSONC: fallow reads these comments; generic JSON tools may not.
+	"$schema": "./node_modules/fallow/schema.json",
+
+	// This project has no single index/main. Every entry below is a real one:
+	//  - the eight CLI entry points invoked by npm scripts (see package.json)
+	//  - all 13 scrapers, which registry.ts references by STRING PATH and imports
+	//    dynamically at runtime. Static analysis cannot follow that, so omitting
+	//    them reports every scraper as dead code.
+	//  - the test files, which node --test discovers by glob
+	"entry": [
+		"src/run-poc.ts",
+		"src/run-one.ts",
+		"src/poc-report.ts",
+		"src/tiera/run.ts",
+		"src/pipeline/recap.ts",
+		"src/pipeline/business-tracker.ts",
+		"src/admin/server.ts",
+		"src/llm/check.ts",
+		// Documented manual calibration script, run by hand:
+		// `node src/gates/check-real-post.ts` (reports/notes/phase1-validators.md).
+		"src/gates/check-real-post.ts",
+		"src/scrapers/*.ts",
+		"src/**/*.test.ts"
+	],
+
+	"duplicates": {
+		// 2 = report every duplicate pair. This codebase has 13 independently
+		// written scrapers, where the same helper tends to be re-typed rather than
+		// shared, so pair-level clones are exactly what is worth seeing.
+		"minOccurrences": 2
+	},
+
+	"rules": {}
+}

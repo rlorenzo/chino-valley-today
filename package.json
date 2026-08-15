@@ -17,7 +17,14 @@
 		"tracker": "node src/pipeline/business-tracker.ts",
 		"admin": "node src/admin/server.ts",
 		"backup": "bash scripts/interim-backup.sh",
-		"test": "node --test \"src/**/*.test.ts\""
+		"test": "node --test \"src/**/*.test.ts\"",
+		"lint": "biome check",
+		"lint:fix": "biome check --write",
+		"format": "biome format --write",
+		"analyze": "fallow dead-code && fallow dupes && fallow health",
+		"coverage": "node --test --experimental-test-coverage \"src/**/*.test.ts\"",
+		"check": "npm run typecheck && npm run lint && npm run analyze && npm test",
+		"prepare": "git config core.hooksPath .githooks"
 	},
 	"dependencies": {
 		"cheerio": "^1.2.0",
@@ -32,6 +39,7 @@
 		"@biomejs/biome": "2.5.7",
 		"@types/mailparser": "^3.4.6",
 		"@types/node": "^26.2.0",
+		"domhandler": "5.0.3",
 		"fallow": "3.14.0",
 		"typescript": "^7.0.2"
 	}

@@ -9,7 +9,8 @@
 
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { openDb, ROOT } from "../db/index.ts";
+import { openDb } from "../db/index.ts";
+import { ROOT } from "../store.ts";
 import { validateDraft } from "./validators.ts";
 
 function parseFrontmatter(raw: string): {

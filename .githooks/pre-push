@@ -1,0 +1,22 @@
+#!/usr/bin/env bash
+# Heavier gate before code leaves the machine: the full test suite plus fallow's
+# dead-code analysis. Kept out of pre-commit so committing stays fast.
+#
+# fallow dupes/health are deliberately NOT blocking here: duplication and
+# complexity are advisory signals about existing code, not defects introduced by
+# this push, and a hook that fails on them would just get bypassed. CI reports
+# them on every PR instead.
+#
+# Bypass with: git push --no-verify
+set -euo pipefail
+
+ROOT="$(git rev-parse --show-toplevel)"
+cd "$ROOT"
+
+echo "pre-push: tests"
+npm test --silent
+
+echo "pre-push: fallow dead-code"
+npx --no-install fallow dead-code
+
+echo "pre-push: ok"

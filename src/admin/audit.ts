@@ -40,7 +40,7 @@ export function currentWeekStartIso(d: Date = new Date()): string {
 // Stable pseudo-random fraction in [0,1) derived from sha256(slug:isoWeek).
 // Deterministic and close enough to uniform for a review-sampling gate;
 // no seeded-PRNG dependency needed.
-export function sampleFraction(slug: string, isoWeek: string): number {
+function sampleFraction(slug: string, isoWeek: string): number {
 	const h = createHash("sha256").update(`${slug}:${isoWeek}`).digest();
 	return h.readUInt32BE(0) / 0x1_0000_0000;
 }

@@ -1,7 +1,7 @@
 // Polite fetcher: custom UA with contact, robots.txt respect, per-host rate
 // limit, conditional GET support. All scraper HTTP goes through politeFetch.
 
-export const USER_AGENT =
+const USER_AGENT =
 	"ChinoValleyTodayBot/0.1 (local news POC; contact: rexlorenzo@gmail.com)";
 
 const MIN_DELAY_MS = 2000;
@@ -24,7 +24,7 @@ export interface RawResult {
 	finalUrl: string;
 }
 
-export function sleep(ms: number): Promise<void> {
+function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 

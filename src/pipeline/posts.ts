@@ -50,7 +50,7 @@ const DIR_BY_STATUS: Record<PostStatus, string> = {
 const DISCLOSURE_LINE =
 	"*Generated from public records with automated review; see sources linked above. Corrections: see About page.*";
 
-export const DISCLOSURE_FOOTER = `\n\n---\n\n${DISCLOSURE_LINE}\n`;
+const DISCLOSURE_FOOTER = `\n\n---\n\n${DISCLOSURE_LINE}\n`;
 
 // Reader glossary for the record codes that ABC posts carry verbatim. These
 // posts quote source records literally and never characterize them (see the

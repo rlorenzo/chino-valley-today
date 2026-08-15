@@ -13,7 +13,7 @@ import { fileURLToPath } from "node:url";
 const here = dirname(fileURLToPath(import.meta.url));
 export const ROOT = join(here, "..");
 
-export function sha256(buf: Uint8Array): string {
+function sha256(buf: Uint8Array): string {
 	return createHash("sha256").update(buf).digest("hex");
 }
 

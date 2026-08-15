@@ -2,21 +2,15 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
+// ROOT is defined once, in store.ts. Re-deriving it here produced two exports
+// with the same name and different relative depths.
+import { ROOT } from "../store.ts";
 
+// Still needed for schema.sql, which sits beside this file rather than at ROOT.
 const here = dirname(fileURLToPath(import.meta.url));
-export const ROOT = join(here, "..", "..");
-export const DB_PATH = process.env.CVT_DB ?? join(ROOT, "data", "cvtoday.db");
+const DB_PATH = process.env.CVT_DB ?? join(ROOT, "data", "cvtoday.db");
 
-export interface SourceRow {
-	id: number;
-	key: string;
-	name: string;
-	base_url: string;
-	method: string;
-	active: number;
-}
-
-export interface DocumentRow {
+interface DocumentRow {
 	id: number;
 	source_id: number;
 	url: string;
@@ -30,7 +24,7 @@ export interface DocumentRow {
 	last_modified: string | null;
 }
 
-export interface NewDocument {
+interface NewDocument {
 	source_id: number;
 	url: string;
 	doc_type: string;
@@ -44,7 +38,7 @@ export interface NewDocument {
 	event_key?: string | null;
 }
 
-export interface NewItem {
+interface NewItem {
 	document_id: number;
 	source_url: string;
 	item_type: string;

@@ -746,7 +746,7 @@ const BUILTIN_ALLOWLIST_SET = new Set(
 // is a name). Generic English function words plus a handful of
 // meeting-recap-genre institutional nouns that otherwise start sentences
 // constantly in this domain ("Council approved...", "Staff recommended...").
-export const SENTENCE_INITIAL_COMMON_WORDS: readonly string[] = [
+const SENTENCE_INITIAL_COMMON_WORDS: readonly string[] = [
 	"the",
 	"a",
 	"an",
@@ -835,7 +835,7 @@ const SENTENCE_INITIAL_SET = new Set(
 // the strength of the bare name being grounded in the corpus, even if the
 // corpus never repeats the title — while a garbled name underneath a valid
 // title still fails, because the check runs on the name that remains.
-export const TITLE_WORDS: readonly string[] = [
+const TITLE_WORDS: readonly string[] = [
 	"mayor",
 	"councilmember",
 	"councilman",
