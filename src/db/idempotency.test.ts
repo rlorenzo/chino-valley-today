@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { type Db, openDb } from "./index.ts";
+import { type Db, type NewItem, openDb } from "./index.ts";
 
 // Item identity is (source, item_type, external_id), NOT (document_id, ...).
 // `documents` is content-addressed, so a source re-uploading a changed document
@@ -279,9 +279,27 @@ describe("item idempotency across document re-uploads", () => {
 			item_type: "agenda_item",
 			title: "untitled",
 		};
+		// All three shapes a JS caller can produce. TypeScript rejects the last two
+		// outright, which is why they need the casts — and why the runtime guard
+		// exists at all: it is the only thing protecting untyped callers.
 		assert.throws(
 			() => db.insertItem({ ...bad, external_id: "" }),
 			/missing external_id/,
+			"empty string",
+		);
+		assert.throws(
+			() => db.insertItem({ ...bad } as unknown as NewItem),
+			/missing external_id/,
+			"property omitted entirely",
+		);
+		assert.throws(
+			() =>
+				db.insertItem({
+					...bad,
+					external_id: null,
+				} as unknown as NewItem),
+			/missing external_id/,
+			"explicit null",
 		);
 		assert.equal(
 			countItems(db),

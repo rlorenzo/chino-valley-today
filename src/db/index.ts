@@ -38,7 +38,7 @@ interface NewDocument {
 	event_key?: string | null;
 }
 
-interface NewItem {
+export interface NewItem {
 	document_id: number;
 	source_url: string;
 	item_type: string;
