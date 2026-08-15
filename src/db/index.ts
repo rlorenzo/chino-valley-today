@@ -134,17 +134,46 @@ export function openDb(path: string = DB_PATH) {
   // Idempotent when external_id is provided (re-runs update in place). Always
   // provide a stable external_id; derive one (e.g. a hash of title+date) when
   // the source has no native ID, or re-runs will duplicate rows.
+  //
+  // Identity is (source, item_type, external_id) — deliberately NOT scoped to
+  // document_id, even though the table's UNIQUE constraint is. `documents` is
+  // content-addressed (UNIQUE(url, content_hash)), so a source re-uploading a
+  // changed document — AgendaQuick re-rendering a packet PDF, say — mints a new
+  // documents row, and a document-scoped lookup would re-insert every item as a
+  // duplicate under the new document_id despite an unchanged source-native
+  // external_id. Nothing downstream dedupes: bundle.ts's itemsFor() selects by
+  // (source, item_type, date) with no DISTINCT, so both copies would land in the
+  // same recap. Matching across the source's documents and repointing
+  // document_id to the newest one keeps exactly one row per logical item.
+  //
+  // This narrows what a row means: items holds the CURRENT version of each item,
+  // not every version. Prior versions remain recoverable from the raw archive
+  // and the superseded documents row, which is where the byte-level history is
+  // meant to live.
   function insertItem(i: NewItem): { id: number; isNew: boolean } {
     if (!i.source_url) {
       throw new Error(`item missing source_url (item_type=${i.item_type}, title=${i.title ?? ''})`);
     }
     const meta = i.meta === undefined || i.meta === null ? null : JSON.stringify(i.meta);
     if (i.external_id != null) {
+      // Oldest row wins the match, so repeated re-uploads keep collapsing onto
+      // one row instead of fanning out.
       const existing = db
-        .prepare('SELECT id FROM items WHERE document_id = ? AND external_id = ? AND item_type = ?')
+        .prepare(
+          `SELECT i.id FROM items i
+             JOIN documents d ON d.id = i.document_id
+            WHERE d.source_id = (SELECT source_id FROM documents WHERE id = ?)
+              AND i.external_id = ?
+              AND i.item_type = ?
+            ORDER BY i.id
+            LIMIT 1`
+        )
         .get(i.document_id, i.external_id, i.item_type) as unknown as { id: number } | undefined;
       if (existing) {
-        db.prepare('UPDATE items SET source_url = ?, title = ?, body = ?, meta = ?, occurred_at = ? WHERE id = ?').run(
+        db.prepare(
+          'UPDATE items SET document_id = ?, source_url = ?, title = ?, body = ?, meta = ?, occurred_at = ? WHERE id = ?'
+        ).run(
+          i.document_id,
           i.source_url,
           i.title ?? null,
           i.body ?? null,
