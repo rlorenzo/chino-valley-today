@@ -4,15 +4,12 @@
 // parser for the frontmatter format written by pipeline/posts.ts's
 // renderPostFile(), and a schema-agnostic pretty-printer for gates/judge
 // JSON that highlights pass/fail where it can detect one.
+import { esc } from "../html.ts";
 import type { Tier } from "../pipeline/posts.ts";
 
-export function esc(s: unknown): string {
-	return String(s ?? "")
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;");
-}
+// Re-exported: the admin modules import esc from this module alongside the
+// other render helpers.
+export { esc };
 
 export function tierBadge(tier: Tier | string): string {
 	const cls =

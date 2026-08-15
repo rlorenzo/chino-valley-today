@@ -3,15 +3,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "./db/index.ts";
+import { esc } from "./html.ts";
 import { ROOT } from "./store.ts";
-
-function esc(s: unknown): string {
-	return String(s ?? "")
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;");
-}
 
 export function renderReport(dbIn?: Db): void {
 	const db = dbIn ?? openDb();

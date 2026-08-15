@@ -30,36 +30,16 @@
 // the most recent couple of releases from it too, clearly labeled in meta.
 
 import * as cheerio from "cheerio";
-import { XMLParser } from "fast-xml-parser";
+import {
+	type FeedItem,
+	parseRssItems,
+	resolveDocumentId,
+	rfc2822ToIso,
+	stripHtml,
+} from "./civicplus-rss.ts";
 import type { ScraperContext, ScraperDef } from "./types.ts";
 
 const BASE = "https://www.cityofchino.org";
-
-const xmlParser = new XMLParser({
-	ignoreAttributes: false,
-	attributeNamePrefix: "@_",
-	htmlEntities: true,
-});
-
-function toArray<T>(v: T | T[] | undefined | null): T[] {
-	if (v == null) return [];
-	return Array.isArray(v) ? v : [v];
-}
-
-function stripHtml(input: string | undefined | null): string {
-	if (!input) return "";
-	return cheerio
-		.load(`<div>${input}</div>`)("div")
-		.text()
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
-function rfc2822ToIso(pubDate: string | undefined): string | null {
-	if (!pubDate) return null;
-	const d = new Date(pubDate);
-	return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
 
 // Resolves the America/Los_Angeles UTC offset (handles PST/PDT correctly) for a
 // given approximate instant, so wall-clock times scraped from the site (which
@@ -114,77 +94,6 @@ function chinoDateTimeToIso(dateStr: string, timeStr?: string): string | null {
 	}
 	const naiveUtc = Date.UTC(year, mo, day, hour, minute);
 	return new Date(naiveUtc - laOffsetMinutes(naiveUtc) * 60000).toISOString();
-}
-
-// CivicPlus RSSFeed.aspx responses embed a live <lastBuildDate> timestamp (see
-// HTTP-behavior note at the end of run()), so re-fetching the *same* feed a
-// moment later never hash-matches the prior document — every run gets a fresh
-// documents row for feed URLs. Since items.UNIQUE is (document_id, external_id,
-// item_type), naively using that fresh document_id would make every feed-sourced
-// item look "new" on every run, defeating idempotency. Fix: look up whether an
-// item with this external_id already exists (from ANY earlier document under
-// this source) and, if so, reuse ITS document_id so insertItem updates in place
-// instead of inserting a duplicate row. Each run's feed fetch is still archived
-// as its own real document (accurately reflecting that the resource changed) —
-// only the item's document linkage is pinned to where it was first captured.
-function resolveDocumentId(
-	ctx: ScraperContext,
-	freshDocumentId: number,
-	externalId: string,
-	itemType: string,
-): number {
-	const row = ctx.db.raw
-		.prepare(
-			`SELECT i.document_id AS documentId FROM items i
-       JOIN documents d ON i.document_id = d.id
-       WHERE i.external_id = ? AND i.item_type = ? AND d.source_id = ?
-       ORDER BY i.id DESC LIMIT 1`,
-		)
-		.get(externalId, itemType, ctx.sourceId) as
-		| { documentId: number }
-		| undefined;
-	return row?.documentId ?? freshDocumentId;
-}
-
-interface FeedItem {
-	title: string;
-	link: string;
-	pubDate?: string;
-	description?: string;
-	guid: string;
-	extra: Record<string, string>;
-}
-
-function parseRssItems(xml: string): FeedItem[] {
-	const parsed = xmlParser.parse(xml) as Record<string, unknown>;
-	const rss = parsed?.rss as Record<string, unknown> | undefined;
-	const channel = rss?.channel as Record<string, unknown> | undefined;
-	if (!channel) return [];
-	const items = toArray(
-		channel.item as
-			| Record<string, unknown>
-			| Record<string, unknown>[]
-			| undefined,
-	);
-	return items.map((it) => {
-		const guidField = it.guid as { "#text"?: string } | string | undefined;
-		const guid =
-			(typeof guidField === "object" ? guidField?.["#text"] : guidField) ??
-			String(it.link ?? "");
-		const extra: Record<string, string> = {};
-		for (const k of Object.keys(it)) {
-			if (k.startsWith("calendarEvent:"))
-				extra[k.slice("calendarEvent:".length)] = String(it[k]);
-		}
-		return {
-			title: String(it.title ?? "").trim(),
-			link: String(it.link ?? "").trim(),
-			pubDate: it.pubDate as string | undefined,
-			description: it.description as string | undefined,
-			guid,
-			extra,
-		};
-	});
 }
 
 const NEWSFLASH_CATEGORIES = [

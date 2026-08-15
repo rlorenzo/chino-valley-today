@@ -25,95 +25,16 @@
 // isn't silently dropped.
 
 import * as cheerio from "cheerio";
-import { XMLParser } from "fast-xml-parser";
+import {
+	type FeedItem,
+	parseRssItems,
+	resolveDocumentId,
+	rfc2822ToIso,
+	stripHtml,
+} from "./civicplus-rss.ts";
 import type { ScraperContext, ScraperDef } from "./types.ts";
 
 const BASE = "https://www.chinohills.org";
-
-const xmlParser = new XMLParser({
-	ignoreAttributes: false,
-	attributeNamePrefix: "@_",
-	htmlEntities: true,
-});
-
-function toArray<T>(v: T | T[] | undefined | null): T[] {
-	if (v == null) return [];
-	return Array.isArray(v) ? v : [v];
-}
-
-function stripHtml(input: string | undefined | null): string {
-	if (!input) return "";
-	return cheerio
-		.load(`<div>${input}</div>`)("div")
-		.text()
-		.replace(/\s+/g, " ")
-		.trim();
-}
-
-function rfc2822ToIso(pubDate: string | undefined): string | null {
-	if (!pubDate) return null;
-	const d = new Date(pubDate);
-	return Number.isNaN(d.getTime()) ? null : d.toISOString();
-}
-
-// Mirrors chino-news-rss.ts's resolveDocumentId() (read there, not modified
-// here): RSSFeed.aspx responses embed a live <lastBuildDate>, so the feed
-// *document* never hash-matches across runs and gets a fresh documents row
-// every run. Since items.UNIQUE is (document_id, external_id, item_type), an
-// item's document linkage must be pinned to wherever its external_id was
-// first captured — otherwise every feed-sourced item looks "new" every run.
-function resolveDocumentId(
-	ctx: ScraperContext,
-	freshDocumentId: number,
-	externalId: string,
-	itemType: string,
-): number {
-	const row = ctx.db.raw
-		.prepare(
-			`SELECT i.document_id AS documentId FROM items i
-       JOIN documents d ON i.document_id = d.id
-       WHERE i.external_id = ? AND i.item_type = ? AND d.source_id = ?
-       ORDER BY i.id DESC LIMIT 1`,
-		)
-		.get(externalId, itemType, ctx.sourceId) as
-		| { documentId: number }
-		| undefined;
-	return row?.documentId ?? freshDocumentId;
-}
-
-interface FeedItem {
-	title: string;
-	link: string;
-	pubDate?: string;
-	description?: string;
-	guid: string;
-}
-
-function parseRssItems(xml: string): FeedItem[] {
-	const parsed = xmlParser.parse(xml) as Record<string, unknown>;
-	const rss = parsed?.rss as Record<string, unknown> | undefined;
-	const channel = rss?.channel as Record<string, unknown> | undefined;
-	if (!channel) return [];
-	const items = toArray(
-		channel.item as
-			| Record<string, unknown>
-			| Record<string, unknown>[]
-			| undefined,
-	);
-	return items.map((it) => {
-		const guidField = it.guid as { "#text"?: string } | string | undefined;
-		const guid =
-			(typeof guidField === "object" ? guidField?.["#text"] : guidField) ??
-			String(it.link ?? "");
-		return {
-			title: String(it.title ?? "").trim(),
-			link: String(it.link ?? "").trim(),
-			pubDate: it.pubDate as string | undefined,
-			description: it.description as string | undefined,
-			guid,
-		};
-	});
-}
 
 const NEWSFLASH_CATEGORIES = [
 	{ cid: "Local-News-1", name: "Local News" },
