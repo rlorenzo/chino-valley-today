@@ -12,8 +12,7 @@ import type { ScraperDef } from "./types.ts";
 import {
 	ingestVideoCaptions,
 	listRecentUploads,
-	parseDurationSeconds,
-	parseTitleDate,
+	meetingCandidates,
 } from "./youtube-shared.ts";
 
 const CHANNEL_URL = "https://www.youtube.com/channel/UCWKinB4PTb_uskobmwBF8pw";
@@ -34,16 +33,7 @@ const scraper: ScraperDef = {
 				"video is selected by date parsed out of the title, not by list position.",
 		);
 
-		const candidates = entries
-			.map((e) => ({
-				...e,
-				date: parseTitleDate(e.title),
-				seconds: parseDurationSeconds(e.durationStr),
-			}))
-			.filter(
-				(e): e is typeof e & { date: string } =>
-					/board|meeting/i.test(e.title) && e.date !== null,
-			);
+		const candidates = meetingCandidates(entries, /board|meeting/i);
 
 		if (candidates.length === 0) {
 			ctx.note(

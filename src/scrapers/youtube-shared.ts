@@ -46,6 +46,29 @@ export function parseDurationSeconds(s: string): number {
 	return parts.reduce((acc, p) => acc * 60 + p, 0);
 }
 
+// Both YouTube scrapers select a video the same way: enrich each listing entry
+// with a title-parsed date and a duration, then keep only entries whose title
+// matches that channel's meeting pattern AND carry a parseable date. The pattern
+// is the only per-channel part — Chino looks for council meetings and study
+// sessions, CVUSD for board meetings.
+export function meetingCandidates<
+	T extends { title: string; durationStr: string },
+>(
+	entries: T[],
+	titlePattern: RegExp,
+): Array<T & { date: string; seconds: number }> {
+	return entries
+		.map((e) => ({
+			...e,
+			date: parseTitleDate(e.title),
+			seconds: parseDurationSeconds(e.durationStr),
+		}))
+		.filter(
+			(e): e is T & { date: string; seconds: number } =>
+				titlePattern.test(e.title) && e.date !== null,
+		);
+}
+
 export interface PlaylistEntry {
 	id: string;
 	title: string;
