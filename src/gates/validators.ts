@@ -146,73 +146,78 @@ const PURE_LINK_ITEM_RE = /^\[[^\]]*\]\([^)]+\)[.,;:]?$/;
 // everything after it from every gate. See "Footer detection" in the report.
 const FOOTER_MARKER_RE = /generated from public records|corrections:/i;
 
-function parseBlocks(bodyMd: string): Block[] {
-	const normalized = bodyMd.replace(/\r\n/g, "\n");
-	const chunks = normalized.split(/\n[ \t]*\n+/);
-	const blocks: Block[] = [];
-
-	for (const chunk of chunks) {
-		const trimmed = chunk.trim();
-		if (trimmed === "") continue;
-
-		if (HR_RE.test(trimmed)) {
-			blocks.push({ kind: "hr", raw: trimmed });
-			continue;
-		}
-
-		const lines = trimmed.split("\n");
-		if (lines.length === 1 && HEADING_RE.test(lines[0])) {
-			blocks.push({ kind: "heading", raw: trimmed });
-			continue;
-		}
-
-		if (LIST_ITEM_RE.test(lines[0])) {
-			const items: string[] = [];
-			let current: string[] | null = null;
-			for (const line of lines) {
-				if (LIST_ITEM_RE.test(line)) {
-					if (current) items.push(current.join(" "));
-					current = [line.replace(LIST_ITEM_RE, "")];
-				} else if (current) {
-					current.push(line.trim());
-				}
-			}
+// A markdown list arrives as ONE blank-line-delimited chunk, but each item is
+// gated separately — a bullet stating a fact needs its own citation. Continuation
+// lines are folded into the item they belong to.
+function splitListItems(lines: string[]): string[] {
+	const items: string[] = [];
+	let current: string[] | null = null;
+	for (const line of lines) {
+		if (LIST_ITEM_RE.test(line)) {
 			if (current) items.push(current.join(" "));
-			for (const item of items) {
-				const t = item.trim();
-				if (t === "") continue;
-				blocks.push({
-					kind: PURE_LINK_ITEM_RE.test(t) ? "list-pure-link" : "list-fact",
-					raw: t,
-				});
-			}
-			continue;
+			current = [line.replace(LIST_ITEM_RE, "")];
+		} else if (current) {
+			current.push(line.trim());
 		}
+	}
+	if (current) items.push(current.join(" "));
+	return items;
+}
 
-		blocks.push({ kind: "paragraph", raw: trimmed });
+// One blank-line-delimited chunk -> the block(s) it contributes. A list chunk is
+// the only one that yields more than one block.
+function classifyChunk(trimmed: string): Block[] {
+	if (HR_RE.test(trimmed)) return [{ kind: "hr", raw: trimmed }];
+
+	const lines = trimmed.split("\n");
+	if (lines.length === 1 && HEADING_RE.test(lines[0])) {
+		return [{ kind: "heading", raw: trimmed }];
 	}
 
-	// Footer detection: the LAST horizontal-rule block, if everything after it
-	// carries the disclosure footer's hallmark phrases, is reclassified (along
-	// with that hr block) as 'footer' and excluded from every gate below. If
-	// the trailing text does NOT look like the known footer, the hr block
-	// stays a plain (exempt) hr and whatever follows is gated normally — a
-	// deliberate fail-closed choice over "trust every trailing ---".
+	if (LIST_ITEM_RE.test(lines[0])) {
+		return splitListItems(lines)
+			.map((item) => item.trim())
+			.filter((item) => item !== "")
+			.map((item) => ({
+				kind: PURE_LINK_ITEM_RE.test(item) ? "list-pure-link" : "list-fact",
+				raw: item,
+			}));
+	}
+
+	return [{ kind: "paragraph", raw: trimmed }];
+}
+
+// The LAST horizontal-rule block, if everything after it carries the disclosure
+// footer's hallmark phrases, is reclassified (along with that hr block) as
+// 'footer' and excluded from every gate. If the trailing text does NOT look like
+// the known footer, the hr stays a plain (exempt) hr and whatever follows is
+// gated normally — a deliberate fail-closed choice over "trust every trailing
+// ---", which would let a draft exempt itself from every check by ending in one.
+function markDisclosureFooter(blocks: Block[]): Block[] {
 	let lastHr = -1;
-	for (let i = 0; i < blocks.length; i++)
+	for (let i = 0; i < blocks.length; i++) {
 		if (blocks[i].kind === "hr") lastHr = i;
-	if (lastHr !== -1) {
-		const trailing = blocks
-			.slice(lastHr + 1)
-			.map((b) => b.raw)
-			.join("\n");
-		if (FOOTER_MARKER_RE.test(trailing)) {
-			for (let i = lastHr; i < blocks.length; i++)
-				blocks[i] = { ...blocks[i], kind: "footer" };
-		}
 	}
+	if (lastHr === -1) return blocks;
 
-	return blocks;
+	const trailing = blocks
+		.slice(lastHr + 1)
+		.map((b) => b.raw)
+		.join("\n");
+	if (!FOOTER_MARKER_RE.test(trailing)) return blocks;
+
+	return blocks.map((b, i) =>
+		i >= lastHr ? { ...b, kind: "footer" as const } : b,
+	);
+}
+
+function parseBlocks(bodyMd: string): Block[] {
+	const chunks = bodyMd.replace(/\r\n/g, "\n").split(/\n[ \t]*\n+/);
+	const blocks = chunks
+		.map((chunk) => chunk.trim())
+		.filter((chunk) => chunk !== "")
+		.flatMap(classifyChunk);
+	return markDisclosureFooter(blocks);
 }
 
 // ---------------------------------------------------------------------------
