@@ -360,6 +360,37 @@ interface DateMatch extends Span {
 	raw: string;
 }
 
+// 40 characters either side of the offending span. That window is what makes a
+// numeric or proper-name failure actionable in the dashboard: the bare token
+// ("2026-08-11", "Two ABC") rarely shows a reviewer where it came from.
+function contextAround(
+	text: string,
+	span: { start: number; end: number },
+): string {
+	return truncate(text.slice(Math.max(0, span.start - 40), span.end + 40));
+}
+
+// Shared tail of every date-format branch below: reject impossible calendar
+// values, then record the match with a normalised YYYY-MM-DD key. `month1` is
+// 1-based; monthLookup() returns 0-based, so its callers pass `mo + 1` and an
+// unmatched month arrives as NaN, which the range check rejects.
+function addDate(
+	out: DateMatch[],
+	m: RegExpMatchArray,
+	year: number,
+	month1: number,
+	day: number,
+): void {
+	if (!(month1 >= 1 && month1 <= 12 && day >= 1 && day <= 31)) return;
+	const start = m.index ?? 0;
+	out.push({
+		start,
+		end: start + m[0].length,
+		key: `${year}-${pad2(month1)}-${pad2(day)}`,
+		raw: m[0],
+	});
+}
+
 function extractDates(text: string): DateMatch[] {
 	const out: DateMatch[] = [];
 
@@ -370,34 +401,20 @@ function extractDates(text: string): DateMatch[] {
 	// the format occurred_at is stored in throughout the DB. Confirmed via
 	// calibration against real corpus text (reports/notes/phase1-validators.md).
 	for (const m of text.matchAll(/(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/g)) {
-		const y = Number(m[1]);
-		const mo = Number(m[2]);
-		const d = Number(m[3]);
-		if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-			out.push({
-				start: m.index,
-				end: m.index + m[0].length,
-				key: `${y}-${pad2(mo)}-${pad2(d)}`,
-				raw: m[0],
-			});
-		}
+		addDate(out, m, Number(m[1]), Number(m[2]), Number(m[3]));
 	}
 
 	for (const m of text.matchAll(
 		/(?<!\d)(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?!\d)/g,
 	)) {
-		const mo = Number(m[1]);
-		const d = Number(m[2]);
 		const yRaw = Number(m[3]);
-		const y = yRaw < 100 ? 2000 + yRaw : yRaw;
-		if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-			out.push({
-				start: m.index,
-				end: m.index + m[0].length,
-				key: `${y}-${pad2(mo)}-${pad2(d)}`,
-				raw: m[0],
-			});
-		}
+		addDate(
+			out,
+			m,
+			yRaw < 100 ? 2000 + yRaw : yRaw,
+			Number(m[1]),
+			Number(m[2]),
+		);
 	}
 
 	const monthDayYearRe = new RegExp(
@@ -406,16 +423,7 @@ function extractDates(text: string): DateMatch[] {
 	);
 	for (const m of text.matchAll(monthDayYearRe)) {
 		const mo = monthLookup(m[1]);
-		const d = Number(m[2]);
-		const y = Number(m[3]);
-		if (mo !== undefined && d >= 1 && d <= 31) {
-			out.push({
-				start: m.index,
-				end: m.index + m[0].length,
-				key: `${y}-${pad2(mo + 1)}-${pad2(d)}`,
-				raw: m[0],
-			});
-		}
+		addDate(out, m, Number(m[3]), (mo ?? Number.NaN) + 1, Number(m[2]));
 	}
 
 	const dayMonthYearRe = new RegExp(
@@ -423,17 +431,8 @@ function extractDates(text: string): DateMatch[] {
 		"gi",
 	);
 	for (const m of text.matchAll(dayMonthYearRe)) {
-		const d = Number(m[1]);
 		const mo = monthLookup(m[2]);
-		const y = Number(m[3]);
-		if (mo !== undefined && d >= 1 && d <= 31) {
-			out.push({
-				start: m.index,
-				end: m.index + m[0].length,
-				key: `${y}-${pad2(mo + 1)}-${pad2(d)}`,
-				raw: m[0],
-			});
-		}
+		addDate(out, m, Number(m[3]), (mo ?? Number.NaN) + 1, Number(m[1]));
 	}
 
 	return out;
@@ -539,9 +538,7 @@ function runNumericGate(
 			failures.push({
 				gate: "numeric",
 				detail: `date "${d.raw}" (${d.key}) does not appear in the input corpus in any recognized form`,
-				excerpt: truncate(
-					scanText.slice(Math.max(0, d.start - 40), d.end + 40),
-				),
+				excerpt: contextAround(scanText, d),
 			});
 		}
 	}
@@ -558,9 +555,7 @@ function runNumericGate(
 			failures.push({
 				gate: "numeric",
 				detail: `time "${t.raw}" does not appear in the input corpus`,
-				excerpt: truncate(
-					scanText.slice(Math.max(0, t.start - 40), t.end + 40),
-				),
+				excerpt: contextAround(scanText, t),
 			});
 		}
 	}
@@ -581,9 +576,7 @@ function runNumericGate(
 			failures.push({
 				gate: "numeric",
 				detail: `vote tally "${t.raw}" not corroborated by the input corpus (neither the literal tally nor both counts independently found)`,
-				excerpt: truncate(
-					scanText.slice(Math.max(0, t.start - 40), t.end + 40),
-				),
+				excerpt: contextAround(scanText, t),
 			});
 		}
 	}
@@ -598,9 +591,7 @@ function runNumericGate(
 			failures.push({
 				gate: "numeric",
 				detail: `number "${n.raw.trim()}" does not appear in the input corpus`,
-				excerpt: truncate(
-					scanText.slice(Math.max(0, n.start - 40), n.end + 40),
-				),
+				excerpt: contextAround(scanText, n),
 			});
 		}
 	}
@@ -1050,9 +1041,7 @@ function runProperNamesGate(
 		failures.push({
 			gate: "proper_names",
 			detail: `name "${candidate}" does not appear in the input corpus`,
-			excerpt: truncate(
-				scanText.slice(Math.max(0, seq.start - 40), seq.end + 40),
-			),
+			excerpt: contextAround(scanText, seq),
 		});
 	}
 
