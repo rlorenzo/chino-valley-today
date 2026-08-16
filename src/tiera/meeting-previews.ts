@@ -121,25 +121,100 @@ function chinoCalendarBodyName(rawTitle: string): {
 	return { cancelled, body: t };
 }
 
+// Both calendar-style generators open identically: pull the source's 'event'
+// items, drop the untitled and the already-past, and keep the raw total for the
+// run note. `total` is every event item in the DB for that source, which is what
+// makes the note ("N upcoming of M total") meaningful.
+function upcomingEvents(
+	db: Db,
+	sourceKey: string,
+	now: Date,
+): { upcoming: Array<{ row: ItemRow; title: string }>; total: number } {
+	const events = queryItems(db, {
+		sourceKeys: [sourceKey],
+		itemTypes: ["event"],
+	});
+	const upcoming: Array<{ row: ItemRow; title: string }> = [];
+	for (const row of events) {
+		const title = cleanTitle(row.title);
+		if (!title) continue;
+		if (!isFutureOccurredAt(row.occurred_at, now)) continue;
+		upcoming.push({ row, title });
+	}
+	return { upcoming, total: events.length };
+}
+
+// meta values arrive as unknown from JSON; every caller wants "the string, or
+// nothing". Repeating the typeof guard inline obscured the branching in the
+// preview builders.
+function metaString(meta: Record<string, unknown>, key: string): string | null {
+	const v = meta[key];
+	return typeof v === "string" && v.trim() !== "" ? v : null;
+}
+
+// The markdown body for one Chino calendar preview.
+//
+// Gate 1a requires every fact-bearing line to carry its own citation, so each
+// bullet repeats the calendar link rather than sharing one below — that rule is
+// what makes this long and branchy, and why it is worth its own function.
+function chinoCalendarPreviewBody(opts: {
+	cancelled: boolean;
+	sourceUrl: string;
+	eventDates: string | null;
+	eventTimes: string | null;
+	location: string | null;
+	matched: ItemRow[];
+}): string {
+	const cite = (label: string) => mdLink(label, opts.sourceUrl);
+	const lines: string[] = [];
+
+	if (opts.cancelled) {
+		lines.push(
+			`**This meeting has been CANCELLED** (${cite("city calendar")}).`,
+			"",
+		);
+	}
+
+	const details: Array<[string, string | null]> = [
+		["Date", opts.eventDates],
+		["Time", opts.eventTimes],
+		["Location", opts.location],
+	];
+	const detailLines = details
+		.filter(([, value]) => value !== null)
+		.map(
+			([label, value]) =>
+				`- **${label}:** ${mdEscape(value as string)} (${cite("calendar")})`,
+		);
+	if (detailLines.length) lines.push(...detailLines, "");
+
+	lines.push(cite("City calendar entry"));
+
+	if (!opts.cancelled) {
+		const agendaMd = agendaListMarkdown(opts.matched);
+		lines.push("");
+		if (agendaMd) {
+			lines.push("### Agenda", "", agendaMd);
+		} else {
+			lines.push(
+				`_No agenda had been posted to our records as of publish time (${cite("calendar")})._`,
+			);
+		}
+	}
+
+	return lines.join("\n");
+}
+
 function genChinoCalendarPreviews(
 	db: Db,
 	now: Date,
 	crossRefAgendaItems: ItemRow[],
 ): GenResult {
-	const events = queryItems(db, {
-		sourceKeys: ["chino-news-rss"],
-		itemTypes: ["event"],
-	});
+	const { upcoming, total } = upcomingEvents(db, "chino-news-rss", now);
 	const notes: string[] = [];
 	const posts: NewPost[] = [];
-	let futureCount = 0;
 
-	for (const row of events) {
-		const title = cleanTitle(row.title);
-		if (!title) continue;
-		if (!isFutureOccurredAt(row.occurred_at, now)) continue;
-		futureCount++;
-
+	for (const { row, title } of upcoming) {
 		const localDate = localMeetingDate(row.occurred_at as string);
 		if (!localDate) {
 			notes.push(
@@ -150,52 +225,19 @@ function genChinoCalendarPreviews(
 
 		const { cancelled, body } = chinoCalendarBodyName(title);
 		const meta = parseMeta(row.meta);
-		const eventDates =
-			typeof meta.eventDates === "string" ? meta.eventDates : null;
-		const eventTimes =
-			typeof meta.eventTimes === "string" ? meta.eventTimes : null;
-		const location = typeof meta.location === "string" ? meta.location : null;
-
+		const eventDates = metaString(meta, "eventDates");
 		const matched = cancelled
 			? []
 			: findMatchingAgendaItems(crossRefAgendaItems, localDate, body);
 
-		// Gate 1a requires every fact-bearing line to carry its own citation, so
-		// each bullet repeats the calendar link rather than sharing one below.
-		const cite = (label: string) => mdLink(label, row.source_url);
-		const lines: string[] = [];
-		if (cancelled)
-			lines.push(
-				`**This meeting has been CANCELLED** (${cite("city calendar")}).`,
-				"",
-			);
-		const detailLines: string[] = [];
-		if (eventDates)
-			detailLines.push(
-				`- **Date:** ${mdEscape(eventDates)} (${cite("calendar")})`,
-			);
-		if (eventTimes)
-			detailLines.push(
-				`- **Time:** ${mdEscape(eventTimes)} (${cite("calendar")})`,
-			);
-		if (location)
-			detailLines.push(
-				`- **Location:** ${mdEscape(location)} (${cite("calendar")})`,
-			);
-		if (detailLines.length) lines.push(...detailLines, "");
-		lines.push(cite("City calendar entry"));
-
-		if (!cancelled) {
-			const agendaMd = agendaListMarkdown(matched);
-			lines.push("");
-			if (agendaMd) {
-				lines.push("### Agenda", "", agendaMd);
-			} else {
-				lines.push(
-					`_No agenda had been posted to our records as of publish time (${cite("calendar")})._`,
-				);
-			}
-		}
+		const bodyMd = chinoCalendarPreviewBody({
+			cancelled,
+			sourceUrl: row.source_url,
+			eventDates,
+			eventTimes: metaString(meta, "eventTimes"),
+			location: metaString(meta, "location"),
+			matched,
+		});
 
 		const humanDate = eventDates ?? humanDateFromLocal(localDate);
 		posts.push({
@@ -205,14 +247,14 @@ function genChinoCalendarPreviews(
 			title: cancelled
 				? `CANCELLED: ${body} — ${humanDate}`
 				: `Meeting Preview: ${body} — ${humanDate}`,
-			bodyMd: lines.join("\n"),
+			bodyMd,
 			meetingDate: localDate,
 			sources: sourcesFrom([row, ...matched]),
 		});
 	}
 
 	notes.push(
-		`chino-news-rss calendar: ${futureCount} upcoming event(s) found (of ${events.length} total calendar 'event' items in DB) -> ${posts.length} preview post(s).`,
+		`chino-news-rss calendar: ${upcoming.length} upcoming event(s) found (of ${total} total calendar 'event' items in DB) -> ${posts.length} preview post(s).`,
 	);
 	return { posts, notes };
 }
@@ -220,20 +262,13 @@ function genChinoCalendarPreviews(
 // ---- Candidate B: cvusd-board 'event' items ----
 
 function genCvusdPreviews(db: Db, now: Date): GenResult {
-	const events = queryItems(db, {
-		sourceKeys: ["cvusd-board"],
-		itemTypes: ["event"],
-	});
+	const { upcoming, total } = upcomingEvents(db, "cvusd-board", now);
 	const notes: string[] = [];
 	const posts: NewPost[] = [];
-	let futureCount = 0;
 
-	for (const row of events) {
-		const title = cleanTitle(row.title);
-		if (!title) continue;
-		if (!isFutureOccurredAt(row.occurred_at, now)) continue;
-		futureCount++;
-
+	// `title` is only a presence guard for this source — upcomingEvents already
+	// dropped the untitled rows, and the post title below is a fixed string.
+	for (const { row } of upcoming) {
 		const localDate = row.occurred_at as string; // already a bare YYYY-MM-DD
 		const meta = parseMeta(row.meta);
 		const meetingType =
@@ -283,7 +318,7 @@ function genCvusdPreviews(db: Db, now: Date): GenResult {
 	}
 
 	notes.push(
-		`cvusd-board: ${futureCount} upcoming event(s) found (of ${events.length} total 'event' items in DB) -> ${posts.length} preview post(s).`,
+		`cvusd-board: ${upcoming.length} upcoming event(s) found (of ${total} total 'event' items in DB) -> ${posts.length} preview post(s).`,
 	);
 	return { posts, notes };
 }

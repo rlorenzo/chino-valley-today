@@ -10,8 +10,7 @@ import type { ScraperDef } from "./types.ts";
 import {
 	ingestVideoCaptions,
 	listRecentUploads,
-	parseDurationSeconds,
-	parseTitleDate,
+	meetingCandidates,
 } from "./youtube-shared.ts";
 
 const CHANNEL_URL = "https://www.youtube.com/user/chinotv3";
@@ -31,19 +30,15 @@ const scraper: ScraperDef = {
 				'to /council meeting|study session/i with a parseable "<Month> <D>, <YYYY>" title date.',
 		);
 
-		const candidates = entries
-			.map((e) => ({
-				...e,
-				date: parseTitleDate(e.title),
-				seconds: parseDurationSeconds(e.durationStr),
-			}))
-			.filter(
-				(e): e is typeof e & { date: string } =>
-					/council meeting|study session/i.test(e.title) && e.date !== null,
-			)
-			.sort((a, b) =>
-				a.date < b.date ? 1 : a.date > b.date ? -1 : b.seconds - a.seconds,
-			);
+		// Newest meeting first; ties broken by the longer video, which is the full
+		// meeting rather than a clip. NOT folded into meetingCandidates(): the
+		// CVUSD scraper deliberately keeps listing order.
+		const candidates = meetingCandidates(
+			entries,
+			/council meeting|study session/i,
+		).sort((a, b) =>
+			a.date < b.date ? 1 : a.date > b.date ? -1 : b.seconds - a.seconds,
+		);
 
 		if (candidates.length === 0) {
 			ctx.note(

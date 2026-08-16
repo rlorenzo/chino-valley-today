@@ -146,73 +146,78 @@ const PURE_LINK_ITEM_RE = /^\[[^\]]*\]\([^)]+\)[.,;:]?$/;
 // everything after it from every gate. See "Footer detection" in the report.
 const FOOTER_MARKER_RE = /generated from public records|corrections:/i;
 
-function parseBlocks(bodyMd: string): Block[] {
-	const normalized = bodyMd.replace(/\r\n/g, "\n");
-	const chunks = normalized.split(/\n[ \t]*\n+/);
-	const blocks: Block[] = [];
-
-	for (const chunk of chunks) {
-		const trimmed = chunk.trim();
-		if (trimmed === "") continue;
-
-		if (HR_RE.test(trimmed)) {
-			blocks.push({ kind: "hr", raw: trimmed });
-			continue;
-		}
-
-		const lines = trimmed.split("\n");
-		if (lines.length === 1 && HEADING_RE.test(lines[0])) {
-			blocks.push({ kind: "heading", raw: trimmed });
-			continue;
-		}
-
-		if (LIST_ITEM_RE.test(lines[0])) {
-			const items: string[] = [];
-			let current: string[] | null = null;
-			for (const line of lines) {
-				if (LIST_ITEM_RE.test(line)) {
-					if (current) items.push(current.join(" "));
-					current = [line.replace(LIST_ITEM_RE, "")];
-				} else if (current) {
-					current.push(line.trim());
-				}
-			}
+// A markdown list arrives as ONE blank-line-delimited chunk, but each item is
+// gated separately — a bullet stating a fact needs its own citation. Continuation
+// lines are folded into the item they belong to.
+function splitListItems(lines: string[]): string[] {
+	const items: string[] = [];
+	let current: string[] | null = null;
+	for (const line of lines) {
+		if (LIST_ITEM_RE.test(line)) {
 			if (current) items.push(current.join(" "));
-			for (const item of items) {
-				const t = item.trim();
-				if (t === "") continue;
-				blocks.push({
-					kind: PURE_LINK_ITEM_RE.test(t) ? "list-pure-link" : "list-fact",
-					raw: t,
-				});
-			}
-			continue;
+			current = [line.replace(LIST_ITEM_RE, "")];
+		} else if (current) {
+			current.push(line.trim());
 		}
+	}
+	if (current) items.push(current.join(" "));
+	return items;
+}
 
-		blocks.push({ kind: "paragraph", raw: trimmed });
+// One blank-line-delimited chunk -> the block(s) it contributes. A list chunk is
+// the only one that yields more than one block.
+function classifyChunk(trimmed: string): Block[] {
+	if (HR_RE.test(trimmed)) return [{ kind: "hr", raw: trimmed }];
+
+	const lines = trimmed.split("\n");
+	if (lines.length === 1 && HEADING_RE.test(lines[0])) {
+		return [{ kind: "heading", raw: trimmed }];
 	}
 
-	// Footer detection: the LAST horizontal-rule block, if everything after it
-	// carries the disclosure footer's hallmark phrases, is reclassified (along
-	// with that hr block) as 'footer' and excluded from every gate below. If
-	// the trailing text does NOT look like the known footer, the hr block
-	// stays a plain (exempt) hr and whatever follows is gated normally — a
-	// deliberate fail-closed choice over "trust every trailing ---".
+	if (LIST_ITEM_RE.test(lines[0])) {
+		return splitListItems(lines)
+			.map((item) => item.trim())
+			.filter((item) => item !== "")
+			.map((item) => ({
+				kind: PURE_LINK_ITEM_RE.test(item) ? "list-pure-link" : "list-fact",
+				raw: item,
+			}));
+	}
+
+	return [{ kind: "paragraph", raw: trimmed }];
+}
+
+// The LAST horizontal-rule block, if everything after it carries the disclosure
+// footer's hallmark phrases, is reclassified (along with that hr block) as
+// 'footer' and excluded from every gate. If the trailing text does NOT look like
+// the known footer, the hr stays a plain (exempt) hr and whatever follows is
+// gated normally — a deliberate fail-closed choice over "trust every trailing
+// ---", which would let a draft exempt itself from every check by ending in one.
+function markDisclosureFooter(blocks: Block[]): Block[] {
 	let lastHr = -1;
-	for (let i = 0; i < blocks.length; i++)
+	for (let i = 0; i < blocks.length; i++) {
 		if (blocks[i].kind === "hr") lastHr = i;
-	if (lastHr !== -1) {
-		const trailing = blocks
-			.slice(lastHr + 1)
-			.map((b) => b.raw)
-			.join("\n");
-		if (FOOTER_MARKER_RE.test(trailing)) {
-			for (let i = lastHr; i < blocks.length; i++)
-				blocks[i] = { ...blocks[i], kind: "footer" };
-		}
 	}
+	if (lastHr === -1) return blocks;
 
-	return blocks;
+	const trailing = blocks
+		.slice(lastHr + 1)
+		.map((b) => b.raw)
+		.join("\n");
+	if (!FOOTER_MARKER_RE.test(trailing)) return blocks;
+
+	return blocks.map((b, i) =>
+		i >= lastHr ? { ...b, kind: "footer" as const } : b,
+	);
+}
+
+function parseBlocks(bodyMd: string): Block[] {
+	const chunks = bodyMd.replace(/\r\n/g, "\n").split(/\n[ \t]*\n+/);
+	const blocks = chunks
+		.map((chunk) => chunk.trim())
+		.filter((chunk) => chunk !== "")
+		.flatMap(classifyChunk);
+	return markDisclosureFooter(blocks);
 }
 
 // ---------------------------------------------------------------------------
@@ -360,6 +365,37 @@ interface DateMatch extends Span {
 	raw: string;
 }
 
+// 40 characters either side of the offending span. That window is what makes a
+// numeric or proper-name failure actionable in the dashboard: the bare token
+// ("2026-08-11", "Two ABC") rarely shows a reviewer where it came from.
+function contextAround(
+	text: string,
+	span: { start: number; end: number },
+): string {
+	return truncate(text.slice(Math.max(0, span.start - 40), span.end + 40));
+}
+
+// Shared tail of every date-format branch below: reject impossible calendar
+// values, then record the match with a normalised YYYY-MM-DD key. `month1` is
+// 1-based; monthLookup() returns 0-based, so its callers pass `mo + 1` and an
+// unmatched month arrives as NaN, which the range check rejects.
+function addDate(
+	out: DateMatch[],
+	m: RegExpMatchArray,
+	year: number,
+	month1: number,
+	day: number,
+): void {
+	if (!(month1 >= 1 && month1 <= 12 && day >= 1 && day <= 31)) return;
+	const start = m.index ?? 0;
+	out.push({
+		start,
+		end: start + m[0].length,
+		key: `${year}-${pad2(month1)}-${pad2(day)}`,
+		raw: m[0],
+	});
+}
+
 function extractDates(text: string): DateMatch[] {
 	const out: DateMatch[] = [];
 
@@ -370,34 +406,20 @@ function extractDates(text: string): DateMatch[] {
 	// the format occurred_at is stored in throughout the DB. Confirmed via
 	// calibration against real corpus text (reports/notes/phase1-validators.md).
 	for (const m of text.matchAll(/(?<!\d)(\d{4})-(\d{1,2})-(\d{1,2})(?!\d)/g)) {
-		const y = Number(m[1]);
-		const mo = Number(m[2]);
-		const d = Number(m[3]);
-		if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-			out.push({
-				start: m.index,
-				end: m.index + m[0].length,
-				key: `${y}-${pad2(mo)}-${pad2(d)}`,
-				raw: m[0],
-			});
-		}
+		addDate(out, m, Number(m[1]), Number(m[2]), Number(m[3]));
 	}
 
 	for (const m of text.matchAll(
 		/(?<!\d)(\d{1,2})\/(\d{1,2})\/(\d{2,4})(?!\d)/g,
 	)) {
-		const mo = Number(m[1]);
-		const d = Number(m[2]);
 		const yRaw = Number(m[3]);
-		const y = yRaw < 100 ? 2000 + yRaw : yRaw;
-		if (mo >= 1 && mo <= 12 && d >= 1 && d <= 31) {
-			out.push({
-				start: m.index,
-				end: m.index + m[0].length,
-				key: `${y}-${pad2(mo)}-${pad2(d)}`,
-				raw: m[0],
-			});
-		}
+		addDate(
+			out,
+			m,
+			yRaw < 100 ? 2000 + yRaw : yRaw,
+			Number(m[1]),
+			Number(m[2]),
+		);
 	}
 
 	const monthDayYearRe = new RegExp(
@@ -406,16 +428,7 @@ function extractDates(text: string): DateMatch[] {
 	);
 	for (const m of text.matchAll(monthDayYearRe)) {
 		const mo = monthLookup(m[1]);
-		const d = Number(m[2]);
-		const y = Number(m[3]);
-		if (mo !== undefined && d >= 1 && d <= 31) {
-			out.push({
-				start: m.index,
-				end: m.index + m[0].length,
-				key: `${y}-${pad2(mo + 1)}-${pad2(d)}`,
-				raw: m[0],
-			});
-		}
+		addDate(out, m, Number(m[3]), (mo ?? Number.NaN) + 1, Number(m[2]));
 	}
 
 	const dayMonthYearRe = new RegExp(
@@ -423,17 +436,8 @@ function extractDates(text: string): DateMatch[] {
 		"gi",
 	);
 	for (const m of text.matchAll(dayMonthYearRe)) {
-		const d = Number(m[1]);
 		const mo = monthLookup(m[2]);
-		const y = Number(m[3]);
-		if (mo !== undefined && d >= 1 && d <= 31) {
-			out.push({
-				start: m.index,
-				end: m.index + m[0].length,
-				key: `${y}-${pad2(mo + 1)}-${pad2(d)}`,
-				raw: m[0],
-			});
-		}
+		addDate(out, m, Number(m[3]), (mo ?? Number.NaN) + 1, Number(m[1]));
 	}
 
 	return out;
@@ -539,9 +543,7 @@ function runNumericGate(
 			failures.push({
 				gate: "numeric",
 				detail: `date "${d.raw}" (${d.key}) does not appear in the input corpus in any recognized form`,
-				excerpt: truncate(
-					scanText.slice(Math.max(0, d.start - 40), d.end + 40),
-				),
+				excerpt: contextAround(scanText, d),
 			});
 		}
 	}
@@ -558,9 +560,7 @@ function runNumericGate(
 			failures.push({
 				gate: "numeric",
 				detail: `time "${t.raw}" does not appear in the input corpus`,
-				excerpt: truncate(
-					scanText.slice(Math.max(0, t.start - 40), t.end + 40),
-				),
+				excerpt: contextAround(scanText, t),
 			});
 		}
 	}
@@ -581,9 +581,7 @@ function runNumericGate(
 			failures.push({
 				gate: "numeric",
 				detail: `vote tally "${t.raw}" not corroborated by the input corpus (neither the literal tally nor both counts independently found)`,
-				excerpt: truncate(
-					scanText.slice(Math.max(0, t.start - 40), t.end + 40),
-				),
+				excerpt: contextAround(scanText, t),
 			});
 		}
 	}
@@ -598,9 +596,7 @@ function runNumericGate(
 			failures.push({
 				gate: "numeric",
 				detail: `number "${n.raw.trim()}" does not appear in the input corpus`,
-				excerpt: truncate(
-					scanText.slice(Math.max(0, n.start - 40), n.end + 40),
-				),
+				excerpt: contextAround(scanText, n),
 			});
 		}
 	}
@@ -1050,9 +1046,7 @@ function runProperNamesGate(
 		failures.push({
 			gate: "proper_names",
 			detail: `name "${candidate}" does not appear in the input corpus`,
-			excerpt: truncate(
-				scanText.slice(Math.max(0, seq.start - 40), seq.end + 40),
-			),
+			excerpt: contextAround(scanText, seq),
 		});
 	}
 
