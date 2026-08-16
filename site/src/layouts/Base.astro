@@ -1,0 +1,155 @@
+---
+import "../styles/world.css";
+
+interface Props {
+	title: string;
+	description: string;
+	current?: "record" | "topics" | "about";
+}
+
+const { title, description, current } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+
+const TOPICS = [
+	{ slug: "planning", name: "Planning" },
+	{ slug: "cvusd", name: "CVUSD" },
+	{ slug: "business", name: "Business" },
+	{ slug: "safety", name: "Safety" },
+];
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<title>{title}</title>
+		<meta name="description" content={description} />
+		<link rel="canonical" href={canonical} />
+		<link
+			rel="alternate"
+			type="application/rss+xml"
+			title="Chino Valley Today"
+			href="/rss.xml"
+		/>
+		<link
+			rel="preload"
+			href="/fonts/archivo-narrow.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin
+		/>
+		<link
+			rel="preload"
+			href="/fonts/literata.woff2"
+			as="font"
+			type="font/woff2"
+			crossorigin
+		/>
+		<link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+		<meta name="theme-color" content="#143a72" />
+	</head>
+	<body>
+		<!--
+DIRECTION CONTRACT — seed 29a604d7 · grounded direction 7 of 7
+
+THESIS: An inspection stamp is a provenance mark, so this is a graded record,
+not a publication. It refuses the local-news card grid and the government
+portal alike.
+
+OWN-WORLD: Chino Valley dairy: crate-blue fields at page scale, stencilled
+Archivo Narrow marks, galvanised zinc ground (never warm paper), Grade-A
+placard yellow for wayfinding, oxide for Tier C. Violet inspection ink appears
+NOWHERE except on a sourced claim. Square corners throughout; radius is 0.
+
+STORY: A resident learns what their government did in two minutes; anyone who
+doubts a line follows its stamp to the primary record.
+
+FIRST VIEWPORT: Crate masthead, then four stencilled topic marks carrying item
+counts and last-inspected dates, then the dated record begins. No hero image,
+no subscribe bar.
+
+FORM: Dairy Inspection Mark. Candidate 7 of 7, assigned by roll 29a604d7.
+
+FINISH: unreviewed and undocumented is unfinished; this build ends with the
+finish review, the verdict, and DESIGN.md
+		-->
+		<a class="skip mark" href="#main">Skip to the record</a>
+
+		<header class="masthead">
+			<div class="shell masthead__inner">
+				<div>
+					<a class="masthead__name" href="/">Chino&nbsp;Valley&nbsp;Today</a>
+					<p class="masthead__rule mark">
+						The public record of Chino &amp; Chino Hills
+					</p>
+				</div>
+				<nav class="masthead__nav mark" aria-label="Sections">
+					<a href="/" aria-current={current === "record" ? "page" : undefined}>
+						Record
+					</a>
+					{
+						TOPICS.map((t) => (
+							<a href={`/topics/${t.slug}/`}>{t.name}</a>
+						))
+					}
+					<a href="/about/" aria-current={current === "about" ? "page" : undefined}>
+						About
+					</a>
+				</nav>
+			</div>
+		</header>
+
+		<main id="main">
+			<slot />
+		</main>
+
+		<footer class="footer">
+			<div class="shell footer__inner">
+				<div>
+					<h2 class="mark">How this works</h2>
+					<p style="margin:0">
+						Every claim here links to the primary record it came from &mdash; an
+						agenda item, a staff report, a video timestamp, a state licence
+						report. No source, no claim.
+					</p>
+				</div>
+				<div>
+					<h2 class="mark">Topics</h2>
+					<ul>
+						{
+							TOPICS.map((t) => (
+								<li>
+									<a href={`/topics/${t.slug}/`}>{t.name}</a>
+								</li>
+							))
+						}
+					</ul>
+				</div>
+				<div>
+					<h2 class="mark">Feeds &amp; contact</h2>
+					<ul>
+						<li><a href="/rss.xml">RSS feed</a></li>
+						<li><a href="/about/">About &amp; corrections</a></li>
+					</ul>
+				</div>
+			</div>
+		</footer>
+
+		<style>
+			.skip {
+				position: absolute;
+				left: -9999px;
+				top: 0;
+				background: var(--placard);
+				color: var(--stencil);
+				padding: 0.6rem 1rem;
+				z-index: 10;
+				font-size: 0.8rem;
+			}
+			.skip:focus {
+				left: 0;
+			}
+		</style>
+	</body>
+</html>

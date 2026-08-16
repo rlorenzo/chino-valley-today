@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Chino Valley Today">
+  <!-- The inspection mark, reduced to what survives at 16px: a crate-blue
+       tile, the violet stamp ring that means "checked against a record", and
+       the Grade-A placard rule the masthead carries. Square corners: this
+       world is cut, not drawn. -->
+  <rect width="32" height="32" fill="#143a72"/>
+  <circle cx="16" cy="14" r="7.5" fill="none" stroke="#a98ad6" stroke-width="2.5"/>
+  <rect x="11" y="12.6" width="10" height="2.8" fill="#a98ad6"/>
+  <rect y="26" width="32" height="6" fill="#f2b705"/>
+</svg>
