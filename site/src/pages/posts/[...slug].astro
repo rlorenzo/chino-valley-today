@@ -27,16 +27,14 @@ const topics = topicsFor(post);
 	<article>
 		<header class="posthead">
 			<div class="shell posthead__inner">
-				<p class="posthead__kicker mark">
+				<h1 class="posthead__title">{post.data.title}</h1>
+				<p class="posthead__date mark">
 					<span>{typeLabel(post.data.post_type)}</span>
 					{
 						post.data.meeting_date && (
 							<span>Meeting {post.data.meeting_date}</span>
 						)
 					}
-				</p>
-				<h1 class="posthead__title">{post.data.title}</h1>
-				<p class="posthead__date mark">
 					<time datetime={post.data.date.toISOString()}>
 						Published {formatDateLong(post.data.date)}
 					</time>
@@ -74,6 +72,21 @@ const topics = topicsFor(post);
 			<section class="inspection" aria-labelledby="sources-heading">
 				<details>
 					<summary>
+						<svg
+							class="inspection__caret"
+							viewBox="0 0 12 12"
+							width="11"
+							height="11"
+							aria-hidden="true"
+							focusable="false"
+						>
+							<path
+								d="M3 1.5 L9 6 L3 10.5"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							/>
+						</svg>
 						<span class="inspection__label mark" id="sources-heading">
 							Inspection record
 						</span>
@@ -116,7 +129,23 @@ const topics = topicsFor(post);
 			</section>
 
 			<nav class="postnav mark" aria-label="Record">
-				<a href="/">&larr; All entries</a>
+				<a href="/">
+					<svg
+						viewBox="0 0 12 12"
+						width="11"
+						height="11"
+						aria-hidden="true"
+						focusable="false"
+					>
+						<path
+							d="M9 1.5 L3 6 L9 10.5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						/>
+					</svg>
+					All entries
+				</a>
 			</nav>
 		</div>
 	</article>
@@ -132,15 +161,6 @@ const topics = topicsFor(post);
 		padding-block: 1.9rem 2.1rem;
 		max-width: 46rem;
 	}
-	.posthead__kicker {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 1rem;
-		margin: 0 0 0.7rem;
-		font-size: 0.7rem;
-		letter-spacing: 0.13em;
-		color: var(--placard);
-	}
 	.posthead__title {
 		margin: 0;
 		font-size: clamp(1.6rem, 1.2rem + 2.1vw, 2.6rem);
@@ -149,10 +169,13 @@ const topics = topicsFor(post);
 		letter-spacing: -0.006em;
 	}
 	.posthead__date {
-		margin: 0.85rem 0 0;
+		margin: 0.95rem 0 0;
 		font-size: 0.72rem;
 		letter-spacing: 0.1em;
 		color: #cdd8ec;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.1rem;
 	}
 	.posthead__topics {
 		margin: 1rem 0 0;
@@ -179,9 +202,8 @@ const topics = topicsFor(post);
 	}
 	.inspection summary {
 		display: flex;
-		align-items: baseline;
-		justify-content: space-between;
-		gap: 1rem;
+		align-items: center;
+		gap: 0.5rem;
 		padding: 0.85rem 0;
 		cursor: pointer;
 		list-style: none;
@@ -194,14 +216,18 @@ const topics = topicsFor(post);
 		letter-spacing: 0.13em;
 		color: var(--stamp);
 	}
-	.inspection__label::before {
-		content: "▸ ";
+	.inspection__caret {
+		color: var(--stamp);
+		flex: none;
+		transition: rotate 120ms linear;
+		align-self: center;
 	}
-	.inspection[open] .inspection__label::before,
-	details[open] .inspection__label::before {
-		content: "▾ ";
+	.inspection details[open] .inspection__caret,
+	details[open] .inspection__caret {
+		rotate: 90deg;
 	}
 	.inspection__count {
+		margin-left: auto;
 		font-size: 0.72rem;
 		letter-spacing: 0.1em;
 		color: var(--muted);
@@ -268,6 +294,9 @@ const topics = topicsFor(post);
 	.postnav a {
 		text-decoration: none;
 		color: var(--crate);
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
 	}
 	.postnav a:hover {
 		text-decoration: underline;

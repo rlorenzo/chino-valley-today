@@ -25,7 +25,6 @@ const { topic, posts } = Astro.props;
 >
 	<header class="topichead">
 		<div class="shell topichead__inner">
-			<p class="topichead__kicker mark">Topic</p>
 			<h1 class="topichead__name mark">{topic.name}</h1>
 			<p class="topichead__blurb">{topic.blurb}</p>
 			<p class="topichead__count mark">
@@ -63,12 +62,6 @@ const { topic, posts } = Astro.props;
 	.topichead__inner {
 		padding-block: 1.8rem 2rem;
 		max-width: 44rem;
-	}
-	.topichead__kicker {
-		margin: 0 0 0.4rem;
-		font-size: 0.68rem;
-		letter-spacing: 0.16em;
-		color: var(--placard);
 	}
 	.topichead__name {
 		margin: 0;
