@@ -20,6 +20,9 @@
 		// Documented manual calibration script, run by hand:
 		// `node src/gates/check-real-post.ts` (reports/notes/phase1-validators.md).
 		"src/gates/check-real-post.ts",
+		// One-time data migration, run by hand:
+		// `node scripts/rekey-external-ids.mjs --apply`.
+		"scripts/*.mjs",
 		"src/scrapers/*.ts",
 		"src/**/*.test.ts"
 	],

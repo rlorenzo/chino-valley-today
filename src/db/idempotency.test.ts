@@ -1,13 +1,18 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { type Db, openDb } from "./index.ts";
+import { type Db, type NewItem, openDb } from "./index.ts";
 
-// Item identity is (source, item_type, external_id), NOT (document_id, ...).
+// Item identity is (document URL, item_type, external_id), NOT (document_id, ...).
 // `documents` is content-addressed, so a source re-uploading a changed document
-// mints a new documents row; keying items on document_id would re-insert every
-// item as a duplicate under the new id even though its source-native
-// external_id never changed. bundle.ts's itemsFor() has no DISTINCT, so those
-// duplicates would land in the same recap.
+// mints a new documents row AT THE SAME URL; keying items on document_id would
+// re-insert every item as a duplicate under the new id even though its
+// source-native external_id never changed. bundle.ts's itemsFor() has no
+// DISTINCT, so those duplicates would land in the same recap.
+//
+// Keyed on the url rather than the source, deliberately: several sources hold
+// more than one meeting on a date (cvusd-board's Regular/Special, a separate
+// chino-agendacenter series per commission), so a source-scoped key merges
+// genuinely different items. See the "two documents from ONE source" test below.
 
 function freshDb(): Db {
 	return openDb(":memory:");
@@ -265,24 +270,47 @@ describe("item idempotency across document re-uploads", () => {
 		);
 	});
 
-	test("items without an external_id are not deduped (documented sharp edge)", () => {
-		// external_id is nullable, and SQLite treats NULLs as distinct in UNIQUE.
-		// insertItem skips the match entirely when it is null, so every re-run
-		// inserts another row. Every current scraper sets one; this pins the
-		// behavior so the gap is visible rather than surprising.
+	test("an item without an external_id is rejected, not silently duplicated", () => {
+		// external_id used to be optional, and SQLite treats NULLs as distinct in
+		// UNIQUE, so an item without one re-inserted on every single run. It is now
+		// required by the type; this pins the runtime guard for JS callers and for
+		// values that are empty rather than absent.
 		const db = freshDb();
 		const sourceId = addSource(db, "chinohills-agendas");
 		const doc = addDocument(db, sourceId, "a".repeat(64));
-		for (let n = 0; n < 2; n++) {
-			db.insertItem({
-				document_id: doc,
-				source_url: "https://example.test/packet.pdf",
-				item_type: "agenda_item",
-				external_id: null,
-				title: "untitled",
-			});
-		}
-		assert.equal(countItems(db), 2);
+		const bad = {
+			document_id: doc,
+			source_url: "https://example.test/packet.pdf",
+			item_type: "agenda_item",
+			title: "untitled",
+		};
+		// All three shapes a JS caller can produce. TypeScript rejects the last two
+		// outright, which is why they need the casts — and why the runtime guard
+		// exists at all: it is the only thing protecting untyped callers.
+		assert.throws(
+			() => db.insertItem({ ...bad, external_id: "" }),
+			/missing external_id/,
+			"empty string",
+		);
+		assert.throws(
+			() => db.insertItem({ ...bad } as unknown as NewItem),
+			/missing external_id/,
+			"property omitted entirely",
+		);
+		assert.throws(
+			() =>
+				db.insertItem({
+					...bad,
+					external_id: null,
+				} as unknown as NewItem),
+			/missing external_id/,
+			"explicit null",
+		);
+		assert.equal(
+			countItems(db),
+			0,
+			"nothing may be written when identity is absent",
+		);
 	});
 
 	test("the match-then-write leaves no transaction open", () => {
