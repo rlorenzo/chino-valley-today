@@ -58,7 +58,7 @@ export function topicsFor(post: Post): TopicSlug[] {
 }
 
 /** Newest first — a record reads backwards from now. */
-export function byNewest(a: Post, b: Post): number {
+function byNewest(a: Post, b: Post): number {
 	return b.data.date.getTime() - a.data.date.getTime();
 }
 
@@ -110,8 +110,4 @@ export function formatDateLong(d: Date): string {
 		day: "numeric",
 		timeZone: "America/Los_Angeles",
 	});
-}
-
-export function isoDate(d: Date): string {
-	return d.toISOString().slice(0, 10);
 }
