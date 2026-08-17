@@ -1,0 +1,90 @@
+name: Deploy
+
+# Rebuild and publish the site on the host whenever main changes.
+#
+# WHY THE BUILD RUNS ON THE HOST RATHER THAN ON THE RUNNER
+#
+# content/published/ is written on the host, by the pipeline, when a human
+# approves a post in the dashboard. A site built on a runner would see only
+# what is in git, so a post approved on the host would be missing from the
+# published site until someone happened to commit it. Building where the
+# content lives removes that whole class of "why isn't my post showing up".
+#
+# The runner therefore does almost nothing: it opens one SSH connection whose
+# key is locked to a single command. It carries no build, no artifacts, and no
+# ability to run anything else on that host.
+#
+# Public repository, so GitHub-hosted runners are free here — this costs no
+# Actions minutes, unlike the private repos where that budget matters.
+
+on:
+  push:
+    branches: [main]
+  # Manual re-deploy, e.g. to publish a post approved on the host without
+  # waiting for an unrelated code change.
+  workflow_dispatch:
+
+# Never let two deploys interleave: they both swap the same `current` symlink.
+# cancel-in-progress stays FALSE — cancelling mid-deploy could leave a release
+# directory half-copied, and the next run would happily swap to it.
+concurrency:
+  group: deploy-droplet
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    name: Rebuild site on the host
+    runs-on: ubuntu-latest
+    # Wait for CI on this same commit rather than deploying a commit that has
+    # not been typechecked, linted or tested.
+    steps:
+      - name: Deploy over a command-restricted SSH key
+        env:
+          # All three are secrets, deliberately. The host address is not in
+          # this file because the repository is public and publishing an origin
+          # address defeats the CDN proxy in front of the site.
+          DEPLOY_KEY: ${{ secrets.CVT_DEPLOY_KEY }}
+          DEPLOY_HOST: ${{ secrets.CVT_DEPLOY_HOST }}
+          KNOWN_HOSTS: ${{ secrets.CVT_DEPLOY_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${DEPLOY_KEY:-}" ] || [ -z "${DEPLOY_HOST:-}" ]; then
+            echo "::error::CVT_DEPLOY_KEY and CVT_DEPLOY_HOST secrets are required"
+            exit 1
+          fi
+
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+
+          # Pin the host key rather than accepting whatever answers. Without
+          # this, a DNS or routing compromise could feed the runner a different
+          # host, and the deploy key would be handed straight to it.
+          if [ -n "${KNOWN_HOSTS:-}" ]; then
+            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+            chmod 600 ~/.ssh/known_hosts
+            strict=yes
+          else
+            echo "::warning::CVT_DEPLOY_KNOWN_HOSTS not set — host key is not pinned"
+            strict=accept-new
+          fi
+
+          # The command sent here is IGNORED: the authorized_keys entry forces
+          # `scripts/deploy.sh local`. It is written out anyway so the intent is
+          # legible in the logs.
+          ssh -i ~/.ssh/id_ed25519 \
+              -o BatchMode=yes \
+              -o StrictHostKeyChecking=$strict \
+              -o ConnectTimeout=20 \
+              "$DEPLOY_HOST" 'deploy-site' 2>&1 | tee deploy.log
+
+          # The forced command prints this on success; its absence means the
+          # symlink swap never happened, whatever the exit status suggested.
+          grep -q 'site live at' deploy.log || {
+            echo "::error::deploy did not report a successful release swap"
+            exit 1
+          }
