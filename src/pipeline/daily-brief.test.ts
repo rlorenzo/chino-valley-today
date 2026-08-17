@@ -4,6 +4,7 @@ import type { ItemRow } from "../tiera/queries.ts";
 import {
 	assembleBrief,
 	type BriefInputs,
+	decodeEntities,
 	isLaWednesday,
 	laTimeOf,
 	postTitleFromFile,
@@ -114,6 +115,27 @@ describe("laTimeOf", () => {
 		assert.equal(laTimeOf("2026-08-17"), null);
 		assert.equal(laTimeOf("2026-07-28T07:00:00.000Z"), null); // midnight PDT
 		assert.equal(laTimeOf(null), null);
+	});
+});
+
+describe("decodeEntities", () => {
+	test("decodes ordinary entities in one pass", () => {
+		assert.equal(decodeEntities("A &#038; B"), "A & B");
+		assert.equal(decodeEntities("A &amp; B"), "A & B");
+		assert.equal(decodeEntities("caf&#233;"), "café");
+	});
+	test("never double-unescapes and never materializes markup", () => {
+		// Doubly-encoded ampersand: one level only, output is literal text.
+		assert.equal(decodeEntities("&#38;amp;"), "&amp;");
+		// "<" and ">" stay encoded — this string lands in markdown, where raw
+		// HTML passes through.
+		assert.equal(
+			decodeEntities("&#60;script&#62;alert(1)&#60;/script&#62;"),
+			"&#60;script&#62;alert(1)&#60;/script&#62;",
+		);
+		// Out-of-range / control-char code points are left alone, not thrown on.
+		assert.equal(decodeEntities("&#1114112;"), "&#1114112;");
+		assert.equal(decodeEntities("&#8;"), "&#8;");
 	});
 });
 
@@ -586,7 +608,7 @@ describe("assembleBrief", () => {
 			/\[chino city council preview\]\(\/posts\/2026-08-17-chino-city-council-preview\/\)/,
 		);
 		assert.doesNotMatch(p.bodyMd, /A quiet morning/);
-		assert.ok(p.sources.includes("https://sbcfire.org/veg-fire"));
+		assert.ok(new Set(p.sources).has("https://sbcfire.org/veg-fire"));
 		assert.equal(new Set(p.sources).size, p.sources.length);
 	});
 
@@ -598,7 +620,7 @@ describe("assembleBrief", () => {
 		assert.doesNotMatch(wednesday.post.bodyMd, /A quiet morning:.*schedule/);
 		assert.match(wednesday.post.bodyMd, /Heritage Farmers Market/);
 		assert.ok(
-			wednesday.post.sources.includes(
+			new Set(wednesday.post.sources).has(
 				"https://heritagefarmersmarket.org/chino-hills",
 			),
 		);

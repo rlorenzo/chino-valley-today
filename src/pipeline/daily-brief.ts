@@ -88,11 +88,22 @@ export function laTimeOf(occurredAt: string | null): string | null {
 // Tribe venue strings arrive with HTML entities intact ("&#038;"); decode the
 // numeric ones plus the bare ampersand at the publishing layer, where
 // EDITORIAL.md says normalization of source rendering artifacts belongs.
+//
+// One regex pass, so decoded output is never re-scanned: a doubly-encoded
+// "&#38;amp;" becomes the literal text "&amp;" instead of unescaping twice
+// (CodeQL js/double-escaping). Numeric entities that would materialize
+// markup or control characters stay encoded — this string lands in markdown,
+// where raw HTML passes through, and a venue name has no business containing
+// "<". Out-of-range code points are left alone rather than letting
+// String.fromCodePoint throw mid-assembly.
 export function decodeEntities(s: string): string {
-	return s
-		.replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
-		.replace(/&amp;/g, "&")
-		.replace(/&nbsp;/g, " ");
+	return s.replace(/&(?:#(\d+)|amp|nbsp);/g, (match, num?: string) => {
+		if (num === undefined) return match === "&amp;" ? "&" : " ";
+		const cp = Number(num);
+		if (!Number.isInteger(cp) || cp < 0x20 || cp > 0x10ffff) return match;
+		if (cp === 0x3c || cp === 0x3e) return match; // "<" and ">"
+		return String.fromCodePoint(cp);
+	});
 }
 
 function metaString(meta: Record<string, unknown>, key: string): string | null {
