@@ -1,5 +1,5 @@
 [Unit]
-Description=Chino Valley Today — offsite backup to Backblaze B2 (restic)
+Description=Chino Valley Today — offsite backup to Backblaze B2 (rclone)
 Documentation=https://github.com/rlorenzo/chino-valley-today
 After=network-online.target
 Wants=network-online.target
@@ -12,10 +12,10 @@ WorkingDirectory=/srv/chino-valley-today
 EnvironmentFile=/srv/chino-valley-today/.env
 ExecStart=/usr/bin/env bash scripts/backup-b2.sh
 
-# restic chunks and encrypts in memory; this is the one job here that is
-# genuinely memory-hungry. Still capped so it cannot disturb the other sites.
-MemoryHigh=350M
-MemoryMax=500M
+# gzip of a 2MB database plus rclone's transfer buffers. Modest, and still
+# capped so it cannot disturb the co-tenant sites.
+MemoryHigh=200M
+MemoryMax=300M
 Nice=15
 IOSchedulingClass=idle
 CPUWeight=15
@@ -27,13 +27,11 @@ ProtectHome=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-# Reads the whole tree; writes only its restic cache. The staging copy of the
-# database goes to PrivateTmp.
-ReadWritePaths=/srv/chino-valley-today/data
-CacheDirectory=cvtoday-restic
-Environment=RESTIC_CACHE_DIR=/var/cache/cvtoday-restic
+# Writes the local snapshot series; reads everything else.
+ReadWritePaths=/srv/chino-valley-today/data /srv/chino-valley-today/backups
 
-# A 99MB archive over a home-grade uplink, plus B2 round trips.
+# First run mirrors the whole ~104MB archive; later runs upload only new
+# content-addressed files.
 TimeoutStartSec=2h
 
 [Install]

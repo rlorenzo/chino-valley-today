@@ -14,7 +14,7 @@
 # failed or interrupted re-run leaves the previous good snapshot intact rather
 # than half-overwriting it (and a since-deleted .env can't leave a stale copy
 # behind). This is a stopgap until Phase 2's proper nightly job
-# (sqlite3 .backup + tar to DO Spaces or restic).
+# (sqlite3 .backup + gzip + rclone to B2 — see scripts/backup-b2.sh).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

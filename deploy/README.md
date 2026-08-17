@@ -46,8 +46,9 @@ sudo -u cvtoday npm ci --omit=dev --prefix /srv/chino-valley-today
 mkdir -p /var/www/chinovalley.today/releases
 chown -R cvtoday:cvtoday /var/www/chinovalley.today
 
-# 4. restic, for the offsite backup.
-apt-get update && apt-get install -y restic
+# 4. rclone, for the offsite backup. Already present on this host for the
+#    other projects' backups; listed for a clean rebuild.
+apt-get update && apt-get install -y rclone
 ```
 
 ### Secrets
@@ -65,25 +66,44 @@ one is for and how to obtain it — this file does not repeat them, so the two
 cannot drift apart. The droplet needs the existing pipeline keys plus the
 `RESTIC_*` and `B2_*` block.
 
-Two setup steps are easy to miss because they are not variables:
+Backups follow the **same pattern as Rush Call, SpotTheStar and foreshock**:
+`sqlite3 .backup` + gzip, 14 local snapshots, `rclone copy` to a per-project B2
+bucket, 14 remote. One restore procedure across every project, which is what
+matters when restoring under stress.
+
+Create a dedicated bucket and a **bucket-scoped Read/Write** application key,
+isolated from the other projects', then write the rclone config:
 
 ```bash
-# 1. The restic password is a FILE, not a value in .env.
-printf '%s' '<long random passphrase>' > /srv/chino-valley-today/.restic-password
-chmod 600 /srv/chino-valley-today/.restic-password
-chown cvtoday:cvtoday /srv/chino-valley-today/.restic-password
-
-# 2. Also keep that passphrase in a password manager. It cannot live only in
-#    the bucket it protects, and restic has no recovery path without it.
+rclone config            # remote type: b2, name it "b2"
+mv ~/.config/rclone/rclone.conf /srv/chino-valley-today/rclone.conf
+chown cvtoday:cvtoday /srv/chino-valley-today/rclone.conf
+chmod 600 /srv/chino-valley-today/rclone.conf
 ```
 
-Give the droplet a B2 application key scoped to that one bucket, with
-**write but not delete** capability. A compromised droplet then cannot destroy
-backup history, which is most of the point of holding it offsite. Pruning needs
-delete rights, so run it deliberately from a trusted machine:
+The credentials live only in that file, never in `.env` — same as the other
+three projects.
+
+**`.env` is deliberately not backed up.** rclone copies to B2 unencrypted, and
+it holds the DO Inference key and the Gmail app password; both are reissuable
+from their consoles, while the archive is not. This matches the other projects,
+which also keep credentials on the box and out of the snapshot.
+
+**The raw archive is mirrored, not snapshotted.** `data/raw` is ~104MB of
+content-addressed documents, so `rclone copy` uploads only files it does not
+already have — tarring it nightly would push the whole thing every run. It is
+copied with `copy` and never `sync`, so a local deletion can never propagate
+offsite.
+
+Restore:
 
 ```bash
-CVT_BACKUP_PRUNE=1 scripts/backup-b2.sh
+rclone --config /srv/chino-valley-today/rclone.conf copy b2:chinovalley-backups/cvtoday-<date>.db.gz .
+gunzip cvtoday-<date>.db.gz
+sqlite3 cvtoday-<date>.db "PRAGMA integrity_check;"   # expect: ok
+systemctl stop cvt-admin
+mv cvtoday-<date>.db /srv/chino-valley-today/data/cvtoday.db
+systemctl start cvt-admin
 ```
 
 ### Data migration
@@ -147,7 +167,7 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 | `cvt-scrape-frequent` | hourly at :17 | news RSS, NWS alerts, sheriff, Nixle mail |
 | `cvt-scrape-daily` | 05:40 | Legistar, Agenda Center, AgendaQuick, CVUSD, ABC |
 | `cvt-scrape-media` | 07:30 | Swagit video, YouTube captions |
-| `cvt-backup` | 02:20 | restic → B2 |
+| `cvt-backup` | 02:20 | rclone → B2 |
 
 Schedules are Pacific because meeting times are; systemd 255 on Ubuntu 24.04
 accepts a timezone directly in `OnCalendar`. All are `Persistent=true`, so a
@@ -194,7 +214,7 @@ admin.chinovalley.today {
 systemctl list-timers 'cvt-*'                        # next/last run of each
 systemctl --failed | grep cvt                        # anything broken
 journalctl -u cvt-scrape-frequent --since '24h ago'  # recent frequent runs
-restic snapshots --tag cvtoday --latest 5            # backups actually landing
+rclone --config /srv/chino-valley-today/rclone.conf lsf b2:chinovalley-backups  # backups landing
 curl -sI https://chinovalley.today | head -1         # site answering
 free -m                                              # headroom vs the other sites
 ```
