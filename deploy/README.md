@@ -98,7 +98,7 @@ offsite.
 Restore:
 
 ```bash
-rclone --config /srv/chino-valley-today/rclone.conf copy b2:chinovalley-backups/cvtoday-<date>.db.gz .
+rclone --config /srv/chino-valley-today/rclone.conf copy b2:chinovalley.today-backup/cvtoday-<date>.db.gz .
 gunzip cvtoday-<date>.db.gz
 sqlite3 cvtoday-<date>.db "PRAGMA integrity_check;"   # expect: ok
 systemctl stop cvt-admin
@@ -214,7 +214,7 @@ admin.chinovalley.today {
 systemctl list-timers 'cvt-*'                        # next/last run of each
 systemctl --failed | grep cvt                        # anything broken
 journalctl -u cvt-scrape-frequent --since '24h ago'  # recent frequent runs
-rclone --config /srv/chino-valley-today/rclone.conf lsf b2:chinovalley-backups  # backups landing
+rclone --config /srv/chino-valley-today/rclone.conf lsf b2:chinovalley.today-backup  # backups landing
 curl -sI https://chinovalley.today | head -1         # site answering
 free -m                                              # headroom vs the other sites
 ```

@@ -98,9 +98,18 @@ if [ -n "${RCLONE_REMOTE:-}" ]; then
 	# Remote rotation: keep the newest BACKUP_KEEP_REMOTE of each snapshot
 	# kind. The raw mirror is deliberately excluded — it is not a snapshot
 	# series and must never be pruned.
+	keep="${BACKUP_KEEP_REMOTE:-14}"
 	for pattern in 'cvtoday-[0-9].*\.db\.gz' 'cvtoday-content-.*\.tar\.gz'; do
-		"${RC[@]}" lsf "$RCLONE_REMOTE" | grep -E "^$pattern$" | sort |
-			head -n "-${BACKUP_KEEP_REMOTE:-14}" | while read -r f; do
+		# `head -n -N` (drop the last N) is a GNU extension that macOS head
+		# rejects outright — and inside a pipeline the failure is swallowed, so
+		# rotation would silently never happen when run from a developer
+		# machine. Counting first works on both.
+		listing="$("${RC[@]}" lsf "$RCLONE_REMOTE" | grep -E "^$pattern$" | sort || true)"
+		[ -n "$listing" ] || continue
+		total="$(printf '%s\n' "$listing" | grep -c .)"
+		excess=$((total - keep))
+		[ "$excess" -gt 0 ] || continue
+		printf '%s\n' "$listing" | head -n "$excess" | while read -r f; do
 			echo "  pruning remote $f"
 			"${RC[@]}" delete "$RCLONE_REMOTE/$f"
 		done
