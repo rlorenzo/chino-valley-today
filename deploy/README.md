@@ -198,6 +198,7 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 | `cvt-scrape-frequent` | hourly at :17 | news RSS, NWS alerts, sheriff, Nixle mail |
 | `cvt-scrape-daily` | 05:40 | Legistar, Agenda Center, AgendaQuick, CVUSD, ABC |
 | `cvt-scrape-media` | 07:30 | Swagit video, YouTube captions |
+| `cvt-brief` | 06:00 | daily brief assembly + site rebuild (no scraping) |
 | `cvt-backup` | 02:20 | rclone → B2 |
 
 Schedules are Pacific because meeting times are; systemd 255 on Ubuntu 24.04
@@ -206,7 +207,7 @@ run missed during a reboot fires once afterwards instead of being skipped.
 
 ```bash
 systemctl enable --now cvt-scrape-frequent.timer cvt-scrape-daily.timer \
-                       cvt-scrape-media.timer cvt-backup.timer
+                       cvt-scrape-media.timer cvt-brief.timer cvt-backup.timer
 systemctl enable --now cvt-admin.service
 
 systemctl list-timers 'cvt-*'
@@ -278,6 +279,7 @@ set them in `.env`:
 | `CVT_HEARTBEAT_URL_FREQUENT` | hourly at :17 | 90 min |
 | `CVT_HEARTBEAT_URL_DAILY` | 05:40 Pacific | 30 h |
 | `CVT_HEARTBEAT_URL_MEDIA` | 07:30 Pacific | 30 h |
+| `CVT_HEARTBEAT_URL_BRIEF` | 06:00 Pacific | 30 h |
 
 Unset means no ping and no alarm, which is the right default on a developer
 machine. A failed ping never fails the scrape run itself.
