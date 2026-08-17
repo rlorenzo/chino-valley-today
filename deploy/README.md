@@ -49,6 +49,14 @@ chown -R cvtoday:cvtoday /var/www/chinovalley.today
 # 4. rclone, for the offsite backup. Already present on this host for the
 #    other projects' backups; listed for a clean rebuild.
 apt-get update && apt-get install -y rclone
+
+# 5. yt-dlp, for the YouTube caption scrapers. NOT from apt — Ubuntu ships a
+#    stale build and YouTube changes break old versions regularly. The official
+#    standalone binary self-updates with `yt-dlp -U`. Without it, both YouTube
+#    scrapers fail with ENOENT and the media group exits non-zero.
+curl -fsSL -o /usr/local/bin/yt-dlp \\
+  https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
+chmod 755 /usr/local/bin/yt-dlp
 ```
 
 ### Secrets
