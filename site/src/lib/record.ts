@@ -161,18 +161,29 @@ export function dek(post: Post): string | null {
 		return m ? plain(m[1]).replace(/[.\s]+$/, "") : null;
 	};
 
-	// A preview's summary is WHEN and WHERE — that is what a reader deciding
-	// whether to attend needs, and it is why this is keyed on post type rather
-	// than left to whichever paragraph happens to come first. A cancellation
-	// outranks both: it changes whether the meeting exists at all.
+	// A preview's summary is WHEN it is and WHETHER AN AGENDA EXISTS. The address
+	// is deliberately omitted: these meetings are all at the same city hall, so
+	// it is the least informative fact available and it costs the line that the
+	// agenda status should occupy. A cancellation outranks everything — it
+	// changes whether the meeting happens at all.
 	if (post.data.post_type === "meeting_preview") {
-		const cancelled = /cancell?ed/i.test(body);
+		if (/cancell?ed/i.test(body)) {
+			return "CANCELLED — this meeting will not take place.";
+		}
+
 		const when = [field("Date"), field("Time")].filter(Boolean).join(", ");
-		const where = field("Location");
-		const detail = [when, where].filter(Boolean).join(" · ");
-		if (cancelled)
-			return truncate(detail ? `CANCELLED — ${detail}` : "CANCELLED");
-		if (detail) return truncate(detail);
+		// The generator either lists cross-referenced agenda items under an
+		// "Agenda" heading, or states that none had been posted.
+		const agendaItems = body.includes("### Agenda")
+			? body
+					.slice(body.indexOf("### Agenda"))
+					.split("\n")
+					.filter((l) => /^-\s+\S/.test(l)).length
+			: 0;
+		const agenda = agendaItems
+			? `${agendaItems} agenda ${agendaItems === 1 ? "item" : "items"} posted`
+			: "no agenda posted yet";
+		return truncate([when, agenda].filter(Boolean).join(" · "));
 	}
 
 	// Recaps and narratives open with a real lede paragraph — use it. A block

@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { type Db, openDb } from "../db/index.ts";
-import { generateMeetingPreviews } from "./meeting-previews.ts";
+import {
+	generateMeetingPreviews,
+	normalizeLocation,
+	normalizeTimes,
+} from "./meeting-previews.ts";
 
 // generateMeetingPreviews is Tier A: its output is auto-published, and it had no
 // tests. It is a pure function of DB state plus an injected `now`, so these seed
@@ -56,6 +60,51 @@ function addEvent(
 	});
 }
 
+// The City of Chino's calendar feed publishes both of these artifacts. The raw
+// archive keeps them verbatim; publishing is where they get corrected.
+describe("calendar feed normalisation", () => {
+	test("a street run into the city is separated", () => {
+		// Their HTML-to-text drops the line break: "AvenueChino".
+		assert.equal(
+			normalizeLocation("13220 Central AvenueChino, CA 91710"),
+			"13220 Central Avenue, Chino, CA 91710",
+		);
+	});
+
+	test("other street suffixes are handled, and correct addresses are untouched", () => {
+		assert.equal(
+			normalizeLocation("100 Grand BlvdChino Hills, CA"),
+			"100 Grand Blvd, Chino Hills, CA",
+		);
+		const good = "13220 Central Avenue, Chino, CA 91710";
+		assert.equal(
+			normalizeLocation(good),
+			good,
+			"a well-formed address must not be rewritten",
+		);
+	});
+
+	test("an 11:59 PM end time is dropped, not published as a real end", () => {
+		// 11:59 PM is the feed's convention for "no end time specified". Publishing
+		// it states a six-hour meeting the source never claimed.
+		assert.equal(normalizeTimes("06:00 PM - 11:59 PM"), "06:00 PM");
+		assert.equal(
+			normalizeTimes("06:00 PM – 11:59 PM"),
+			"06:00 PM",
+			"en dash too",
+		);
+	});
+
+	test("a real end time survives untouched", () => {
+		assert.equal(normalizeTimes("06:00 PM - 08:00 PM"), "06:00 PM - 08:00 PM");
+	});
+
+	test("both are null-safe", () => {
+		assert.equal(normalizeLocation(null), null);
+		assert.equal(normalizeTimes(null), null);
+	});
+});
+
 describe("generateMeetingPreviews", () => {
 	test("an empty database yields no posts and does not throw", () => {
 		const out = generateMeetingPreviews(seedDb(), NOW);
@@ -78,6 +127,27 @@ describe("generateMeetingPreviews", () => {
 		assert.equal(post.tier, "A");
 		assert.equal(post.postType, "meeting_preview");
 		assert.ok(post.sources.length > 0, "every post must carry its sources");
+	});
+
+	test("the published body carries the normalised location and time", () => {
+		const db = seedDb();
+		addEvent(db, "chino-news-rss", {
+			title: "Planning Commission Meeting",
+			occurredAt: "2026-08-19T18:00:00.000Z",
+			meta: {
+				eventDates: "August 19, 2026",
+				eventTimes: "06:00 PM - 11:59 PM",
+				location: "13220 Central AvenueChino, CA 91710",
+			},
+		});
+		const body = generateMeetingPreviews(db, NOW).posts[0]?.bodyMd ?? "";
+		assert.match(body, /13220 Central Avenue, Chino/, "location separated");
+		assert.equal(
+			body.includes("11:59"),
+			false,
+			"open-ended marker must not publish",
+		);
+		assert.match(body, /06:00 PM/, "the start time still publishes");
 	});
 
 	test("a PAST meeting produces no preview", () => {
