@@ -4,12 +4,16 @@
 	"description": "",
 	"main": "index.js",
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1"
+		"dev": "astro dev",
+		"build": "astro build",
+		"preview": "astro preview",
+		"check": "astro check"
 	},
 	"keywords": [],
 	"type": "commonjs",
 	"dependencies": {
 		"@astrojs/rss": "4.0.19",
 		"astro": "7.2.0"
-	}
+	},
+	"private": true
 }

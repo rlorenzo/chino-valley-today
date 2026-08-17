@@ -1,11 +1,20 @@
 import { defineConfig } from "astro/config";
 
-// The site origin is a single value on purpose: PLAN.md ships first to
+// The origin feeds canonical tags and every RSS item link, so it must match
+// wherever the build is actually served. PLAN.md ships first to
 // cvtoday.rexlorenzo.com on the existing Caddy droplet and moves to the branded
-// domain once validated, so the move must be one line, not a find-and-replace
-// through canonical tags and the RSS feed.
+// domain once validated — pointing canonicals at chinovalley.today while serving
+// from the interim host would tell crawlers the real page lives somewhere that
+// does not answer yet.
+//
+// So the branded domain is the default (it is the committed home), and the
+// interim deploy overrides it:
+//
+//   CVT_SITE_ORIGIN=https://cvtoday.rexlorenzo.com npm run build
+const SITE_ORIGIN = process.env.CVT_SITE_ORIGIN ?? "https://chinovalley.today";
+
 export default defineConfig({
-	site: "https://chinovalley.today",
+	site: SITE_ORIGIN,
 	trailingSlash: "always",
 	build: {
 		// Static output rsynced to the droplet at publish (PLAN.md Phase 2).

@@ -154,9 +154,10 @@ published, rejected.
 
 **Real:**
 
-- 4 published posts in `content/published/` — 3 meeting recaps (Chino City
-  Council, Chino Hills City Council, CVUSD Board) and 1 business-tracker
-  narrative — each human-reviewed and approved.
+- 9 published posts in `content/published/` — 3 meeting recaps (Chino City
+  Council, Chino Hills City Council, CVUSD Board), 3 meeting previews, a
+  business-tracker listing, a business-tracker narrative, and a news digest —
+  each human-reviewed and approved.
 - A populated archive: 2,381 items across 53 documents in `data/cvtoday.db`,
   plus content-addressed raw source bytes in `data/raw/`.
 - Per-source dossiers in `reports/notes/` (12 files) documenting method, HTTP

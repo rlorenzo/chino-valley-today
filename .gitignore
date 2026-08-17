@@ -15,3 +15,6 @@ site/node_modules/
 
 # Local screenshot scratch from design review tooling
 .playwright-mcp/
+
+# Transient decision-page state from design tooling
+.impeccable/questions/
