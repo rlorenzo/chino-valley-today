@@ -4,6 +4,7 @@ import {
 	TOPICS,
 	dek,
 	formatDate,
+	postUrl,
 	sourceHost,
 	topicsFor,
 	typeLabel,
@@ -25,7 +26,7 @@ const summary = dek(post);
 	</time>
 
 	<h3 class="entry__title">
-		<a href={`/posts/${post.id}/`}>{post.data.title}</a>
+		<a href={postUrl(post)}>{post.data.title}</a>
 	</h3>
 
 	{summary && <p class="entry__dek">{summary}</p>}

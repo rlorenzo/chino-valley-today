@@ -74,10 +74,70 @@ const TYPE_LABEL: Record<string, string> = {
 	business_narrative: "Business tracker",
 	news_digest: "Digest",
 	alert: "Alert",
+	"daily-brief": "Daily brief",
 };
 
 export function typeLabel(type: string): string {
 	return TYPE_LABEL[type] ?? type.replace(/_/g, " ");
+}
+
+export function isBrief(post: Post): boolean {
+	return post.data.post_type === "daily-brief";
+}
+
+/**
+ * A daily brief's canonical home is its date (/brief/YYYY-MM-DD); everything
+ * else lives under /posts/. One helper so no page hardcodes the split.
+ */
+export function postUrl(post: Post): string {
+	return isBrief(post) && post.data.brief_date
+		? `/brief/${post.data.brief_date}/`
+		: `/posts/${post.id}/`;
+}
+
+/** Daily briefs, newest brief day first. */
+export function briefsOnly(posts: Post[]): Post[] {
+	return posts
+		.filter((p) => isBrief(p) && p.data.brief_date)
+		.sort((a, b) =>
+			(b.data.brief_date ?? "").localeCompare(a.data.brief_date ?? ""),
+		);
+}
+
+/**
+ * The citable spine: everything except the daily briefs, which are a morning
+ * assembly OF the record rather than entries IN it.
+ */
+export function recordOnly(posts: Post[]): Post[] {
+	return posts.filter((p) => !isBrief(p));
+}
+
+/** Today's date in America/Los_Angeles as YYYY-MM-DD, at build time. */
+export function laToday(now: Date = new Date()): string {
+	return new Intl.DateTimeFormat("en-CA", {
+		timeZone: "America/Los_Angeles",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(now);
+}
+
+/** The YYYY-MM-DD `days` calendar days after a YYYY-MM-DD date. */
+export function laDatePlus(date: string, days: number): string {
+	const d = new Date(`${date}T00:00:00Z`);
+	d.setUTCDate(d.getUTCDate() + days);
+	return d.toISOString().slice(0, 10);
+}
+
+/** "Monday, August 17, 2026" for a YYYY-MM-DD local calendar date. */
+export function formatLocalDateLong(date: string): string {
+	return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
+		weekday: "long",
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		timeZone: "UTC",
+	});
 }
 
 /**

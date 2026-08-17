@@ -1,7 +1,7 @@
 import { getCollection } from "astro:content";
 import rss from "@astrojs/rss";
 import type { APIContext } from "astro";
-import { publishedOnly, typeLabel } from "../lib/record.ts";
+import { postUrl, publishedOnly, typeLabel } from "../lib/record.ts";
 
 export async function GET(context: APIContext) {
 	const posts = publishedOnly(await getCollection("posts"));
@@ -16,7 +16,7 @@ export async function GET(context: APIContext) {
 		items: posts.map((post) => ({
 			title: post.data.title,
 			pubDate: post.data.date,
-			link: `/posts/${post.id}/`,
+			link: postUrl(post),
 			// The feed carries the same provenance the page does: a reader in a
 			// feed client can still see which authority each entry rests on
 			// without loading the site.

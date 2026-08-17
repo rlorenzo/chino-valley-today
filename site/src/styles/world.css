@@ -469,6 +469,20 @@ img {
 	font-weight: 600;
 }
 
+/* Internal links — the daily brief's "new on the record" points at our own
+   posts. They are navigation, not provenance, so they take crate, never the
+   stamp: violet on a link to ourselves would dissolve the one rule. */
+.prose a:not([href^="http"]) {
+	color: var(--crate);
+	text-decoration: underline;
+	text-underline-offset: 0.15em;
+}
+.prose a:not([href^="http"]):hover {
+	background: var(--crate);
+	color: #fff;
+	text-decoration: none;
+}
+
 /* The disclosure footer and code glossary the pipeline appends. */
 .prose em {
 	font-style: normal;
