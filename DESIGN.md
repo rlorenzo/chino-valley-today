@@ -96,6 +96,12 @@ The surface is a **Read** surface. It serves a resident skimming for two minutes
 and an insider verifying a citation, from one artifact, and neither may be
 optimised at the other's expense.
 
+**Redirected 2026-08-17:** the site now leads with a **daily brief** — "what do
+I need to know today" — rather than with the archive. The world does not
+change; the composition does. The record remains the citable spine, one level
+down from the front page. An inspection stamp on this morning's fire item means
+exactly what it means on a three-week-old recap.
+
 ## Colors
 
 **Strategy: Committed.** Crate blue owns whole regions — masthead, page headers,
@@ -119,9 +125,15 @@ heading, not as an accent, not on a focus ring. If it is violet, it is provenanc
 This is the system's single load-bearing constraint; everything else is
 negotiable and this is not.
 
-Applied to: the `stamp` component, every outbound link inside post prose (which is
-by definition a citation — the editorial rules permit no other kind), and the
-inspection-record disclosure that lists a post's sources.
+Applied to: the `stamp` component, every outbound link inside post prose that
+cites a primary record, and the inspection-record disclosure that lists a
+post's sources.
+
+Explicitly excluded (ruling 2026-08-17, with the "headlines elsewhere"
+section): links to secondary press are **attribution, not provenance**, and
+never wear violet. They take a crate-outline treatment that names the outlet.
+If violet ever marks a Champion or Daily Bulletin link, the one rule with teeth
+has lost them.
 
 Contrast, measured against the grounds actually used: violet on zinc 8.46:1,
 white on crate 11.18:1, placard on crate 6.15:1, muted on zinc 5.70:1. All AA.
@@ -152,6 +164,11 @@ and lot codes all align in columns.
 - **Shell** `68rem` for record and index surfaces; **measure** `34rem` for reading.
   Prose never runs to shell width.
 - **Gutter** `clamp(1.15rem, 4vw, 2.5rem)`, shared by every container.
+- **The index leads with today** (2026-08-17): the current daily brief —
+  weather line, overnight incidents, today's schedule, fresh record items,
+  headlines elsewhere — then the week ahead, then the record. Topic marks and
+  the dated record move below the fold or to a record page; the archive is
+  demoted in position, never in fidelity.
 - The record is a **list, not a card grid.** Entries are `7.5rem` date column plus
   flexible title, collapsing to a single column below `40rem`. Density is the
   point: a record that paginates into cards hides how much of it there is.
@@ -205,8 +222,10 @@ Borders are `1.5px` on stamps and chips, `2px` on section rules and crate seams,
   takes crate or placard.
 - Reuse `.mark` for any record annotation instead of respecifying uppercase
   tracking per component.
-- Show real counts, real dates, and honest zeroes. The project is pre-launch with
-  no readers; nothing may imply an audience, subscribers, or a track record.
+- Show real counts, real dates, and honest zeroes. The site launched 2026-08-17
+  with no known readership; nothing may imply an audience, subscribers, or a
+  track record. A daily brief on a quiet day says so plainly rather than
+  padding.
 - Keep corners square and depth flat when adding surfaces.
 
 ### Don't
@@ -215,7 +234,9 @@ Borders are `1.5px` on stamps and chips, `2px` on section rules and crate seams,
   ring lands on every link on the page and would dissolve the rule within a
   keyboard tab or two — this was an actual defect in the first build.
 - Don't introduce a warm cream or paper ground. The zinc is cool on purpose.
-- Don't add card grids for content, hero images, or a subscribe bar.
+- Don't add card grids for content or hero images. No subscribe bar until a
+  real newsletter exists (Phase 3); when it does, it is one quiet crate field
+  with an honest label, never a modal or interstitial.
 - Don't call a recap "minutes" anywhere in chrome, copy, or metadata. Official
   minutes are a legal record adopted by the body; this is not that.
 

@@ -1,6 +1,7 @@
 # SOURCES.md — living registry of sources, endpoints, quirks
 
-Status date: 2026-08-11 (Phase 0 POC). Per-source deep dives live in
+Status date: 2026-08-17 (Phase 4 Task 4.1 sources added; original registry
+2026-08-11, Phase 0 POC). Per-source deep dives live in
 `reports/notes/<key>.md`; this file is the summary registry. Update this file
 whenever a source changes behavior.
 
@@ -106,6 +107,71 @@ whenever a source changes behavior.
 - **Editorial note:** Tier C source — bodies name private individuals (incl. minors) verbatim; human review always required (see PLAN Phase 1).
 - **Link-back depth:** document-level only (no per-item permalinks on the Coroner page).
 - **Reliability guess:** low for Chino Hills specificity (the station-specific channel is off-limits by policy); the practical Chino Hills police-news channel decision belongs in Phase 1 editorial rules.
+
+### nws-forecast — NWS daily forecast (both cities)
+
+- **Added 2026-08-17 (Phase 4).** Same documented API as nws-alerts, same
+  skipRobots justification. Gridpoints verified via `/points`: Chino →
+  `SGX/47,73`, Chino Hills → `SGX/45,71` (adjacent cells; both ingested,
+  city-tagged in meta).
+- **Quirks:** forecast periods churn on every NWS update; items refresh in
+  place via (document url, item_type, external_id) with external_id =
+  `<grid>:<period start ISO>`. source_url is the reader-facing
+  forecast.weather.gov MapClick page, not the JSON API URL.
+- **Link-back depth:** document-level (city forecast page; period-level anchors
+  don't exist on MapClick).
+- **Reliability guess:** high.
+
+### sbcfire-news — San Bernardino County Fire news
+
+- **Added 2026-08-17 (Phase 4).** Standard WordPress RSS at `sbcfire.org/feed/`
+  — press releases, major-incident news, PIO podcasts. County-wide; Chino
+  Valley relevance flagged in `meta.chinoRelevant`, not filtered at ingest.
+- **Quirks:** feed carries full article HTML in `content:encoded` (unlike the
+  CivicPlus teasers) — the scraper reads it directly; robots.txt fetch was
+  bot-blocked to an external recon tool but the pipeline's own client fetches
+  the site normally.
+- **Link-back depth:** item-level (stable WordPress slugs).
+- **Reliability guess:** high.
+
+### cvfd-news — Chino Valley Fire District (CivicPlus)
+
+- **Added 2026-08-17 (Phase 4).** Third CivicPlus instance in the registry;
+  feed catalog is openly enumerable at `/RSS.aspx` (NOT robots-blocked here,
+  unlike cityofchino.org). Ingests News Flash (news_release), Alert Center
+  (alert), Calendar (event). Agenda Center (ModID=65, per-committee feeds)
+  deliberately left for a future governance scraper.
+- **Quirks:** all three feeds were empty on the first run — the district posts
+  sparingly, and an empty Alert Center is the desired steady state (a non-empty
+  run is an active emergency). Calendar items get occurred_at from
+  `calendarEvent:EventDates/EventTimes` (Pacific local → UTC via the shared
+  `localDateTimeToIso`), falling back to pubDate.
+- **Link-back depth:** item-level (CivicAlerts.aspx?AID / Calendar.aspx?EID).
+- **Reliability guess:** high (platform proven twice over); content volume low.
+
+### sbclib-events / sbparks-events / cbwcd-events / yanksair-events — Tribe Events calendars
+
+- **Added 2026-08-17 (Phase 4).** Four WordPress + The Events Calendar sites
+  sharing one scraper core (`src/scrapers/tribe-events.ts`): REST API at
+  `/wp-json/tribe/events/v1/events`, stable per-event permalinks, structured
+  categories. First run: 152 + 2 + 20 + 4 events respectively.
+  - **sbclib-events** — `library.sbcounty.gov`, venue-scoped to Chino (1181),
+    Chino Hills/Thalman (1250), Cal Aero (1241). **Never use sbclib.org** — its
+    Cloudflare WAF 403s everything, including real browsers; the county
+    hostname serves the identical WordPress openly.
+  - **sbparks-events** — `parks.sbcounty.gov`, venue-scoped to Prado (1897).
+  - **cbwcd-events** — `cbwcd.org`, whole calendar (the district IS the
+    coverage area): Water Wednesdays, compost giveaways, free workshops.
+  - **yanksair-events** — `yanksair.org`, whole calendar. robots.txt lives at
+    the `www.` hostname only and asks `Crawl-delay: 10` (honored via an extra
+    8s request gap on top of politeFetch's 2s floor).
+- **Quirks:** the events JSON re-hashes as dates roll → fresh document every
+  run; items pin to first capture via resolveDocumentId. external_id is
+  `<event id>:<utc_start_date>` because per-occurrence id uniqueness for
+  recurring events was not verified.
+- **Link-back depth:** item-level (`/event/<slug>/[<date>/]`).
+- **Reliability guess:** high (county sites match the proven sheriff/library
+  infra); medium for yanksair (small-org WordPress).
 
 ## Open questions from PLAN — answers so far
 

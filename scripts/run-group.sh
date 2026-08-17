@@ -26,16 +26,19 @@ cd "$ROOT" || exit 70
 group="${1:-}"
 
 case "$group" in
-	# Cheap, high-churn: news feeds, weather alerts, and the Nixle mailbox.
-	# Hourly is well inside every one of these sources' politeness budget.
+	# Cheap, high-churn: news feeds, weather alerts + forecast, fire district
+	# feeds, and the Nixle mailbox. Hourly is well inside every one of these
+	# sources' politeness budget, and the fire Alert Center is exactly the
+	# feed that must not wait a day.
 	frequent)
-		keys=(chino-news-rss chinohills-news-rss nws-alerts sbsheriff-news sbsheriff-nixle-mail)
+		keys=(chino-news-rss chinohills-news-rss nws-alerts nws-forecast sbcfire-news cvfd-news sbsheriff-news sbsheriff-nixle-mail)
 		;;
-	# Agenda systems and listings. These change when a clerk posts a packet,
-	# which is a daily-at-most event, and the agenda systems are the sources
-	# we least want to hammer.
+	# Agenda systems, listings, and event calendars. These change when a clerk
+	# or staff member posts something, which is a daily-at-most event, and the
+	# agenda systems are the sources we least want to hammer. (yanksair.org's
+	# robots.txt asks Crawl-delay: 10 — daily cadence keeps us far inside it.)
 	daily)
-		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses)
+		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses sbclib-events sbparks-events cbwcd-events yanksair-events)
 		;;
 	# Video and captions. Expensive in time and bandwidth, and captions do not
 	# exist until well after a meeting ends, so this runs the morning after.
