@@ -24,6 +24,19 @@ chinovalley.today, www.chinovalley.today {
 
 	encode zstd gzip
 
+	# /health is an extensionless file, so file_server would otherwise serve it
+	# as application/octet-stream — some monitors and every browser handle that
+	# badly. Astro sets these headers on the Response object, but a static build
+	# writes only the body to disk and the headers are lost, so they belong here.
+	#
+	# no-store is not decoration: a cached `ok` outlives the thing it reports on,
+	# which is the one way a health check can actively mislead.
+	@health path /health
+	header @health {
+		Content-Type "text/plain; charset=utf-8"
+		Cache-Control "no-store"
+	}
+
 	# Send www to the bare domain so there is one canonical origin, matching
 	# the canonical tags astro emits.
 	@www host www.chinovalley.today

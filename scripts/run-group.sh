@@ -60,4 +60,26 @@ done
 if [ "$failed" -gt 0 ]; then
 	echo "$failed of ${#keys[@]} scrapers failed in group '$group'" >&2
 fi
+
+# Dead-man's-switch ping, on success only.
+#
+# This is the check that matters for this project. The public site is static:
+# if every timer here died, /health would keep answering `ok` and the site
+# would serve a frozen record indefinitely, alerting nobody. A publication
+# whose claim is currency fails worse by silently going stale than by visibly
+# going down.
+#
+# So the monitor is inverted — instead of asking "is it up?", the job says
+# "I ran", and the monitoring service alerts when that stops arriving. Set
+# CVT_HEARTBEAT_URL_<GROUP> to an UptimeRobot heartbeat URL (or healthchecks.io
+# equivalent); unset means no ping and no alarm, which is the right default for
+# a developer machine.
+heartbeat_var="CVT_HEARTBEAT_URL_$(printf '%s' "$group" | tr '[:lower:]' '[:upper:]')"
+heartbeat="${!heartbeat_var:-}"
+if [ "$failed" -eq 0 ] && [ -n "$heartbeat" ]; then
+	# Never let a monitoring outage fail the scrape run itself.
+	curl -fsS --max-time 15 "$heartbeat" >/dev/null 2>&1 ||
+		echo "note: heartbeat ping to $heartbeat_var failed (scrape itself was fine)" >&2
+fi
+
 exit "$failed"

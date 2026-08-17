@@ -208,6 +208,68 @@ admin.chinovalley.today {
 }
 ```
 
+## Monitoring
+
+Two different things fail here, and only one of them is what a normal uptime
+check finds.
+
+### Site liveness — `https://chinovalley.today/health`
+
+Plain text, keyword `ok` on the first line. Matches the foreshock pattern:
+UptimeRobot HTTP(s) monitor, keyword `ok`, 5-minute interval.
+
+```text
+ok
+built=2026-08-17T17:07:50.752Z
+posts=9
+latest_post=2026-08-15
+```
+
+This proves the droplet is up, Caddy is running, TLS is valid and the release
+symlink resolves. Caddy sets `Cache-Control: no-store` on it, because a cached
+`ok` outlives the thing it reports on.
+
+### Pipeline liveness — the check that actually matters
+
+**`/health` cannot tell you the pipeline is alive.** The site is static: if
+every scrape timer died tonight, `/health` would keep answering `ok` while the
+site served a frozen record, and nothing would alert. For a publication whose
+claim is currency, silently going stale is a worse failure than visibly going
+down — nobody is paged by content that simply stops changing.
+
+So the check is inverted. Each scrape group pings a dead-man's-switch URL after
+a clean run, and the monitoring service alerts when the ping **stops arriving**.
+Create three UptimeRobot *heartbeat* monitors (or healthchecks.io checks) and
+set them in `.env`:
+
+| Variable | Group schedule | Suggested period |
+| --- | --- | --- |
+| `CVT_HEARTBEAT_URL_FREQUENT` | hourly at :17 | 90 min |
+| `CVT_HEARTBEAT_URL_DAILY` | 05:40 Pacific | 30 h |
+| `CVT_HEARTBEAT_URL_MEDIA` | 07:30 Pacific | 30 h |
+
+Unset means no ping and no alarm, which is the right default on a developer
+machine. A failed ping never fails the scrape run itself.
+
+### Immediate failure detail
+
+Heartbeats tell you something stopped; they do not say what. For that, hang an
+`OnFailure=` unit on the timers to push to the same ntfy topic foreshock uses:
+
+```ini
+# /etc/systemd/system/cvt-notify@.service
+[Unit]
+Description=Notify on failure of %i
+
+[Service]
+Type=oneshot
+EnvironmentFile=/srv/chino-valley-today/.env
+ExecStart=/usr/bin/curl -fsS -H "Title: %i failed" -d "check: journalctl -u %i -n 50" ${NTFY_TOPIC_URL}
+```
+
+Then add `OnFailure=cvt-notify@%n.service` to each `cvt-scrape-*.service` and
+`cvt-backup.service`.
+
 ## Health check
 
 ```bash
