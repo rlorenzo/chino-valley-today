@@ -32,11 +32,13 @@ export interface NewPost {
 		| "meeting_recap"
 		| "business_tracker"
 		| "alert"
-		| "news_digest";
+		| "news_digest"
+		| "daily-brief";
 	tier: Tier;
 	title: string;
 	bodyMd: string; // markdown body; the disclosure footer is appended automatically
 	meetingDate?: string;
+	briefDate?: string; // daily-brief only: the LA calendar day the brief covers
 	sources: string[]; // source_urls backing every claim in the post
 }
 
@@ -149,6 +151,7 @@ export function renderPostFile(p: NewPost, createdAt: string): string {
 		`tier: ${p.tier}`,
 		`date: ${y(createdAt)}`,
 		...(p.meetingDate ? [`meeting_date: ${y(p.meetingDate)}`] : []),
+		...(p.briefDate ? [`brief_date: ${y(p.briefDate)}`] : []),
 		"sources:",
 		...p.sources.map((s) => `  - ${y(s)}`),
 		"---",
@@ -189,9 +192,13 @@ export function listPosts(db: Db, status?: PostStatus): PostRow[] {
 
 // Idempotent create: same slug re-queued updates content in place; posts a
 // human already published or rejected are never clobbered by a generator.
+// `replacePublished` is the daily-brief exception: a same-day re-run must
+// replace that day's already-published brief rather than duplicate or skip it.
+// Rejected posts stay untouchable on every path — a human said no.
 export function createPost(
 	db: Db,
 	p: NewPost,
+	opts: { replacePublished?: boolean } = {},
 ): {
 	id: number;
 	filePath: string;
@@ -201,7 +208,10 @@ export function createPost(
 		throw new Error(`post ${p.slug}: sources[] must not be empty`);
 	const existing = getPost(db, p.slug);
 	if (existing) {
-		if (existing.status === "published" || existing.status === "rejected") {
+		const untouchable =
+			existing.status === "rejected" ||
+			(existing.status === "published" && !opts.replacePublished);
+		if (untouchable) {
 			return {
 				id: existing.id,
 				filePath: existing.file_path,

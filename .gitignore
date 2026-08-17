@@ -6,6 +6,11 @@ data/
 content/queue/
 content/held/
 content/rejected/
+# Daily briefs are machine-regenerated on the host every morning (cvt-brief).
+# Tracking them would trip the deploy guard's divergent-content check daily;
+# they are Tier A artifacts fully re-derivable from the database, so they live
+# on the host only. Every other published post stays tracked and guarded.
+content/published/*-daily-brief.md
 .fallow/
 
 # Astro build output and caches (the built site is rsynced, not committed)
