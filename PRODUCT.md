@@ -28,27 +28,38 @@ Two audiences, served by one artifact:
   what it means for them, in a few minutes.
 - **Civic insiders** — officials, staff, commissioners, journalists, activists —
   who use it as a faster, citable record of what the bodies actually did.
+- **The morning-habit reader** (the target added by the 2026-08-17
+  redirection): a resident who checks every day the way they check a weather
+  app — today's brief first, the archive only when something touches them.
 
 Written for residents first, but accurate and cited enough that insiders rely on
 it. Any surface must serve a casual skim and a deep citation-check equally well;
 optimizing for one at the other's expense is a failure.
 
-Arrival is often issue-driven — a development near someone's house, a school
-board vote, a liquor license on their block — not feed-browsing.
+Arrival is issue-driven (a development near someone's house, a school board
+vote, a liquor license on their block), incident-driven ("what was that fire
+yesterday?"), or habitual (the morning check) — rarely feed-browsing.
 
 ## Product Purpose
 
-A meeting-driven local news brief for Chino and Chino Hills, California. It
-ingests primary public records, synthesizes them with mandatory source citations,
-routes everything through tiered automated gates plus human review, and publishes
-a static site.
+A daily local brief for Chino and Chino Hills, California, answering one
+question each morning: **what do I need to know today?** It ingests primary
+public records and official feeds, synthesizes them with mandatory source
+citations, routes everything through tiered automated gates plus human review,
+and publishes a static site.
 
-Success is that a resident can learn what their local government did, and verify
-every claim against the record, without attending the meeting or trusting the
-publisher's word for it.
+Success is that a resident checks it each morning and in two minutes knows the
+weather, what happened overnight (a fire a few blocks away, a decision, a
+closure), what's happening today, and what their local government did — and can
+verify every one of the site's own claims against the record.
 
-Cadence is meeting-driven — roughly 8–12 posts/month — not daily. Modeled loosely
-on tucsondailybrief.com but deliberately scoped to meeting cadence.
+**Cadence, redirected 2026-08-17:** a daily brief assembled every morning,
+mostly by Tier A templates so daily publishing does not require daily human
+writing; a thin day still ships honestly (weather + today's schedule).
+Meeting-driven Tier B deep posts (recaps, previews, tracker narratives)
+continue at their 8–12/month rhythm and fold into the brief when they publish.
+Modeled on tucsondailybrief.com; the original meeting-cadence-only scoping is
+superseded.
 
 ## Positioning
 
@@ -66,8 +77,11 @@ blocked rather than editorially discouraged.
 - Held posts are reviewed by a human before publication; the archive keeps the
   raw bytes of every source document.
 
-This is a record-of-the-record, not commentary. It covers what public bodies did,
-not what other outlets said about it.
+This is a record-of-the-record first, not commentary. Its own claims cover what
+public bodies did. The daily brief additionally *points* at what other outlets
+reported — a "headlines elsewhere" section, attributed, built from feed
+metadata only (EDITORIAL.md amendment 2026-08-17) — but never restates another
+outlet's reporting as its own claim.
 
 ## Operating Context
 
@@ -76,8 +90,17 @@ not what other outlets said about it.
   Swagit video, CVUSD board listings, YouTube auto-captions for two channels,
   NWS alerts, California ABC license reports, San Bernardino County Sheriff
   news, and the Sheriff's Nixle channel via email subscription.
+- **Sources (planned, Phase 4 — probes not yet run; direction, not
+  capability):** NWS daily forecast (beyond active alerts), Chino Valley Fire
+  District / CAL FIRE incident data, CHP traffic incidents, secondary-press
+  RSS for headline aggregation (The Champion, Daily Bulletin, regional TV),
+  CIF-SS / school athletics results (team-level only), community and library
+  event calendars.
 - **Post types:** meeting previews, meeting recaps, business-tracker listings and
-  narratives, news digests, alerts.
+  narratives, news digests, alerts, and (Phase 4) the **daily brief** — a
+  morning assembly of weather, overnight incidents, today's schedule, fresh
+  record items, and headlines elsewhere. Sections are conditional; empty ones
+  drop out rather than padding.
 - **Review workflow:** generated posts land in `content/queue`, `content/held`,
   `content/rejected`, or `content/published` as markdown with YAML frontmatter,
   with state mirrored in a `posts` table. A local admin dashboard bound to
@@ -109,8 +132,11 @@ human or automated, and changes to them are dated editorial decisions):
   even when a source document names them (sheriff and coroner releases do).
 - Contested CVUSD items get votes, direct quotes with timestamps, and links only
   — no characterization of motive, tone, or sides beyond quoted words.
-- Secondary press (The Champion and all others) is link-only with at most one
-  line of neutral framing. Never scraped, never excerpted beyond a headline.
+- Secondary press (The Champion and all others): headline + link, optionally a
+  1–2 sentence attributed summary in our own words (amended 2026-08-17).
+  Fetching is bounded by mechanical robots.txt compliance and binding ToS —
+  not a blanket no-scrape rule. No substantial excerpting (a copyright limit,
+  independent of robots); another outlet's fact is never restated as our claim.
 - Agency-operated notification channels are primary sources, ingested by their
   intended delivery mechanism (Nixle by email subscription, never page scraping).
   User-generated platforms (Facebook, Nextdoor) are excluded as sources.
@@ -119,8 +145,9 @@ human or automated, and changes to them are dated editorial decisions):
 
 **Terminology** (use these words, they are load-bearing): Tier A / B / C; Gate 1
 (deterministic validators) and Gate 2 (cross-family judge); *recap* not
-*minutes*; *preview*, *digest*, *tracker narrative*; post states queued, held,
-published, rejected.
+*minutes*; *preview*, *digest*, *tracker narrative*, *daily brief*; *headlines
+elsewhere* for the attributed secondary-press section; post states queued,
+held, published, rejected.
 
 **Explicitly undecided — do not invent:**
 
@@ -139,6 +166,12 @@ published, rejected.
   (meetings and links, no agenda items). Three options remain open: a
   narrowly-scoped robots exception, permanent listing-level coverage, or asking
   the district for an allowlist or direct feed. This is a policy decision.
+- **Student-athlete naming in sports coverage.** The minors rule ("never
+  named") collides with routine sports reporting. Interim rule (EDITORIAL.md
+  2026-08-17): team-level coverage only — scores, standings, schedules, no
+  names. Open options: keep team-level permanently; allow names for
+  achievements drawn from official releases; case-by-case Tier C review. This
+  is a policy decision for the operator, not a builder default.
 
 ## Brand Commitments
 
@@ -168,16 +201,22 @@ published, rejected.
   behavior, extraction quality, and open questions for each source.
 - `reports/poc.html`, a generated Phase 0 report.
 - 149 passing tests, including gate validators and the ISO-week bundler.
+- **The site is live at `https://chinovalley.today` as of 2026-08-17** —
+  deployed to the droplet behind Cloudflare, scheduled scrapes and offsite
+  backups running, deploy-on-push CI verified. The database on the host has
+  grown past the local snapshot as timers run.
 
 **Absent — future work must not fabricate these:**
 
-- No readers, subscribers, traffic, or engagement of any kind. **The project is
-  pre-launch; nothing is public yet.** No metrics, no vanity counts, no "trusted
-  by" claims, no social proof.
+- No known readers, subscribers, traffic, or engagement of any kind. The site
+  launched 2026-08-17 with **no promotion**; no metrics, no vanity counts, no
+  "trusted by" claims, no social proof.
 - No testimonials, quotes, endorsements, press mentions, or partner logos.
-- No corrections address, About copy, masthead, or named staff beyond the
-  operator.
+- No masthead or named staff beyond the operator.
 - No pricing, subscription, licensing, or funding model has been decided.
+- None of the Phase 4 sources (forecast, fire/EMS, traffic, secondary-press
+  feeds, sports, events) is ingesting yet; no daily brief has ever been
+  assembled. The direction exists; the capability does not.
 
 ## Product Principles
 

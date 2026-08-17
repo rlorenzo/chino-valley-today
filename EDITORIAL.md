@@ -49,11 +49,38 @@ reviewer. Changes to this file are editorial decisions — date them.
   timestamps), and links only. The recap may state what was decided and who
   voted how; it may not describe motives, tone, or sides beyond quoted words.
 
-## Secondary press
+## Secondary press (amended 2026-08-17)
 
-- The Champion (championnewspapers.com) and all secondary press: link-only,
-  at most one line of neutral framing. Never scrape, never excerpt beyond a
-  headline. We cover the record, not the coverage.
+- Original rule (2026-08-12): link-only, at most one line of neutral framing,
+  never excerpted beyond a headline. **Superseded 2026-08-17 by operator
+  decision:** the blanket never-scrape stance was never the operator's rule.
+  The boundary for secondary press is the same as for every other source —
+  robots.txt read mechanically against our own honest User-Agent, plus any
+  binding platform ToS.
+- A secondary-press item (The Champion, Daily Bulletin, regional TV, and all
+  others) may carry a 1–2 sentence attributed summary, under these conditions:
+  - Fetching is governed by mechanical robots.txt compliance and binding ToS.
+    Prefer the outlet's feed where one exists; article fetches are polite
+    (conditional GET, long intervals, cached, honest UA with contact email).
+  - Summaries are short and in our own words — 1–2 sentences. No substantial
+    excerpting or reproduction of the article. That limit is **copyright**,
+    not scraping policy, and it holds regardless of what robots.txt permits.
+  - Verbatim feed-provided title/description renders as Tier A. Any
+    LLM-written summary is Tier B and passes the full gate path.
+  - Every item names the outlet and links the article. The provenance stamp
+    (violet) is reserved for primary records and never applied to a
+    secondary-press link — attribution and provenance are different claims.
+- We still cover the record, not the coverage: "headlines elsewhere" is a
+  pointer service to readers. A fact reported by another outlet is never
+  restated as our own claim.
+
+## Sports and student-athletes (interim rule, 2026-08-17)
+
+- Sports coverage is **team-level only**: scores, standings, records, and
+  schedules from official sources (CIF-SS, school athletics sites). No
+  student-athlete is named or identifiably described, including from official
+  releases — the minors rule takes precedence until an explicit carve-out is
+  decided (open decision recorded in PRODUCT.md).
 
 ## Source channels (decision 2026-08-12)
 

@@ -1,16 +1,54 @@
 # PLAN.md - Chino Valley Today
 
-Branding: "Chino Valley Today" (domain chinovalley.today identified, purchase deferred until POC validates). A meeting-driven local news brief for Chino and Chino Hills, CA. Automated ingestion
-of primary sources, LLM synthesis with mandatory source citations, human review gate,
-static site output. Modeled loosely on tucsondailybrief.com but scoped to
-meeting-cadence publishing (8-12 posts/month), not daily.
+Branding: "Chino Valley Today" (chinovalley.today, registered and live
+2026-08-17). A daily local news brief for Chino and Chino Hills, CA: automated
+ingestion of primary sources and official feeds, LLM synthesis with mandatory
+source citations, tiered machine + human review gates, static site output.
+Modeled on tucsondailybrief.com. [REDIRECTED 2026-08-17: originally scoped to
+meeting-cadence publishing only (8-12 posts/month); now a daily brief assembled
+every morning from Tier A templates, with meeting-driven Tier B posts folded
+in — see Phase 4.]
 
 This plan covers Phase 0 (scraper POC) in detail and later phases in outline.
 Do not build ahead of the current phase.
 
 ---
 
-## Status (updated 2026-08-14)
+## Status (updated 2026-08-17)
+
+**Phase 2: COMPLETE — the site is LIVE at <https://chinovalley.today>**
+(2026-08-17): Astro site deployed to the shared droplet behind Cloudflare,
+systemd scrape/backup timers enabled, nightly offsite backup to B2,
+deploy-on-push CI verified. (Infrastructure identifiers live in the private
+Obsidian note, deliberately not in this public repo.)
+
+**2026-08-17: DAILY-BRIEF REDIRECTION** (branch `daily-brief-redirect`). The
+record-led site is useful but not engaging: it answers "what did the council
+do" and never "what do I need to know today." Redirection decisions (all
+confirmed with the operator, documented in PRODUCT.md / EDITORIAL.md /
+DESIGN.md / surface brief v2):
+
+1. **Daily brief, auto-assembled**: a new `daily-brief` post type built every
+   morning by Tier A templates from the last 24h of items + today's schedule;
+   Tier B narratives fold in when published. Daily cadence without daily human
+   writing; thin days ship honestly (weather + schedule).
+2. **Four new content areas**: fire/EMS incidents, daily weather forecast,
+   secondary-press headline aggregation, team-level sports + community events.
+   See Phase 4.
+3. **Editorial amendment (dated in EDITORIAL.md)**: secondary press may carry
+   a 1-2 sentence attributed summary. The old blanket never-scrape stance was
+   not the operator's rule — the boundary is mechanical robots.txt compliance
+   plus binding ToS, with no substantial excerpting (a copyright limit).
+   Interim sports rule:
+   team-level only, no student-athlete names (minors rule precedence; open
+   decision recorded in PRODUCT.md).
+4. **Visual world retained**: Dairy Inspection Mark stays; the front page
+   re-composes to lead with Today (surface brief v2 has the full critique of
+   the v1 index and the new structure).
+
+Phase 4 (below) supersedes Phase 3's ordering: the daily brief is the next
+build target; podcast/newsletter/growth follow it (the newsletter is strictly
+better fed by a daily brief anyway).
 
 **Phase 0: COMPLETE** (commit effdfed). 12 sources ingesting (11 planned + City
 of Chino YouTube captions added after launch), all acceptance criteria
@@ -76,7 +114,9 @@ recommended next step.
   listing-only); item idempotency across packet re-uploads (external_id is
   document-scoped; see vault task).
 
-**Phase 2/3: not started** (static site + droplet; podcast + growth).
+**Phase 3: not started** (podcast + growth; re-sequenced after Phase 4 — see
+the 2026-08-17 status entry above). Phase 2 completed 2026-08-17 with the
+proper nightly offsite backup to B2 in place.
 Interim backup landed 2026-08-14: `npm run backup` (scripts/interim-backup.sh)
 snapshots the DB (WAL-safe .backup + integrity check), data/raw, .env, and
 content/ working state to `~/Backups/chino-valley-today/<date>/` (override with
@@ -113,8 +153,10 @@ scrape/review sessions. Phase 2 still owes the proper nightly offsite job.
 5. **Polite scraping.** Respect robots.txt. Conditional GET (ETag/Last-Modified) where
    supported. Cache everything; never re-fetch unchanged documents. Identify with a
    custom User-Agent including a contact email. Government meeting data is public
-   record; be a good citizen anyway. Do not scrape championnewspapers.com content -
-   the Champion is link-only (see Editorial rules).
+   record; be a good citizen anyway. [AMENDED 2026-08-17: secondary press
+   (including championnewspapers.com) is fetchable under the same rules —
+   robots.txt read mechanically against our UA, plus binding ToS — with
+   published output limited to short attributed summaries; see EDITORIAL.md.]
 
 ## Stack
 
@@ -524,6 +566,182 @@ an explicit per-item acknowledgment.
   (Supersedes the original "DO Spaces or restic" note, 2026-08-17.)
   The raw archive IS the moat; do not lose it.
 - Secrets: `.env` on droplet, never in git.
+
+## Phase 4: Daily brief + expanded sources (redirection 2026-08-17)
+
+Sequenced BEFORE Phase 3 (the newsletter is strictly better fed by a daily
+brief). Goal: every morning the site answers "what do I need to know today" —
+weather, overnight incidents, today's schedule, fresh record items, headlines
+elsewhere — assembled by Tier A templates so daily cadence never requires
+daily human writing. Initial source recon ran 2026-08-17 (web-research pass;
+findings below marked verified/unverified honestly — unverified means the
+probe task must confirm before building).
+
+### Task 4.0 - Source probes (record in SOURCES.md, Phase-0 format)
+
+Recon verdicts to confirm or refute, per source:
+
+- **NWS daily/hourly forecast — VERIFIED, trivial.** Chino resolves to
+  gridpoint SGX/47,73: `api.weather.gov/gridpoints/SGX/47,73/forecast` and
+  `/forecast/hourly`. Same API and politeness rules as the alerts scraper
+  already ingesting. Probe: confirm the Chino Hills gridpoint too (valley vs
+  hills may differ, same as the alert-zone question in Phase 0).
+- **SB County Fire RSS — VERIFIED, easy.** `sbcfire.org/feed/` is standard
+  WordPress RSS with stable item permalinks (press releases, major-incident
+  news). Highest value-to-effort of the new sources; ship first.
+- **Chino Valley Fire District RSS — VERIFIED plumbing, easy.** CivicPlus,
+  same platform family as both cities' existing feeds: News Flash
+  (`chinovalleyfire.org/RSSFeed.aspx?ModID=1&CID=All-newsflash.xml`), Alert
+  Center (ModID=63), Agenda Center (ModID=65), Calendar (ModID=58). Feed
+  validated but empty on probe day; mostly config, not new code.
+- **CAL FIRE incidents API — UNVERIFIED, verify before building.**
+  Third-party-documented GeoJSON endpoint
+  (`fire.ca.gov/umbraco/api/IncidentApi/GeoJsonList?inactive=true`, year
+  param) with per-incident permalink pages. Recon fetches got 403 on both the
+  endpoint AND robots.txt (bot-detection, not a robots verdict). Probe with
+  the pipeline's own honest UA; read robots.txt mechanically in that pass.
+- **Champion Newspapers RSS — UNVERIFIED, careful follow-up.** TownNews CMS;
+  the usual search-based RSS pattern returned 429 (rate-limited, not absent).
+  Their robots.txt blocks ~30 named AI crawlers (ClaudeBot, GPTBot, ...) but
+  does not disallow general paths for other agents — mechanically, our custom
+  contact-email UA is permitted. Prefer the feed once found; article fetches
+  are allowed under the amended editorial rule, extra-polite (long intervals,
+  conditional GET). Highest editorial value in the headlines-elsewhere set.
+- **SCNG papers (Daily Bulletin, SB Sun) — BLOCKED at network level** to the
+  recon tool; needs a probe from the pipeline's own client, with its own
+  robots.txt check, before any verdict.
+- **SB County Library events — VERIFIED (2026-08-17), easy.** The sbclib.org
+  hostname sits behind aggressive Cloudflare (403 even to browser probes),
+  but the identical WordPress serves openly at **library.sbcounty.gov**,
+  whose robots.txt disallows only `/wp-admin/`. The Events Calendar REST API
+  is public JSON with item-level permalinks, times, and age-group categories:
+  `library.sbcounty.gov/wp-json/tribe/events/v1/events?venue=<id>&start_date=...`
+  Venue IDs: Chino Branch **1181** (61 upcoming on probe day), James S.
+  Thalman Chino Hills **1250** (71), Cal Aero Preserve Academy **1241** (20).
+  Kids programming (storytimes, LEGO events, craft corners) is exactly the
+  daily brief's "today at the library" material. Use the county hostname
+  only; never fight the sbclib.org WAF.
+- **School athletics calendars — WEAK ROI, probe last.** No district-wide
+  sports platform found; Chino High embeds a Google Calendar (a public iCal
+  URL may exist behind the embed — get the calendar ID). Four separate
+  per-school integrations otherwise. Team-level coverage only (EDITORIAL.md
+  interim rule).
+
+Community-events recon, second pass (2026-08-17):
+
+- **Yanks Air Museum — VERIFIED, easy.** WordPress + Tribe on yanksair.org
+  (robots at `www.yanksair.org`: wp-admin only, `Crawl-delay: 10` — honor it).
+  Full subscribe block: iCal/webcal/.ics export. Permalinks
+  `/event/<slug>/`; events listed through mid-2027.
+- **Chino Basin Water Conservation District (cbwcd.org) — VERIFIED, easy.**
+  WordPress + Tribe, robots fully open. ICS feed at
+  `?post_type=tribe_events&ical=1&eventDisplay=list`; permalinks
+  `/event/<slug>/`; category filters (e.g. free-workshops). Water
+  Wednesdays, compost giveaways, garden classes — exactly the free
+  community programming a daily brief wants.
+- **SB County Regional Parks / Prado — VERIFIED, easy** (REST confirmed
+  directly 2026-08-17): `parks.sbcounty.gov/wp-json/tribe/events/v1/events`
+  with `venue=1897` for Prado Regional Park; robots wp-admin only. Same
+  Tribe family as the library and sheriff sources.
+- **Planes of Fame Air Museum — moderate, scrape-only.** No feed; custom
+  CMS; stable permalinks `planesoffame.org/events-calendar2/<slug>`; robots
+  permissive on event paths. Distinctive Chino Airport content (Hangar
+  Talks, airshows); worth a small HTML scraper after the feed sources land.
+- **UNVERIFIED — JS-rendered calendars, probe with a real browser client:**
+  CVUSD district calendar (`chino.k12.ca.us/page/page_calendar?calID=134999`
+  — main-domain robots allows it, unlike the ParentSquare file CDN; the
+  widget likely calls an inspectable ParentSquare API), Chaffey College
+  calendar (`chaffey.edu/calendar/` — robots permissive, vendor unknown),
+  Shoppes at Chino Hills (`shoppesatchinohills.com/eventscalendar/` —
+  correct domain spelling, robots open, SPA route).
+- **Ticketed regional events (recon 2026-08-17, backlog):** Ticketmaster
+  Discovery API is genuinely open (free key, 5,000 req/day, lat/long search,
+  stable permalinks) — Tier A material for a venue-whitelisted "worth the
+  drive" section (Toyota Arena, Ontario Improv, Fox Pomona, Glass House,
+  Ontario Convention Center). SeatGeek API in reserve (free client ID,
+  overlapping inventory, attribution required). Eventbrite stays rejected in
+  every form — including email-digest ingestion, which changes the transport
+  but not the ToS content-republishing prohibition.
+- **Skip, with reasons:** Eventbrite (public location-search API shut off
+  Feb 2020; discovery is gated to distribution partners), Chamber of
+  Commerce calendar (GrowthZone at business.chinovalleychamber.com, no
+  feed, ribbon-cutting/networking content; if ever revisited, check that
+  subdomain's own robots.txt — only the marketing domain was checked),
+  Chino Youth Museum (city facility — its events already flow through the
+  ingested cityofchino.org calendar; confirm ingestion isn't filtering
+  that facility out), Heritage Farmers Market (no per-event data — render
+  as a static recurring line in the brief, "every Wednesday 3:30–7:30pm at
+  the Shoppes", sourced to heritagefarmersmarket.org/chino-hills).
+
+**Rejected by recon, with reasons (do not revisit without new evidence):**
+Watch Duty (ToS prohibits the access needed), MaxPreps (robots.txt disallows
+exactly the team/school/scores paths needed, for all agents — a mechanical
+block), PulsePoint (no official API, agency participation unconfirmed),
+CHP incidents page (no stable permalinks — transient ASP.NET postback rows
+fail the "citable permalink" requirement). **Patch — low priority, not
+rejected** (reclassified under the 2026-08-17 scrape-policy clarification:
+its robots.txt blocks named AI crawlers, not our UA or general paths;
+mechanically permitted, but no feed was found and local coverage is thin).
+
+### Task 4.1 - Ingest the easy verified set
+
+`sbcfire-news` (WordPress RSS), `cvfd-news` + `cvfd-alerts` (CivicPlus RSS),
+`nws-forecast` (gridpoint daily + hourly), `sbclib-events` (Tribe REST API on
+library.sbcounty.gov, three venue IDs above), `yanksair-events` (ICS),
+`cbwcd-events` (ICS), `sbparks-events` (Tribe REST, Prado venue 1897). The
+three Tribe/ICS event sources share one ingestion shape — consider a generic
+tribe-events scraper parameterized by host/venue. Each: source row, scraper,
+dossier in reports/notes/, items with stable source_urls. All Tier A-able
+content.
+
+### Task 4.2 - Headlines-elsewhere ingestion
+
+Champion first (pending 4.0 feed discovery), SCNG if unblocked. Prefer feeds;
+article fetches where robots.txt permits our UA, extra-polite. Published form
+is always a 1-2 sentence attributed summary + link (EDITORIAL.md amendment
+2026-08-17; the no-substantial-excerpting limit is copyright and holds
+regardless of robots). Verbatim feed title/description renders Tier A; any
+LLM-written summary is Tier B behind the full gate path.
+
+### Task 4.3 - Daily brief assembler
+
+New post type `daily-brief`, one per morning (~6am Pacific systemd timer, new
+`cvt-brief.timer`): deterministic assembly of last-24h items + today's
+schedule from the existing DB. Sections (all conditional, empty ones drop
+out): weather line (forecast + active alerts), overnight/yesterday incidents,
+today's meetings and events, fresh record items (license events, published
+recaps/previews/narratives folded in by link+summary), headlines elsewhere.
+Tier A frame; per-item tier routing unchanged (an incident naming a private
+individual stays Tier C and simply doesn't appear until cleared). Quiet day =
+weather + schedule, honestly labeled. Frontmatter extends the schema; the
+Astro content collection stays the last-line validator.
+
+### Task 4.4 - Front page leads with Today
+
+Rebuild index per surface brief v2 (.impeccable/surfaces/): Today → This week
+→ the record (v1 treatment demoted, not degraded). Dairy Inspection Mark
+retained; violet remains provenance-only; headlines-elsewhere links take a
+crate-outline attribution treatment, never violet. Do not build a fake brief
+before 4.3 ships real ones.
+
+### Task 4.5 - Topic taxonomy for new content
+
+Decide where incidents, sports/events, and headlines file (does `safety`
+absorb fire/EMS? fifth topic mark?), and move topic classification from
+site-side derivation (`lib/record.ts`) into the pipeline, which owns the
+source keys and item types.
+
+### Phase 4 acceptance
+
+- [ ] Seven consecutive mornings publish a daily brief with zero human
+      writing (human review only where tiers require it)
+- [ ] A quiet day ships honestly (weather + schedule, no padding)
+- [ ] Every brief item's link passes the existing citation spot-check ritual
+- [ ] Headlines-elsewhere items render as short attributed summaries only
+      (verbatim feed text as Tier A, or LLM summaries gated Tier B; never
+      substantial excerpts)
+- [ ] No student-athlete name anywhere (team-level rule holds)
+- [ ] Index leads with Today; the record remains fully reachable and citable
 
 ## Phase 3 (outline): Podcast + growth
 
