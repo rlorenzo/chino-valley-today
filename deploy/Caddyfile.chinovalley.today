@@ -7,13 +7,44 @@
 #   caddy validate --config /etc/caddy/Caddyfile
 #   systemctl reload caddy      # reload, never restart — reload is graceful
 #
-# PREREQUISITE: chinovalley.today must already resolve to this droplet before
-# reloading, or Caddy's ACME challenge fails and it will retry in a loop while
-# logging errors. In Cloudflare, the A record must
-# be DNS-only (grey cloud), not proxied — a proxied record makes Cloudflare
-# terminate TLS and the HTTP-01 challenge never reaches Caddy.
+# TLS: CLOUDFLARE ORIGIN CA, so the proxy stays ON permanently.
+#
+# The records are proxied (orange cloud), which is deliberate — it hides the
+# origin address, and this repo is public. That rules out Caddy's automatic
+# Let's Encrypt issuance: TLS-ALPN-01 is terminated at Cloudflare's edge and
+# never reaches Caddy, and HTTP-01 depends on the zone's SSL mode.
+#
+# Instead Cloudflare issues a free Origin CA certificate (up to 15 years,
+# trusted by Cloudflare specifically) and Caddy simply serves it. No ACME, no
+# renewal job, no custom Caddy build, and the proxy never has to be switched
+# off — not even briefly.
+#
+# Generate at: Cloudflare -> SSL/TLS -> Origin Server -> Create Certificate
+# (hostnames: chinovalley.today, *.chinovalley.today), then on the droplet:
+#
+#   install -d -m 700 /etc/caddy/certs
+#   # paste the certificate:
+#   nano /etc/caddy/certs/chinovalley.today.pem
+#   # paste the private key:
+#   nano /etc/caddy/certs/chinovalley.today.key
+#   chmod 600 /etc/caddy/certs/chinovalley.today.*
+#   chown caddy:caddy /etc/caddy/certs/chinovalley.today.*
+#
+# Then set Cloudflare SSL/TLS mode to FULL (STRICT). Not Flexible: Flexible
+# talks to the origin over plain HTTP while Caddy redirects HTTP to HTTPS,
+# which is an infinite redirect loop. Not Full: it accepts any origin
+# certificate and so verifies nothing.
+#
+# This certificate is trusted only by Cloudflare, by design. Reaching the
+# origin directly will show a certificate error — that is expected, and is the
+# point of the proxy.
 
 chinovalley.today, www.chinovalley.today {
+	# Explicit cert disables Caddy's automatic HTTPS for this site, which is
+	# required here: left automatic, Caddy would keep failing ACME behind the
+	# proxy and burn Let's Encrypt rate limits.
+	tls /etc/caddy/certs/chinovalley.today.pem /etc/caddy/certs/chinovalley.today.key
+
 	# Static only. No application, no upstream, nothing to exploit — the whole
 	# site is files produced by `astro build`.
 	root * /var/www/chinovalley.today/current
@@ -60,10 +91,16 @@ chinovalley.today, www.chinovalley.today {
 		-Server
 	}
 
-	log {
-		output file /var/log/caddy/chinovalley.today.log {
-			roll_size 10MiB
-			roll_keep 5
-		}
-	}
+	# NO custom log file, deliberately. Access logs go to journald with
+	# everything else on this host (`journalctl -u caddy`), which is where the
+	# four co-tenant sites already log and where anyone debugging would look.
+	#
+	# A `log { output file ... }` block was tried and removed: the caddy service
+	# runs with ProtectSystem=full and could not open a file under /var/log/caddy
+	# even with the directory owned by caddy — and notably `caddy validate`
+	# passes anyway, because it never opens the log writer. Loosening hardening
+	# on a host serving four other production sites, to gain a log that records
+	# Cloudflare edge addresses rather than visitor ones (the requests arrive
+	# proxied), was not a trade worth making. Cloudflare's own dashboard holds
+	# the visitor data if it is ever wanted.
 }

@@ -118,15 +118,38 @@ rsync -avz content/ $CVT_DEPLOY_HOST:/srv/chino-valley-today/content/
 ssh $CVT_DEPLOY_HOST 'chown -R cvtoday:cvtoday /srv/chino-valley-today/data /srv/chino-valley-today/content'
 ```
 
-### DNS
+### DNS and TLS
 
-`chinovalley.today` must resolve to the droplet **before** the Caddy block
-is enabled, or ACME fails in a retry loop.
+`chinovalley.today` and `www` are `A` records pointing at the droplet, **proxied
+(orange cloud)**. That is deliberate: the proxy hides the origin address, which
+matters because this repo is public, and it brings caching and DDoS absorption.
 
-In Cloudflare, add an `A` record for `@` (and `www`) pointing at the droplet,
-set to **DNS-only — the grey cloud, not proxied**. A proxied record makes
-Cloudflare terminate TLS, and Caddy's HTTP-01 challenge never reaches the
-origin.
+Keeping the proxy on rules out Caddy's automatic Let's Encrypt issuance —
+TLS-ALPN-01 is terminated at Cloudflare's edge and never reaches Caddy. So TLS
+uses a **Cloudflare Origin CA certificate** instead: free, valid up to 15 years,
+trusted by Cloudflare specifically, and served directly by Caddy. No ACME, no
+renewal job, no custom Caddy build, and the proxy is never switched off.
+
+1. Cloudflare → SSL/TLS → **Origin Server** → Create Certificate. Hostnames
+   `chinovalley.today` and `*.chinovalley.today`. Leave the default key type.
+2. Install both halves on the droplet, owner-only:
+
+   ```bash
+   install -d -m 700 -o caddy -g caddy /etc/caddy/certs
+   nano /etc/caddy/certs/chinovalley.today.pem    # paste the certificate
+   nano /etc/caddy/certs/chinovalley.today.key    # paste the private key
+   chmod 600 /etc/caddy/certs/chinovalley.today.*
+   chown caddy:caddy /etc/caddy/certs/chinovalley.today.*
+   ```
+
+3. Cloudflare → SSL/TLS → Overview → set encryption mode to **Full (strict)**.
+
+   Not **Flexible**: it reaches the origin over plain HTTP while Caddy redirects
+   HTTP to HTTPS, producing an infinite redirect loop. Not **Full**: it accepts
+   any origin certificate, so it verifies nothing.
+
+The Origin CA certificate is trusted only by Cloudflare, by design. Hitting the
+origin address directly will show a certificate warning — that is expected.
 
 ### Caddy
 
