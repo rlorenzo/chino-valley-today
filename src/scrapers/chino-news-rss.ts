@@ -32,6 +32,7 @@
 import * as cheerio from "cheerio";
 import {
 	type FeedItem,
+	localDateTimeToIso,
 	parseRssItems,
 	resolveDocumentId,
 	rfc2822ToIso,
@@ -41,60 +42,9 @@ import type { ScraperContext, ScraperDef } from "./types.ts";
 
 const BASE = "https://www.cityofchino.org";
 
-// Resolves the America/Los_Angeles UTC offset (handles PST/PDT correctly) for a
-// given approximate instant, so wall-clock times scraped from the site (which
-// are always Chino, CA local time) convert to correct UTC ISO strings.
-function laOffsetMinutes(approxUtcMs: number): number {
-	const parts = new Intl.DateTimeFormat("en-US", {
-		timeZone: "America/Los_Angeles",
-		timeZoneName: "longOffset",
-	}).formatToParts(new Date(approxUtcMs));
-	const m = (
-		parts.find((p) => p.type === "timeZoneName")?.value ?? "GMT-08:00"
-	).match(/GMT([+-])(\d{2}):(\d{2})/);
-	if (!m) return -480;
-	return (
-		(m[1] === "-" ? -1 : 1) * (parseInt(m[2], 10) * 60 + parseInt(m[3], 10))
-	);
-}
-
-const MONTHS = [
-	"january",
-	"february",
-	"march",
-	"april",
-	"may",
-	"june",
-	"july",
-	"august",
-	"september",
-	"october",
-	"november",
-	"december",
-];
-
-// Parses strings like "August 18, 2026" (+ optional "06:00 PM") as Chino, CA
-// local time and returns a correct UTC ISO string.
-function chinoDateTimeToIso(dateStr: string, timeStr?: string): string | null {
-	const dm = dateStr.trim().match(/([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})/);
-	if (!dm) return null;
-	const mo = MONTHS.indexOf(dm[1].toLowerCase());
-	if (mo < 0) return null;
-	const day = parseInt(dm[2], 10);
-	const year = parseInt(dm[3], 10);
-	let hour = 0;
-	let minute = 0;
-	if (timeStr) {
-		const tm = timeStr.trim().match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-		if (tm) {
-			hour = parseInt(tm[1], 10) % 12;
-			minute = parseInt(tm[2], 10);
-			if (/pm/i.test(tm[3])) hour += 12;
-		}
-	}
-	const naiveUtc = Date.UTC(year, mo, day, hour, minute);
-	return new Date(naiveUtc - laOffsetMinutes(naiveUtc) * 60000).toISOString();
-}
+// Local-time parsing moved to civicplus-rss.ts (localDateTimeToIso) on
+// 2026-08-17 when cvfd-news.ts became the second CivicPlus scraper needing it.
+const chinoDateTimeToIso = localDateTimeToIso;
 
 const NEWSFLASH_CATEGORIES = [
 	{ cid: "Chino-Spotlights-1", name: "Chino Spotlights" },

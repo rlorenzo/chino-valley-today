@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+	localDateTimeToIso,
 	parseRssItems,
 	rfc2822ToIso,
 	stripHtml,
@@ -123,5 +124,33 @@ describe("toArray", () => {
 		assert.deepEqual(toArray(["a", "b"]), ["a", "b"]);
 		assert.deepEqual(toArray(null), []);
 		assert.deepEqual(toArray(undefined), []);
+	});
+});
+
+describe("localDateTimeToIso", () => {
+	test("converts a Pacific summer datetime (PDT, UTC-7)", () => {
+		assert.equal(
+			localDateTimeToIso("August 18, 2026", "06:00 PM"),
+			"2026-08-19T01:00:00.000Z",
+		);
+	});
+
+	test("converts a Pacific winter datetime (PST, UTC-8)", () => {
+		assert.equal(
+			localDateTimeToIso("January 5, 2026", "06:00 PM"),
+			"2026-01-06T02:00:00.000Z",
+		);
+	});
+
+	test("a date without a time is local midnight", () => {
+		assert.equal(
+			localDateTimeToIso("August 18, 2026"),
+			"2026-08-18T07:00:00.000Z",
+		);
+	});
+
+	test("returns null on an unrecognized date rather than guessing", () => {
+		assert.equal(localDateTimeToIso("18 August 2026"), null);
+		assert.equal(localDateTimeToIso("Notamonth 5, 2026"), null);
 	});
 });

@@ -683,9 +683,20 @@ rejected** (reclassified under the 2026-08-17 scrape-policy clarification:
 its robots.txt blocks named AI crawlers, not our UA or general paths;
 mechanically permitted, but no feed was found and local coverage is thin).
 
-### Task 4.1 - Ingest the easy verified set
+### Task 4.1 - Ingest the easy verified set — DONE 2026-08-17
 
-`sbcfire-news` (WordPress RSS), `cvfd-news` + `cvfd-alerts` (CivicPlus RSS),
+Landed same day as planned: seven scrapers (216 items on first run), a shared
+Tribe-events core, new tests, SOURCES.md + dossiers, and timer-group
+assignments (fire/forecast → frequent, event calendars → daily). Deltas from
+the original scope sketch below: `cvfd-news` ingests News Flash + Alert
+Center + Calendar in one scraper (supersedes the separate `cvfd-alerts`
+key); the forecast ingests the daily gridpoint endpoint only (the hourly
+endpoint is deferred until a surface needs it); and all four event calendars
+use the Tribe REST API rather than ICS — same data, structured categories
+and per-occurrence ids included. All three CVFD feeds were empty on first
+run — expected; empty Alert Center is the desired steady state.
+
+Original scope: `sbcfire-news` (WordPress RSS), `cvfd-news` (CivicPlus RSS),
 `nws-forecast` (gridpoint daily + hourly), `sbclib-events` (Tribe REST API on
 library.sbcounty.gov, three venue IDs above), `yanksair-events` (ICS),
 `cbwcd-events` (ICS), `sbparks-events` (Tribe REST, Prado venue 1897). The

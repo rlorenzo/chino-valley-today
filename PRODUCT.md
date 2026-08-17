@@ -90,12 +90,19 @@ outlet's reporting as its own claim.
   Swagit video, CVUSD board listings, YouTube auto-captions for two channels,
   NWS alerts, California ABC license reports, San Bernardino County Sheriff
   news, and the Sheriff's Nixle channel via email subscription.
-- **Sources (planned, Phase 4 — probes not yet run; direction, not
-  capability):** NWS daily forecast (beyond active alerts), Chino Valley Fire
-  District / CAL FIRE incident data, CHP traffic incidents, secondary-press
-  RSS for headline aggregation (The Champion, Daily Bulletin, regional TV),
-  CIF-SS / school athletics results (team-level only), community and library
-  event calendars.
+- **Sources (7 more ingesting since 2026-08-17, Phase 4 Task 4.1):** NWS
+  daily forecast (both cities' gridpoints), San Bernardino County Fire news
+  RSS, Chino Valley Fire District feeds (news, alerts, calendar), and four
+  Tribe Events calendars — county library (three Chino Valley branches),
+  Prado Regional Park, Chino Basin Water Conservation District, and Yanks
+  Air Museum. SOURCES.md is the authoritative registry; counts here are a
+  snapshot.
+- **Sources (still planned, Phase 4 — direction, not capability):** CAL FIRE
+  incident data (endpoint unverified), secondary-press RSS for headline
+  aggregation (The Champion, Daily Bulletin, regional TV), CIF-SS / school
+  athletics results (team-level only), the JS-rendered calendars (CVUSD
+  district, Chaffey College, Shoppes at Chino Hills), and Ticketmaster
+  Discovery for ticketed regional events.
 - **Post types:** meeting previews, meeting recaps, business-tracker listings and
   narratives, news digests, alerts, and (Phase 4) the **daily brief** — a
   morning assembly of weather, overnight incidents, today's schedule, fresh
@@ -214,9 +221,11 @@ held, published, rejected.
 - No testimonials, quotes, endorsements, press mentions, or partner logos.
 - No masthead or named staff beyond the operator.
 - No pricing, subscription, licensing, or funding model has been decided.
-- None of the Phase 4 sources (forecast, fire/EMS, traffic, secondary-press
-  feeds, sports, events) is ingesting yet; no daily brief has ever been
-  assembled. The direction exists; the capability does not.
+- **No daily brief has ever been assembled**, and none of the new Phase 4
+  item types (forecast periods, fire news, events) renders on the public
+  site yet — the Task 4.1 sources ingest into the database only. Secondary
+  press, sports, CAL FIRE incidents, and the JS-rendered calendars are not
+  ingesting at all. The pipeline is ahead of the product surface.
 
 ## Product Principles
 
