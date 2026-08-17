@@ -124,11 +124,15 @@ published, rejected.
 
 **Explicitly undecided — do not invent:**
 
-- **Corrections contact.** EDITORIAL.md's required footer names a
-  `[corrections email]` placeholder and published posts currently say "see About
-  page". No corrections address or route exists yet.
-- **About page copy.** No text exists describing who runs this or how it works,
-  even though the post footer already points readers there.
+- ~~**Corrections contact.**~~ **Decided 2026-08-17:**
+  `corrections@chinovalley.today`, routed to the operator by Cloudflare Email
+  Routing. Published on the About page; the post footer keeps pointing there
+  rather than carrying the address, so the address can change without editing a
+  published post.
+- ~~**About page copy.**~~ **Written 2026-08-17** (`site/src/pages/about.astro`):
+  what the site is, how the tiers and gates work, how corrections are handled,
+  and where the material comes from. Carries live counts, no claims about
+  readership.
 - **CVUSD agenda-item depth.** CVUSD agenda PDFs are served from
   `files.smartsites.parentsquare.com`, whose robots.txt is a blanket
   `Disallow: /`. The scraper honors it, so CVUSD coverage is listing-level only

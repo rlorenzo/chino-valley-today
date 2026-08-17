@@ -67,6 +67,12 @@ reviewer. Changes to this file are editorial decisions — date them.
 
 - Corrections are visible: strikethrough + dated correction note on the post.
   Never silent edits. Substantive corrections get a note in the next digest.
+- The corrections address is `corrections@chinovalley.today` (decided
+  2026-08-17, routed to the operator by Cloudflare Email Routing).
 - Every post footer: "Generated from public records with automated review;
-  see sources linked above. Corrections: [corrections email]."
+  see sources linked above. Corrections: see About page." The footer points at
+  the About page rather than carrying the address inline, deliberately: the
+  address can then change without editing a single published post, which this
+  document forbids doing silently. The About page is where the address is
+  published.
 - A correction to a Tier B post counts as an audit miss for gate-tightening.
