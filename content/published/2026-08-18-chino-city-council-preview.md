@@ -11,10 +11,13 @@ sources:
 **This meeting has been CANCELLED** ([city calendar](https://www.cityofchino.org/Calendar.aspx?EID=1835)).
 
 - **Date:** August 18, 2026 ([calendar](https://www.cityofchino.org/Calendar.aspx?EID=1835))
-- **Time:** 06:00 PM - 11:59 PM ([calendar](https://www.cityofchino.org/Calendar.aspx?EID=1835))
-- **Location:** 13220 Central AvenueChino, CA 91710 ([calendar](https://www.cityofchino.org/Calendar.aspx?EID=1835))
+- **Time:** 06:00 PM ([calendar](https://www.cityofchino.org/Calendar.aspx?EID=1835))
+- **Location:** 13220 Central Avenue, Chino, CA 91710 ([calendar](https://www.cityofchino.org/Calendar.aspx?EID=1835))
 
 [City calendar entry](https://www.cityofchino.org/Calendar.aspx?EID=1835)
+
+
+*Correction, 2026-08-16: an earlier version of this preview showed this meeting ending at 11:59 PM and ran the street and city together in the location. Those were artifacts of the city calendar feed's own formatting, not facts about the meeting.*
 
 ---
 
