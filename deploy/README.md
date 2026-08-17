@@ -195,8 +195,8 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 
 | Unit | Schedule (Pacific) | Sources |
 | --- | --- | --- |
-| `cvt-scrape-frequent` | hourly at :17 | news RSS, NWS alerts, sheriff, Nixle mail |
-| `cvt-scrape-daily` | 05:40 | Legistar, Agenda Center, AgendaQuick, CVUSD, ABC |
+| `cvt-scrape-frequent` | hourly at :17 | news RSS, NWS alerts + forecast, fire feeds, sheriff, Nixle mail |
+| `cvt-scrape-daily` | 05:40 | Legistar, Agenda Center, AgendaQuick, CVUSD, ABC, event calendars |
 | `cvt-scrape-media` | 07:30 | Swagit video, YouTube captions |
 | `cvt-brief` | 06:00 | daily brief assembly + site rebuild (no scraping) |
 | `cvt-backup` | 02:20 | rclone → B2 |

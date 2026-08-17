@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS documents (
 CREATE TABLE IF NOT EXISTS posts (
   id INTEGER PRIMARY KEY,
   slug TEXT UNIQUE NOT NULL,
-  post_type TEXT NOT NULL,           -- 'meeting_preview','meeting_recap','business_tracker','alert','news_digest'
+  post_type TEXT NOT NULL,           -- 'meeting_preview','meeting_recap','business_tracker',
+                                     -- 'business_narrative','alert','news_digest','daily-brief'
   tier TEXT NOT NULL CHECK (tier IN ('A','B','C')),
   status TEXT NOT NULL DEFAULT 'queued',  -- 'queued','held','published','rejected'
   file_path TEXT NOT NULL,           -- content/... location (moves with status)
