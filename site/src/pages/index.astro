@@ -1,0 +1,142 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../layouts/Base.astro";
+import Entry from "../components/Entry.astro";
+import {
+	TOPICS,
+	formatDate,
+	publishedOnly,
+	topicsFor,
+} from "../lib/record.ts";
+
+const posts = publishedOnly(await getCollection("posts"));
+
+// Real counts and real dates. A topic with nothing in it says so, because this
+// is a record and an empty shelf is information.
+const marks = TOPICS.map((t) => {
+	const inTopic = posts.filter((p) => topicsFor(p).includes(t.slug));
+	return {
+		...t,
+		count: inTopic.length,
+		last: inTopic[0]?.data.date ?? null,
+	};
+});
+---
+
+<Base
+	title="Chino Valley Today — the public record of Chino & Chino Hills"
+	description="What the Chino and Chino Hills city councils, the CVUSD board, and the commissions actually did — every claim linked to the primary record."
+	current="record"
+>
+	<section class="lede">
+		<div class="shell lede__inner">
+			<p class="lede__text">
+				What the councils, the school board, and the commissions actually did.
+				Every claim carries the record it came from.
+			</p>
+		</div>
+	</section>
+
+	<section class="shell" aria-labelledby="topics-heading">
+		<h2 id="topics-heading" class="sr-only">Topics</h2>
+		<div class="marks">
+			{
+				marks.map((m) => (
+					<a class="markcard" href={`/topics/${m.slug}/`}>
+						<span class="markcard__name mark">{m.name}</span>
+						<span class="markcard__blurb">{m.blurb}</span>
+						<span class="markcard__meta mark">
+							<span>
+								{m.count} {m.count === 1 ? "item" : "items"}
+							</span>
+							<span>{m.last ? formatDate(m.last) : "none yet"}</span>
+						</span>
+					</a>
+				))
+			}
+		</div>
+	</section>
+
+	<section class="shell record-section" aria-labelledby="record-heading">
+		<div class="record-head">
+			<h2 id="record-heading" class="mark">The record</h2>
+			<p class="record-count mark">
+				{posts.length} {posts.length === 1 ? "entry" : "entries"}
+			</p>
+		</div>
+
+		{
+			posts.length === 0 ? (
+				<p class="empty">
+					Nothing has been published yet. When a meeting is covered, it appears
+					here with its sources attached.
+				</p>
+			) : (
+				<ol class="record">
+					{posts.map((post) => (
+						<Entry post={post} />
+					))}
+				</ol>
+			)
+		}
+	</section>
+</Base>
+
+<style>
+	.lede {
+		background: var(--galv-sunk);
+		border-bottom: 1px solid var(--galv-edge);
+	}
+	.lede__inner {
+		padding-block: 1.6rem 1.7rem;
+	}
+	.lede__text {
+		margin: 0;
+		max-width: 44rem;
+		font-size: clamp(1.15rem, 1.02rem + 0.75vw, 1.5rem);
+		line-height: 1.38;
+	}
+	.marks {
+		margin-top: 2rem;
+	}
+	.markcard__blurb {
+		font-size: 0.82rem;
+		line-height: 1.4;
+		color: #cdd8ec;
+	}
+	.record-section {
+		margin-top: 3.2rem;
+	}
+	.record-head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 0.7rem;
+	}
+	.record-head h2 {
+		margin: 0;
+		font-size: 0.82rem;
+		letter-spacing: 0.14em;
+	}
+	.record-count {
+		margin: 0;
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+	.empty {
+		border: 2px dashed var(--galv-edge);
+		padding: 2rem;
+		color: var(--muted);
+		text-align: center;
+	}
+	.sr-only {
+		position: absolute;
+		width: 1px;
+		height: 1px;
+		overflow: hidden;
+		clip: rect(0 0 0 0);
+		white-space: nowrap;
+	}
+</style>

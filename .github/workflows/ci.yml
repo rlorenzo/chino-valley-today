@@ -45,6 +45,20 @@ jobs:
         # rather than quietly reformatting in CI.
         run: npm run lint
 
+      # Biome has no markdown parser, and this repo is documentation-heavy: the
+      # per-source dossiers in reports/notes are the record of how each scraper
+      # was built. Config-driven (.markdownlint-cli2.jsonc), which is also where
+      # content/published is excluded — those are pipeline output and EDITORIAL.md
+      # forbids editing a published post for style.
+      - name: Lint markdown
+        run: npm run lint:md
+
+      # shellcheck ships in the ubuntu-latest runner image, so there is nothing
+      # to install. Unconditional here, unlike the pre-commit hook, which skips
+      # it when a contributor has not installed it locally.
+      - name: Lint shell
+        run: npm run lint:sh
+
       - name: Test with coverage
         run: npm run coverage
 

@@ -70,10 +70,12 @@ Target meeting: **video 393508, "City Council Meeting", 2026-07-14**, 1h28m,
 threshold — no truncation needed this run).
 
 Final counts, clean-DB run:
-```
+
+```json
 Run 1: {"documentsFetched":2,"documentsNew":2,"itemsSeen":1084,"itemsNew":1084}
 Run 2: {"documentsFetched":2,"documentsNew":1,"itemsSeen":1084,"itemsNew":0}
 ```
+
 Both runs completed in ~35 seconds, well inside the ~4-minute budget.
 
 ## A real idempotency bug found and fixed during this run
@@ -152,6 +154,7 @@ once with `?ts=120` — and diffs the two server responses:
 - **Without `?ts=`**, the page's on-play seek initializer (present twice: one
   block for a `video.js` player path, one for a `jwplayer` fallback path)
   reads a URL **hash fragment**, not a query param:
+
   ```js
   if (location.hash) {
     hash = location.hash.replace(/^#/, '').replace(/^&start=/, '');
@@ -159,6 +162,7 @@ once with `?ts=120` — and diffs the two server responses:
     jwplayer("player").seek(hash);   // (and the video.js path: player.currentTime(hash))
   }
   ```
+
 - **With `?ts=120`**, the server-rendered HTML is different: both of those
   blocks are replaced outright with a hardcoded call —
   `jwplayer("player").seek(120);` and `player.currentTime(120);` — baked
@@ -245,7 +249,7 @@ skipped for anything sourced from these transcripts:
 
 ## Spot-checked source_urls (curl -sI)
 
-```
+```text
 https://chinohillsca.new.swagit.com/videos/393508?ts=5      -> HTTP/2 200
 https://chinohillsca.new.swagit.com/videos/393508?ts=2030   -> HTTP/2 200
 https://chinohillsca.new.swagit.com/videos/393508?ts=5306   -> HTTP/2 200

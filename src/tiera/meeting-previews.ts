@@ -144,6 +144,33 @@ function upcomingEvents(
 	return { upcoming, total: events.length };
 }
 
+// The City of Chino's calendar feed publishes two rendering artifacts that are
+// its own, not ours. The raw archive keeps them verbatim (faithful archive);
+// these normalise at the PUBLISHING layer, which is where EDITORIAL.md says the
+// rules bite.
+//
+// 1. Location arrives with the street run into the city: "13220 Central
+//    AvenueChino, CA 91710" — their HTML-to-text lost a line break.
+// 2. An end time of 11:59 PM is their convention for "no end specified", not a
+//    six-hour meeting. Publishing it as a real end time states something the
+//    source does not mean.
+const STREET_SUFFIX =
+	/(Avenue|Ave|Street|St|Boulevard|Blvd|Drive|Dr|Road|Rd|Way|Lane|Ln|Court|Ct|Place|Pl|Parkway|Pkwy)(?=[A-Z])/g;
+
+export function normalizeLocation(raw: string | null): string | null {
+	if (!raw) return null;
+	return raw
+		.replace(STREET_SUFFIX, "$1, ")
+		.replace(/\s{2,}/g, " ")
+		.trim();
+}
+
+export function normalizeTimes(raw: string | null): string | null {
+	if (!raw) return null;
+	const openEnded = raw.match(/^(.*?)\s*[-–]\s*11:59\s*PM\s*$/i);
+	return (openEnded ? openEnded[1] : raw).trim() || null;
+}
+
 // meta values arrive as unknown from JSON; every caller wants "the string, or
 // nothing". Repeating the typeof guard inline obscured the branching in the
 // preview builders.
@@ -234,8 +261,8 @@ function genChinoCalendarPreviews(
 			cancelled,
 			sourceUrl: row.source_url,
 			eventDates,
-			eventTimes: metaString(meta, "eventTimes"),
-			location: metaString(meta, "location"),
+			eventTimes: normalizeTimes(metaString(meta, "eventTimes")),
+			location: normalizeLocation(metaString(meta, "location")),
 			matched,
 		});
 

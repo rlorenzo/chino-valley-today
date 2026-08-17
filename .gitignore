@@ -7,3 +7,14 @@ content/queue/
 content/held/
 content/rejected/
 .fallow/
+
+# Astro build output and caches (the built site is rsynced, not committed)
+site/dist/
+site/.astro/
+site/node_modules/
+
+# Local screenshot scratch from design review tooling
+.playwright-mcp/
+
+# Transient decision-page state from design tooling
+.impeccable/questions/

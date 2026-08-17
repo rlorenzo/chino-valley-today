@@ -7,7 +7,7 @@ localhost-bound) and the EDITORIAL.md Tier C enforcement rule. Owns
 
 ## How to run it
 
-```
+```bash
 node src/admin/server.ts
 ```
 
@@ -165,6 +165,7 @@ requires an explicit per-item acknowledgment. No exceptions."*
 - The `required` HTML attribute is a UX nicety, not the enforcement — a raw
   `curl -X POST` bypasses it entirely. The actual enforcement is server-side
   in `app.ts`'s `POST /posts/:slug/approve` handler:
+
   ```ts
   if (post.tier === 'C' && str(form.ack) !== '1') {
     return c.text('Tier C approve rejected: required acknowledgment checkbox
@@ -172,6 +173,7 @@ requires an explicit per-item acknowledgment. No exceptions."*
       checked.', 400);
   }
   ```
+
 - Verified directly (see below): POSTing approve for a Tier C held post with
   no `ack` field returns `HTTP 400` and the post's `status`/`file_path` are
   unchanged (still `held`, file still under `content/held/`). POSTing again

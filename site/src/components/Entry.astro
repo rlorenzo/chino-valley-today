@@ -1,0 +1,91 @@
+---
+import type { Post } from "../lib/record.ts";
+import {
+	TOPICS,
+	dek,
+	formatDate,
+	sourceHost,
+	topicsFor,
+	typeLabel,
+} from "../lib/record.ts";
+
+interface Props {
+	post: Post;
+}
+
+const { post } = Astro.props;
+const topics = topicsFor(post);
+const hosts = [...new Set(post.data.sources.map(sourceHost))];
+const summary = dek(post);
+---
+
+<li class="entry">
+	<time class="entry__date mark" datetime={post.data.date.toISOString()}>
+		{formatDate(post.data.date)}
+	</time>
+
+	<h3 class="entry__title">
+		<a href={`/posts/${post.id}/`}>{post.data.title}</a>
+	</h3>
+
+	{summary && <p class="entry__dek">{summary}</p>}
+
+	<p class="entry__meta">
+		<span class="mark type">{typeLabel(post.data.post_type)}</span>
+
+		{
+			topics.map((slug) => {
+				const t = TOPICS.find((x) => x.slug === slug);
+				return t ? (
+					<a class="chip" href={`/topics/${t.slug}/`}>
+						{t.name}
+					</a>
+				) : null;
+			})
+		}
+
+		{post.data.tier === "C" && <span class="chip chip--c">Reviewed by hand</span>}
+
+		{/*
+		  The stamp on an entry names the authority the whole post is checked
+		  against. Violet appears here and nowhere else on this row, so a reader
+		  scanning the record can see at a glance that every line has a source.
+		*/}
+		{
+			hosts.slice(0, 2).map((h) => (
+				<span class="stamp">{h}</span>
+			))
+		}
+		{hosts.length > 2 && <span class="stamp">+{hosts.length - 2}</span>}
+	</p>
+</li>
+
+<style>
+	/* The reason to click. A title alone tells a resident nothing about what
+	   their government did, which is the whole job of this list. */
+	.entry__dek {
+		grid-column: 2;
+		margin: 0.35rem 0 0;
+		font-size: 0.95rem;
+		line-height: 1.5;
+		color: var(--muted);
+		max-width: 46rem;
+	}
+
+	@media (max-width: 40rem) {
+		.entry__dek {
+			grid-column: 1;
+		}
+	}
+
+	.type {
+		font-size: 0.68rem;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+	/* On a list row the stamp is a label, not a link: the links live on the
+	   post itself, where a reader can follow them in context. */
+	.entry__meta .stamp {
+		cursor: default;
+	}
+</style>

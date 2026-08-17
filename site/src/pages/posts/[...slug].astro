@@ -1,0 +1,304 @@
+---
+import { getCollection, render } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import {
+	TOPICS,
+	formatDateLong,
+	sourceHost,
+	topicsFor,
+	typeLabel,
+} from "../../lib/record.ts";
+
+export async function getStaticPaths() {
+	const posts = await getCollection("posts");
+	return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+const { Content } = await render(post);
+const topics = topicsFor(post);
+---
+
+<Base
+	title={`${post.data.title} — Chino Valley Today`}
+	description={`${typeLabel(post.data.post_type)} — ${post.data.title}. Every claim linked to the primary record.`}
+	current="record"
+>
+	<article>
+		<header class="posthead">
+			<div class="shell posthead__inner">
+				<h1 class="posthead__title">{post.data.title}</h1>
+				<p class="posthead__date mark">
+					<span>{typeLabel(post.data.post_type)}</span>
+					{
+						post.data.meeting_date && (
+							<span>Meeting {post.data.meeting_date}</span>
+						)
+					}
+					<time datetime={post.data.date.toISOString()}>
+						Published {formatDateLong(post.data.date)}
+					</time>
+				</p>
+				{
+					topics.length > 0 && (
+						<p class="posthead__topics">
+							{topics.map((slug) => {
+								const t = TOPICS.find((x) => x.slug === slug);
+								return t ? (
+									<a class="chip chip--on-crate" href={`/topics/${t.slug}/`}>
+										{t.name}
+									</a>
+								) : null;
+							})}
+						</p>
+					)
+				}
+			</div>
+		</header>
+
+		<div class="reading body">
+			<div class="prose">
+				<Content />
+			</div>
+
+			{/*
+			  THE INSPECTION RECORD.
+
+			  This is the "deep on demand" half of the layered answer: the post
+			  above reads clean for a two-minute skim, and anyone checking a line
+			  opens this. It is a native <details>, so it works with zero JS, is
+			  keyboard operable, and is findable by in-page search when open.
+			*/}
+			<section class="inspection" aria-labelledby="sources-heading">
+				<details>
+					<summary>
+						<svg
+							class="inspection__caret"
+							viewBox="0 0 12 12"
+							width="11"
+							height="11"
+							aria-hidden="true"
+							focusable="false"
+						>
+							<path
+								d="M3 1.5 L9 6 L3 10.5"
+								fill="none"
+								stroke="currentColor"
+								stroke-width="2"
+							/>
+						</svg>
+						<span class="inspection__label mark" id="sources-heading">
+							Inspection record
+						</span>
+						<span class="inspection__count mark">
+							{post.data.sources.length}
+							{post.data.sources.length === 1 ? " source" : " sources"}
+						</span>
+					</summary>
+
+					<div class="inspection__body">
+						<p class="inspection__note">
+							Every claim above is drawn from these records. Follow any one to
+							the primary document and check it.
+						</p>
+						<ol class="inspection__list">
+							{
+								post.data.sources.map((src) => (
+									<li>
+										<a class="stamp" href={src} rel="noopener noreferrer">
+											{sourceHost(src)}
+										</a>
+										<a class="inspection__url" href={src} rel="noopener noreferrer">
+											{src}
+										</a>
+									</li>
+								))
+							}
+						</ol>
+						<p class="inspection__tier mark">
+							{
+								post.data.tier === "A"
+									? "Tier A — rendered from structured data, no model involved."
+									: post.data.tier === "B"
+										? "Tier B — passed automated citation, numeric and name checks, then a second-model review."
+										: "Tier C — cleared by a human, by hand, with an explicit acknowledgment."
+							}
+						</p>
+					</div>
+				</details>
+			</section>
+
+			<nav class="postnav mark" aria-label="Record">
+				<a href="/">
+					<svg
+						viewBox="0 0 12 12"
+						width="11"
+						height="11"
+						aria-hidden="true"
+						focusable="false"
+					>
+						<path
+							d="M9 1.5 L3 6 L9 10.5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+						/>
+					</svg>
+					All entries
+				</a>
+			</nav>
+		</div>
+	</article>
+</Base>
+
+<style>
+	.posthead {
+		background: var(--crate);
+		color: #fff;
+		border-bottom: 6px solid var(--placard);
+	}
+	.posthead__inner {
+		padding-block: 1.9rem 2.1rem;
+		max-width: 46rem;
+	}
+	.posthead__title {
+		margin: 0;
+		font-size: clamp(1.6rem, 1.2rem + 2.1vw, 2.6rem);
+		line-height: 1.14;
+		font-weight: 600;
+		letter-spacing: -0.006em;
+	}
+	.posthead__date {
+		margin: 0.95rem 0 0;
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		color: #cdd8ec;
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem 1.1rem;
+	}
+	.posthead__topics {
+		margin: 1rem 0 0;
+		display: flex;
+		gap: 0.4rem;
+		flex-wrap: wrap;
+	}
+	.chip--on-crate {
+		border-color: var(--placard);
+		color: var(--placard);
+	}
+	.chip--on-crate:hover {
+		background: var(--placard);
+		color: var(--stencil);
+	}
+
+	.body {
+		padding-block: 2.4rem 1rem;
+	}
+
+	.inspection {
+		margin-top: 3rem;
+		border-top: 2px solid var(--stamp);
+	}
+	.inspection summary {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.85rem 0;
+		cursor: pointer;
+		list-style: none;
+	}
+	.inspection summary::-webkit-details-marker {
+		display: none;
+	}
+	.inspection__label {
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--stamp);
+	}
+	.inspection__caret {
+		color: var(--stamp);
+		flex: none;
+		transition: rotate 120ms linear;
+		align-self: center;
+	}
+	.inspection details[open] .inspection__caret,
+	details[open] .inspection__caret {
+		rotate: 90deg;
+	}
+	.inspection__count {
+		margin-left: auto;
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+	.inspection__body {
+		padding-bottom: 1.6rem;
+	}
+	.inspection__note {
+		margin: 0 0 1rem;
+		font-size: 0.92rem;
+		color: var(--muted);
+	}
+	/* Ledger lines, not a left accent bar: a record separates its entries with
+	   a rule across, the way a recorded-document register does. */
+	.inspection__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		counter-reset: source;
+		border-top: 1px solid var(--galv-edge);
+	}
+	.inspection__list li {
+		counter-increment: source;
+		display: grid;
+		grid-template-columns: 1.6rem 1fr;
+		gap: 0.25rem 0.6rem;
+		padding-block: 0.8rem;
+		border-bottom: 1px solid var(--galv-edge);
+	}
+	.inspection__list li::before {
+		content: counter(source, decimal-leading-zero);
+		grid-row: 1 / span 2;
+		font-family: "Archivo Narrow", "Arial Narrow", sans-serif;
+		font-weight: 700;
+		font-size: 0.72rem;
+		color: var(--muted);
+		padding-top: 0.28rem;
+	}
+	.inspection__list .stamp {
+		justify-self: start;
+	}
+	.inspection__url {
+		font-size: 0.76rem;
+		color: var(--muted);
+		word-break: break-all;
+		line-height: 1.4;
+	}
+	.inspection__tier {
+		margin: 1.4rem 0 0;
+		font-size: 0.7rem;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+		border-top: 1px solid var(--galv-edge);
+		padding-top: 0.8rem;
+	}
+
+	.postnav {
+		margin-top: 2.4rem;
+		padding-top: 1.2rem;
+		border-top: 1px solid var(--galv-edge);
+		font-size: 0.76rem;
+		letter-spacing: 0.08em;
+	}
+	.postnav a {
+		text-decoration: none;
+		color: var(--crate);
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+	.postnav a:hover {
+		text-decoration: underline;
+	}
+</style>

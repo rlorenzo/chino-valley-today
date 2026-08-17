@@ -35,11 +35,13 @@ output, Steps 1-4):
 4. **Agenda Quick is NOT blocked** — this took a live-verification catch to
    confirm. Its `robots.txt` file reads, on casual inspection, like a
    blanket block:
-   ```
+
+   ```text
    # To ban all spiders from the entire site uncomment the next two lines:
    # User-agent: *
    # Disallow: /
    ```
+
    Both directive lines are commented out — this is the unmodified default
    template from the underlying framework, left as-is. It has **zero active
    directives**. My first manual pass over this file (via `curl`) misread it
@@ -199,7 +201,7 @@ enrich stored item bodies.
   `/m/newsflash/home/detail/N` URLs; handled transparently by
   `redirect: 'follow'`.
 - Agenda Quick (`agendaquick.chinohills.org:8086`): plain `Microsoft-IIS/10.0`
-  + ASP.NET/ColdFusion (`.cfm`) responses, no unusual headers. PDF responses
+  - ASP.NET/ColdFusion (`.cfm`) responses, no unusual headers. PDF responses
   *do* carry `ETag`/`Last-Modified`/`Accept-Ranges: bytes` (unlike the
   CivicPlus RSS endpoints) — genuine conditional-GET support, though not
   exercised across runs in this POC since content didn't change between the

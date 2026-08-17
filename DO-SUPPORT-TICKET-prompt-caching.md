@@ -8,11 +8,11 @@ Status: FILED with DO support 2026-08-13. Kept for the record. File under Produc
 
 Hello,
 
-I run a small pipeline that generates local news recaps from city council transcripts. Each run sends the same ~74k-token prompt to `deepseek-4-flash` at `inference.do-ai.run`, sometimes several times a day while I'm debugging. Your docs say caching for open-source models just works, no `cache_control` needed (https://docs.digitalocean.com/products/inference/how-to/use-prompt-caching/). I've never gotten a single cached token back. What made me dig in is that `cache_created_input_tokens` is always 0 too. It's not that my requests miss the cache, nothing ever gets written to it in the first place.
+I run a small pipeline that generates local news recaps from city council transcripts. Each run sends the same ~74k-token prompt to `deepseek-4-flash` at `inference.do-ai.run`, sometimes several times a day while I'm debugging. Your docs say caching for open-source models just works, no `cache_control` needed (<https://docs.digitalocean.com/products/inference/how-to/use-prompt-caching/>). I've never gotten a single cached token back. What made me dig in is that `cache_created_input_tokens` is always 0 too. It's not that my requests miss the cache, nothing ever gets written to it in the first place.
 
 Here are two runs from today, about two hours apart. Same prompt both times, and you can see the token counts match exactly:
 
-```
+```json
 {"cache_created_input_tokens":0,"cache_read_input_tokens":0,"completion_tokens":1914,"prompt_tokens":74671,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":76585}
 {"cache_created_input_tokens":0,"cache_read_input_tokens":0,"completion_tokens":1888,"prompt_tokens":74671,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":76559}
 ```

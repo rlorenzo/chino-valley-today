@@ -70,7 +70,7 @@ platform CVUSD deliberately adopted.
 
 `files.smartsites.parentsquare.com/robots.txt`:
 
-```
+```text
 User-agent: Googlebot-Image
 Allow: /
 
@@ -147,6 +147,7 @@ shipped scraper does at runtime.
 ## What was ingested
 
 **`cvusd-board`** (per real run against the project DB):
+
 - 2 documents (`doc_type: 'listing'`): the current-year page (`/224768_2`,
   redirects to `/136685_3`) and the 2025/2026 page (`/253390_3`).
 - 19 items (`item_type: 'event'`), one per meeting row across both listing
@@ -160,6 +161,7 @@ shipped scraper does at runtime.
 - 0 `agenda_item` rows (blocked — see above).
 
 **`youtube-captions`**:
+
 - 1 document (`doc_type: 'captions'`): the July 16, 2026 board meeting video
   (`hRO51ueaqb4`), archived as raw VTT bytes via `saveRaw`.
 - 131 items (`item_type: 'transcript_segment'`), `external_id:
@@ -171,19 +173,23 @@ shipped scraper does at runtime.
 ## yt-dlp commands used
 
 1. **List recent uploads** (channel, not per-video — avoids extra calls):
-   ```
+
+   ```bash
    yt-dlp --flat-playlist --print "%(id)s|%(title)s|%(duration_string)s" \
      --playlist-end 15 https://www.youtube.com/channel/UCWKinB4PTb_uskobmwBF8pw
    ```
+
    `--flat-playlist` conveniently exposes `duration_string` without a
    separate full-metadata call per video (`upload_date` is `"NA"` in flat
    mode, which is why selection uses the date parsed out of each title
    instead — see below).
 2. **Download auto-captions for the chosen video only**:
-   ```
+
+   ```bash
    yt-dlp --skip-download --write-auto-sub --sub-format vtt --sub-langs en \
      -o "<tmpdir>/%(id)s" https://www.youtube.com/watch?v=hRO51ueaqb4
    ```
+
    yt-dlp appends `.en.vtt`, confirmed (`<tmpdir>/hRO51ueaqb4.en.vtt`).
 
 Total yt-dlp invocations per run: **2** when a fresh video needs captions

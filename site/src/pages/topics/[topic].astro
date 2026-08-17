@@ -1,0 +1,99 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import Entry from "../../components/Entry.astro";
+import { TOPICS, publishedOnly, topicsFor } from "../../lib/record.ts";
+
+export async function getStaticPaths() {
+	const posts = publishedOnly(await getCollection("posts"));
+	return TOPICS.map((topic) => ({
+		params: { topic: topic.slug },
+		props: {
+			topic,
+			posts: posts.filter((p) => topicsFor(p).includes(topic.slug)),
+		},
+	}));
+}
+
+const { topic, posts } = Astro.props;
+---
+
+<Base
+	title={`${topic.name} — Chino Valley Today`}
+	description={`${topic.blurb} Every claim linked to the primary record.`}
+	current="topics"
+>
+	<header class="topichead">
+		<div class="shell topichead__inner">
+			<h1 class="topichead__name mark">{topic.name}</h1>
+			<p class="topichead__blurb">{topic.blurb}</p>
+			<p class="topichead__count mark">
+				{posts.length}
+				{posts.length === 1 ? " entry" : " entries"}
+			</p>
+		</div>
+	</header>
+
+	<div class="shell topicbody">
+		{
+			posts.length === 0 ? (
+				<p class="empty">
+					Nothing filed under {topic.name} yet. When a meeting covers it, the
+					entry appears here with its sources attached.
+					<a href="/">See the whole record</a>
+				</p>
+			) : (
+				<ol class="record">
+					{posts.map((post) => (
+						<Entry post={post} />
+					))}
+				</ol>
+			)
+		}
+	</div>
+</Base>
+
+<style>
+	.topichead {
+		background: var(--crate);
+		color: #fff;
+		border-bottom: 6px solid var(--placard);
+	}
+	.topichead__inner {
+		padding-block: 1.8rem 2rem;
+		max-width: 44rem;
+	}
+	.topichead__name {
+		margin: 0;
+		font-size: clamp(2rem, 1.4rem + 3.2vw, 3.6rem);
+		letter-spacing: 0.02em;
+		line-height: 0.98;
+	}
+	.topichead__blurb {
+		margin: 0.9rem 0 0;
+		font-size: 1.05rem;
+		color: #cdd8ec;
+		max-width: 34rem;
+	}
+	.topichead__count {
+		margin: 1rem 0 0;
+		font-size: 0.72rem;
+		letter-spacing: 0.12em;
+		color: var(--placard);
+	}
+	.topicbody {
+		margin-top: 2.4rem;
+	}
+	.empty {
+		border: 2px dashed var(--galv-edge);
+		padding: 2.2rem;
+		color: var(--muted);
+		text-align: center;
+		display: grid;
+		gap: 0.9rem;
+		justify-items: center;
+	}
+	.empty a {
+		color: var(--crate);
+	}
+</style>

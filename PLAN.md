@@ -26,6 +26,7 @@ banked: the raw archive has no backup until Phase 2 — interim backup job is a
 recommended next step.
 
 **Phase 1: functionally COMPLETE.**
+
 - Infrastructure (commits 2598a8d..6bf3f1d): EDITORIAL.md; post lifecycle +
   posts/audit_log; Tier A generators (5 real posts); Gate 1 validators;
   Gate 2 cross-family judge (qwen3.5, glm-5.2 backup) with Tier C routing;
@@ -46,7 +47,7 @@ recommended next step.
   names, covered by the Gate 2 judge.
 - **Nixle email ingester LIVE** (sbsheriff-nixle-mail, commits c61185e,
   639c7d6) — completes amended Task 0.9. Mailbox
-  chinovalleytoday+nixle@gmail.com subscribed; IMAP read-only polling;
+  <chinovalleytoday+nixle@gmail.com> subscribed; IMAP read-only polling;
   ingests only nixle.us-permalink-carrying messages (provenance rule),
   everything Tier C. First live poll verified; first real alert (~1-2 wk
   cadence) will validate email-template assumptions.
@@ -78,7 +79,7 @@ recommended next step.
 **Phase 2/3: not started** (static site + droplet; podcast + growth).
 Interim backup landed 2026-08-14: `npm run backup` (scripts/interim-backup.sh)
 snapshots the DB (WAL-safe .backup + integrity check), data/raw, .env, and
-content/ working state to ~/Backups/chino-valley-today/<date>/ (override with
+content/ working state to `~/Backups/chino-valley-today/<date>/` (override with
 CVT_BACKUP_DIR; point it at a cloud-synced folder for offsite). Run it after
 scrape/review sessions. Phase 2 still owes the proper nightly offsite job.
 
@@ -129,7 +130,7 @@ scrape/review sessions. Phase 2 still owes the proper nightly offsite job.
   be repointed (including to Anthropic) without code changes
 - Static site: Astro (Phase 2). Content-first SSG: content collections with typed
   frontmatter, zero client JS by default, official RSS/sitemap integrations,
-  Pagefind-friendly for later search. Island policy: vanilla <script> modules by
+  Pagefind-friendly for later search. Island policy: vanilla `<script>` modules by
   default; Solid (@astrojs/solid-js) only if a widget ever earns a framework.
   Not a POC concern.
 - Scheduling: systemd timers on the droplet (better logging/failure visibility than cron)
@@ -137,7 +138,7 @@ scrape/review sessions. Phase 2 still owes the proper nightly offsite job.
 
 ## Repo layout
 
-```
+```text
 chinovalley-today/
   PLAN.md
   SOURCES.md              # living registry of sources, endpoints, quirks
@@ -207,6 +208,7 @@ CREATE TABLE items (
 ```
 
 Notes:
+
 - `items.source_url` is the deepest stable link available: Legistar item permalink,
   news release permalink, YouTube URL with `t=` offset for transcript segments,
   ABC license detail URL, PDF URL (with `#page=N` fragment where viewers honor it).
@@ -234,6 +236,7 @@ imports. Record findings in a SOURCES.md "Prior art" section: per repo, what
 was learned, what was ported, license.
 
 Reading map (repo -> which of our tasks it informs):
+
 - biglocalnews/civic-scraper -> Tasks 0.2, 0.3, 0.4. Platform classes for
   CivicPlus, Legistar, Granicus, CivicClerk, PrimeGov. Read the civicplus
   module for Agenda Center URL patterns, asset-type taxonomy, and date handling
@@ -256,6 +259,7 @@ Reading map (repo -> which of our tasks it informs):
   names in transcripts - directly relevant to Gate 1c (proper-name whitelist).
 
 Contribution targets (for the public repo, after POC stabilizes):
+
 - Swagit transcript extractor (Task 0.5) - no maintained OSS equivalent exists;
   ours becomes the reference implementation.
 - The gating layer (validators + cross-family judge + tiered publishing) as a
@@ -313,7 +317,7 @@ PDFs same as 0.2.
 
 ### Task 0.5 - Chino Hills Swagit transcripts
 
-Council videos live at chinohillsca.new.swagit.com (e.g. /videos/<id>). Pages embed
+Council videos live at chinohillsca.new.swagit.com (e.g. `/videos/<id>`). Pages embed
 full machine transcripts. For POC: fetch the most recent council meeting page,
 extract transcript text and any timestamp anchors, store as transcript_segment items
 with source_url pointing at the Swagit video URL (append timestamp params if the
@@ -345,7 +349,8 @@ Requires User-Agent header.
 ### Task 0.8 - ABC license activity (business early-warning)
 
 California ABC publishes license query and activity reports:
-- Query system: www.abc.ca.gov/licensing/license-lookup/
+
+- Query system: <www.abc.ca.gov/licensing/license-lookup/>
 - Reports: status changes and new applications, filterable by county; filter city
   Chino / Chino Hills client-side.
 For POC: fetch one recent report for San Bernardino County, filter rows to
@@ -375,6 +380,7 @@ type, status, premises_address, primary_name}. source_url = per-license detail p
 
 `npm run poc` executes all scrapers (each independently try/caught; one failure
 must not kill the run), then renders `reports/poc.html`:
+
 - Per source: method, HTTP behaviors (ETag support? robots.txt rules?), item count,
   5-10 sample items each showing title, occurred_at, and a clickable source_url,
   extraction-quality notes (esp. PDF text quality and caption accuracy on names),
@@ -383,6 +389,7 @@ must not kill the run), then renders `reports/poc.html`:
   (document-level vs item-level vs timestamp-level).
 
 Acceptance criteria for Phase 0:
+
 - [ ] Legistar API question answered definitively
 - [ ] Every stored item has a working source_url (spot-check 3 per source by hand)
 - [ ] At least one full recent Chino council meeting represented as items
@@ -404,6 +411,7 @@ No scheduling. Run by hand.
   (weekly, from ABC + planning items), Alert (NWS/PD, as needed).
 
 ### Tier A: template-rendered, auto-publish
+
 Structured data through deterministic templates; zero LLM in the path.
 Covers: NWS alerts, meeting previews (date/time/location + agenda item titles
 verbatim from source), ABC license event listings, city release headline+link
@@ -411,7 +419,9 @@ digests, event calendar items. Design pressure: maximize what fits here.
 A preview that quotes agenda item titles verbatim with links cannot hallucinate.
 
 ### Tier B: LLM-generated, machine-gated, auto-publish on clean pass
+
 Covers: meeting recaps, business tracker narratives.
+
 - Generation: DO Gradient serverless, DeepSeek V4 Flash (`deepseek-4-flash`,
   1M-token context, ~$0.07/$0.17 per 1M in/out, prompt caching). The 1M context
   fits a full meeting transcript + agenda packet in one call - no chunking layer.
@@ -449,12 +459,14 @@ Covers: meeting recaps, business tracker narratives.
   = tighten gates or demote the post type to held-by-default.
 
 ### Tier C: human-required, judge cannot override
+
 Crime items naming private individuals, anything involving minors, personnel or
 legal allegations, corrections, and any item the judge flags private_individual.
 Expected volume: 1-2/month. These render as drafts only; publish command requires
 an explicit per-item acknowledgment.
 
 ### Mechanics
+
 - Pipeline writes to `queue/` -> validators/judge route to `publish/` or `held/`.
 - Admin dashboard at `/admin`, Caddy basic auth, served by a minimal Node service
   (Hono, localhost-bound, reverse-proxied; public site remains fully static).
@@ -492,7 +504,7 @@ an explicit per-item acknowledgment.
   which is a free last-line validator. Pages: index (reverse-chron), per-post
   permalink, per-topic tag pages (planning, cvusd, business, safety), about,
   RSS feed (@astrojs/rss). Zero client JS shipped by default.
-- Interactivity policy: plain Astro <script> tags (scoped vanilla modules) for
+- Interactivity policy: plain Astro `<script>` tags (scoped vanilla modules) for
   simple behaviors (subscribe form, collapsible sections, filters). A widget
   earns Solid only when it has real client-side state (derived values, shared
   state across components, frequent updates). Any Solid island loads with

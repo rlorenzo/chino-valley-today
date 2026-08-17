@@ -1,0 +1,154 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../layouts/Base.astro";
+import { publishedOnly } from "../lib/record.ts";
+
+const posts = publishedOnly(await getCollection("posts"));
+const sourceCount = new Set(
+	posts.flatMap((p) =>
+		p.data.sources.map((s) => {
+			try {
+				return new URL(s).hostname.replace(/^www\./, "");
+			} catch {
+				return s;
+			}
+		}),
+	),
+).size;
+---
+
+<Base
+	title="About — Chino Valley Today"
+	description="How Chino Valley Today is made: primary sources, automated checks, human review, and visible corrections."
+	current="about"
+>
+	<header class="abouthead">
+		<div class="shell abouthead__inner">
+			<h1 class="abouthead__title">
+				A record of what local government did, with the receipts attached.
+			</h1>
+		</div>
+	</header>
+
+	<div class="reading body prose">
+		<p>
+			Chino Valley Today covers the meetings that decide things in Chino and
+			Chino Hills &mdash; the two city councils, the CVUSD Board of Education,
+			and the commissions that rule on development. It is built for two
+			readers at once: someone who cannot sit through a three-hour weeknight
+			meeting, and someone who needs to check exactly what was decided.
+		</p>
+
+		<h2>Every claim carries its source</h2>
+		<p>
+			The first editorial rule is the shortest one: <strong
+				>no source, no claim</strong
+			>. Each entry links to the primary record it came from &mdash; an agenda
+			item, a staff report page, a video timestamp, a state licence report, an
+			agency alert. The
+			<span class="stamp-inline">violet stamps</span> throughout this site mark those
+			sourced claims, and every one is a link you can follow.
+		</p>
+		<p>
+			This is a record of the record. It reports what a public body did. It
+			does not characterise motives, tone, or sides beyond what was actually
+			said on the record.
+		</p>
+
+		<h2>What is checked before anything publishes</h2>
+		<p>
+			Entries are assembled from public documents and then routed by how much
+			judgment they need.
+		</p>
+		<ul>
+			<li>
+				<strong>Tier A</strong> is rendered directly from structured data with
+				no language model involved. A template that quotes verbatim and links
+				out cannot invent anything.
+			</li>
+			<li>
+				<strong>Tier B</strong> is written from the source documents and must
+				pass two independent checks before it can publish: an automated pass
+				that verifies every paragraph carries a citation, that every number and
+				date appears in the source material, and that every proper name is one
+				the sources actually used &mdash; and then a second review by a
+				different model, which can only hold a post, never clear one another
+				check has flagged.
+			</li>
+			<li>
+				<strong>Tier C</strong> is never automated. Anything naming a private
+				individual, anything involving a minor, and anything touching
+				allegations is held for a person to read and clear by hand.
+			</li>
+		</ul>
+		<p>
+			Anything that fails any check is held rather than published. A missed
+			week costs little; a wrong entry naming a resident costs trust that does
+			not come back.
+		</p>
+
+		<h2>Corrections</h2>
+		<p>
+			Corrections are visible. A corrected entry keeps the original text struck
+			through with a dated note attached &mdash; never a silent edit.
+		</p>
+		<p class="placeholder">
+			<strong>Placeholder &mdash; needs a real contact before launch.</strong>
+			A corrections address has not been set up yet. Until it is, this page
+			cannot tell a reader how to report an error, which is a gap worth closing
+			before anyone relies on the site.
+		</p>
+
+		<h2>Where the material comes from</h2>
+		<p>
+			Sources are the agencies' own: council and board agenda systems, meeting
+			video and its captions, state licence reports, and agency-operated
+			notification channels ingested the way those channels intend to be read.
+			Other publications are linked, never scraped or excerpted. Social
+			platforms are not used as sources.
+		</p>
+		<p class="stat mark">
+			{posts.length} entries published &middot; {sourceCount} source
+			{sourceCount === 1 ? " authority" : " authorities"} cited
+		</p>
+	</div>
+</Base>
+
+<style>
+	.abouthead {
+		background: var(--crate);
+		color: #fff;
+		border-bottom: 6px solid var(--placard);
+	}
+	.abouthead__inner {
+		padding-block: 1.9rem 2.2rem;
+		max-width: 44rem;
+	}
+	.abouthead__title {
+		margin: 0;
+		font-size: clamp(1.55rem, 1.2rem + 2vw, 2.5rem);
+		line-height: 1.16;
+		font-weight: 600;
+	}
+	.body {
+		padding-block: 2.4rem 1rem;
+	}
+	.stamp-inline {
+		color: var(--stamp);
+		font-weight: 600;
+	}
+	.placeholder {
+		border: 2px dashed var(--oxide);
+		color: var(--oxide);
+		padding: 0.9rem 1.1rem;
+		font-size: 0.94rem;
+	}
+	.stat {
+		margin-top: 2.4rem;
+		padding-top: 1rem;
+		border-top: 1px solid var(--galv-edge);
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+</style>
