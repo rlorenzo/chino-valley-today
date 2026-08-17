@@ -2,6 +2,7 @@
 import type { Post } from "../lib/record.ts";
 import {
 	TOPICS,
+	dek,
 	formatDate,
 	sourceHost,
 	topicsFor,
@@ -15,6 +16,7 @@ interface Props {
 const { post } = Astro.props;
 const topics = topicsFor(post);
 const hosts = [...new Set(post.data.sources.map(sourceHost))];
+const summary = dek(post);
 ---
 
 <li class="entry">
@@ -25,6 +27,8 @@ const hosts = [...new Set(post.data.sources.map(sourceHost))];
 	<h3 class="entry__title">
 		<a href={`/posts/${post.id}/`}>{post.data.title}</a>
 	</h3>
+
+	{summary && <p class="entry__dek">{summary}</p>}
 
 	<p class="entry__meta">
 		<span class="mark type">{typeLabel(post.data.post_type)}</span>
@@ -57,6 +61,23 @@ const hosts = [...new Set(post.data.sources.map(sourceHost))];
 </li>
 
 <style>
+	/* The reason to click. A title alone tells a resident nothing about what
+	   their government did, which is the whole job of this list. */
+	.entry__dek {
+		grid-column: 2;
+		margin: 0.35rem 0 0;
+		font-size: 0.95rem;
+		line-height: 1.5;
+		color: var(--muted);
+		max-width: 46rem;
+	}
+
+	@media (max-width: 40rem) {
+		.entry__dek {
+			grid-column: 1;
+		}
+	}
+
 	.type {
 		font-size: 0.68rem;
 		letter-spacing: 0.1em;
