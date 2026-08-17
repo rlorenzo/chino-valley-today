@@ -43,6 +43,13 @@
 		// the one legitimate H1 reads as a duplicate.
 		"MD025": { "front_matter_title": "" },
 
+		// Hard tabs stay flagged in prose, but not inside fenced code — those
+		// blocks reproduce real file content, and both Caddyfile syntax and this
+		// repo's own Biome style are tab-indented. Re-indenting a sample to
+		// satisfy a markdown rule would mean copy-pasting it produces a file
+		// that does not match what the repo actually ships.
+		"MD010": { "code_blocks": false },
+
 		// ON, with settings — these catch things worth catching.
 
 		// A fence without a language gets no highlighting and hides whether a block

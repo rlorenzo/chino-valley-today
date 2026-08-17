@@ -1,0 +1,14 @@
+[Unit]
+Description=Hourly frequent-source scrape for Chino Valley Today
+
+[Timer]
+# Hourly at :17 rather than :00 — every naive cron job on the internet fires on
+# the hour, and these are small agency servers.
+OnCalendar=*-*-* *:17:00 America/Los_Angeles
+# A missed run (reboot, droplet resize) executes once on the next boot instead
+# of being silently skipped.
+Persistent=true
+RandomizedDelaySec=5min
+
+[Install]
+WantedBy=timers.target

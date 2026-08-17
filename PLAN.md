@@ -516,8 +516,13 @@ an explicit per-item acknowledgment.
   file_server only. Separate 512MB droplet later only if isolation is wanted.
 - systemd timers: fetch hourly for RSS/alerts, meeting-day-aware schedule for
   agenda/video sources (poll transcript availability the morning after meetings).
-- Backups: nightly `sqlite3 .backup` + tar of data/raw to DO Spaces or restic to
-  existing storage. The raw archive IS the moat; do not lose it.
+- Backups: nightly `sqlite3 .backup` + gzip, `rclone copy` to a per-project B2
+  bucket, 14 local / 14 remote — the same mechanism as the Rush Call,
+  SpotTheStar and foreshock backups, so there is one restore procedure across
+  every project. `data/raw` is mirrored file-by-file rather than tarred, since
+  its filenames are content hashes and only new files need uploading.
+  (Supersedes the original "DO Spaces or restic" note, 2026-08-17.)
+  The raw archive IS the moat; do not lose it.
 - Secrets: `.env` on droplet, never in git.
 
 ## Phase 3 (outline): Podcast + growth
