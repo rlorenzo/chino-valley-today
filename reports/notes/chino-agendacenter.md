@@ -135,6 +135,7 @@ way civic-scraper's `packet=true` query-param convention does elsewhere
 packet.
 
 **Item-splitting heuristic** (POC quality, `splitAgendaItems()`):
+
 1. Find the standalone `AGENDA` heading line.
 2. Find the next `ADJOURN`/`ADJOURNMENT` line after it — this reliably brackets
    the actual agenda text and excludes everything after it (staff reports,
@@ -229,6 +230,7 @@ tracked meeting.
 
 `biglocalnews/civic-scraper`'s CivicPlus module, per
 `reports/notes/prior-art.md`:
+
 - **Ported directly**: the anchor-`name`/`id` `_MMDDYYYY-<id>` date-parsing
   quirk (`parseAnchorDate()`).
 - **Ported the taxonomy idea, not the code**: agenda vs. minutes vs. packet

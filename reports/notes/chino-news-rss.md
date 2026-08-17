@@ -94,6 +94,7 @@ parallel "Police Department" category (ModID=58, `CID=Police-Department-26`, 0 i
 at run time).
 
 Caveats:
+
 - Content observed is **community-outreach/recruiting** (academy sign-ups, events),
   not incident or crime press releases. Chino PD does not appear to publish
   incident-level reports through this RSS surface.

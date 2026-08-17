@@ -282,7 +282,7 @@ split worth being explicit about since the task named only the spider repo.
 
 Flat, one row per meeting occurrence:
 
-```
+```text
 Meeting {
   id            # slug + date + time derived, stable across re-scrapes
   title
@@ -299,6 +299,7 @@ Meeting {
   source          # canonical URL for the meeting page itself
 }
 ```
+
 `required: ["id", "title", "start", "source"]` per the embedded JSON Schema.
 
 ### License
@@ -404,7 +405,7 @@ Rationale, from reading `cdp-backend`'s repo structure and dependency manifest
   there.
 - This is architecturally consistent with CDP's stated purpose: it's a full
   multi-tenant hosted-instance framework (web app + Algolia-esque search + Firestore
-  + video pipeline) built for cities willing to run actual cloud infrastructure, not
+  - video pipeline) built for cities willing to run actual cloud infrastructure, not
   a library meant to be run standalone against a local file store.
 - Standing up even a minimal CDP instance would mean provisioning real GCP services
   (Firestore, Cloud Functions, Cloud Storage) and Pulumi-managing them — directly
@@ -450,6 +451,7 @@ chapter boundaries" prompt (Oberoi reports that approach produced worse results)
    title.
 
 Two transferable mechanical details:
+
 - Transcripts are processed in **8,000-token chunks** specifically to avoid the
   "lost in the middle" degradation of long-context prompting — relevant context
   given PLAN.md's plan to feed a full transcript + packet into a 1M-context model in

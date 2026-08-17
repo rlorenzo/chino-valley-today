@@ -10,7 +10,7 @@ dependency) needed to work around a real permalink bug described below.
 real data. No ViewState scraping needed for listing/detail data. Confirmed
 endpoints and exact query patterns used (copy-pasteable):
 
-```
+```http
 GET https://webapi.legistar.com/v1/chino/events?%24top=30&%24orderby=EventDate%20desc
 GET https://webapi.legistar.com/v1/chino/events/<EventId>/eventitems?AgendaNote=1&MinutesNote=1
 GET https://webapi.legistar.com/v1/chino/eventitems/<EventItemId>/votes
@@ -100,6 +100,7 @@ ORDER, ADJOURN, signature block, etc.) fall back to the meeting's
 `EventInSiteURL`, which is always non-empty and always resolves.
 
 Spot-checked (curl, 3 random source_urls from the final DB state):
+
 - `https://chino.legistar.com/LegislationDetail.aspx?ID=8140825&GUID=5D2A308B-4EFD-4EFB-B139-1ADB47BF95D2&G=FCED2B78-20F3-40ED-B45D-72741543B315&Options=&Search=` → **HTTP 200**, 102,318 bytes, `<title>Chino - File #: 26-415</title>` (R.J. Noble pavement contract — a `vote` item's source_url).
 - Same URL again for a second sampled `agenda_item` row (random draw happened to repeat) → same **HTTP 200**, confirmed real.
 - `https://chino.legistar.com/MeetingDetail.aspx?LEGID=1963&GID=931&G=FCED2B78-20F3-40ED-B45D-72741543B315` → **HTTP 200**, 201,827 bytes (meeting-level fallback URL used by procedural items).

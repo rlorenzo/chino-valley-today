@@ -108,7 +108,7 @@ since `City` alone answers the filtering need.
 
 The pattern is real and appears as the `href` on every license-number cell:
 
-```
+```text
 https://www.abc.ca.gov/licensing/license-lookup/single-license/?RPTTYPE=12&LICENSE=<number>
 ```
 

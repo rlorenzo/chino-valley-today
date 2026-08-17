@@ -48,6 +48,7 @@ trailing slash on each side (`https://x/y/` ≡ `https://x/y`) — no
 prefix/partial matching.
 
 **Exempt from the "must have a link" requirement** (not substantive):
+
 - headings
 - hr blocks
 - the footer (see above)
@@ -134,6 +135,7 @@ and Curtis Burton"` reads as two independent names, not one unmatchable
 five-word phrase.
 
 **Stripping before the grounding check** (in order):
+
 1. If the sequence's first token is sentence-initial *and* is in
    `SENTENCE_INITIAL_COMMON_WORDS` (generic function words — `the`, `a`,
    `it`, `according`, `however`, … — plus meeting-recap-genre institutional
@@ -237,7 +239,7 @@ Numeric and proper-name gates are now clean (0 failures) across all five
 real posts. The three meeting-preview posts fail **only** on citation
 coverage, and it's a genuine, reportable finding rather than a gate bug:
 
-3. **The meeting-preview template cites once per post, not once per
+1. **The meeting-preview template cites once per post, not once per
    fact.** It renders a bulleted block —
    `- **Date:** …` / `- **Time:** …` / `- **Location:** …` — followed by a
    *separate* paragraph with one link (`[City calendar entry](url)`)
@@ -319,6 +321,7 @@ coverage, and it's a genuine, reportable finding rather than a gate bug:
   judge) and Gate 3 (the sampling audit), not Gate 1.
 
 ## Tuning knobs (all named constants in `validators.ts`, exported where a
+
 caller might reasonably want to inspect or extend them)
 
 - `BUILTIN_ALLOWLIST` — whole-phrase name/entity exemptions. Add a new
@@ -349,7 +352,7 @@ caller might reasonably want to inspect or extend them)
 
 ## Verification
 
-```
+```bash
 npx tsc --noEmit                         # clean
 node --test "src/gates/**/*.test.ts"     # 34/34 passing
 node src/gates/check-real-post.ts        # calibration report above

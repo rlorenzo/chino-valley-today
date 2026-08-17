@@ -1,0 +1,64 @@
+{
+	// Markdown linting for the files Biome cannot parse.
+	//
+	// Scope is deliberate: hand-written documentation and the per-source research
+	// notes. `content/published/` is EXCLUDED — those are pipeline output, their
+	// format is decided by renderPostFile(), and EDITORIAL.md forbids silent edits
+	// to published posts, so a style rule could never be acted on there anyway.
+	// Their real validator is the Astro content-collection schema, which fails the
+	// build on malformed frontmatter.
+	"globs": ["**/*.md"],
+	"ignores": [
+		"node_modules",
+		"site/node_modules",
+		"site/dist",
+		"content/published", // generated; see above
+		".impeccable" // design-tooling output, not authored docs
+	],
+
+	"config": {
+		"default": true,
+
+		// OFF — these fire constantly on this repo without indicating a defect.
+
+		// Long-form prose and research notes full of source URLs. Reflowing them to
+		// 80 columns would churn every document to satisfy a number, and 278 of the
+		// 421 initial findings were this one rule.
+		"MD013": false,
+
+		// The per-source notes in reports/ deliberately repeat section names
+		// ("Findings", "Open questions") so the twelve dossiers read the same way.
+		"MD024": false,
+
+		// Table column alignment is cosmetic, and these tables are readable.
+		"MD060": false,
+
+		// HTML comments are load-bearing here: the impeccable product-schema marker
+		// and the design-contract block are both machine-read.
+		"MD033": { "allowed_elements": ["details", "summary", "br", "img"] },
+
+		// DESIGN.md follows the DESIGN.md format spec: a YAML token schema, then a
+		// single `# Design System: …` H1 in the body. That frontmatter is a token
+		// map, not a document title, so title detection has to be switched off or
+		// the one legitimate H1 reads as a duplicate.
+		"MD025": { "front_matter_title": "" },
+
+		// ON, with settings — these catch things worth catching.
+
+		// A fence without a language gets no highlighting and hides whether a block
+		// is shell, SQL, or JSON.
+		"MD040": true,
+
+		// Consistent list markers across a document.
+		"MD004": { "style": "dash" },
+
+		// Bare URLs render inconsistently across markdown viewers.
+		"MD034": true,
+
+		// Structural blank lines. All auto-fixable, so keeping them costs nothing
+		// and keeps diffs clean.
+		"MD022": true,
+		"MD031": true,
+		"MD032": true
+	}
+}

@@ -23,6 +23,34 @@ echo "pre-commit: biome (staged)"
 # keeps commits of only non-JS files (markdown, sql) from failing here.
 npx --no-install biome check --staged --no-errors-on-unmatched
 
+# Biome parses no markdown and no shell, so those get their own linters. Both
+# are cheap (~1.2s and ~0.1s for the whole repo), but they only run when a file
+# of that kind is actually staged — most commits here touch neither.
+#
+# Two variants on purpose: `$(...)` drops NUL bytes, so the -z form can only be
+# piped, never captured for an emptiness test.
+staged() { git diff --cached --name-only --diff-filter=ACMR -- "$@"; }
+staged_z() { git diff --cached --name-only --diff-filter=ACMR -z -- "$@"; }
+
+if [ -n "$(staged '*.md')" ]; then
+  echo "pre-commit: markdownlint"
+  # No file arguments: the config owns both the globs and the ignore list
+  # (content/published is generated and must not be style-edited), and passing
+  # staged paths would bypass that.
+  npx --no-install markdownlint-cli2
+fi
+
+if [ -n "$(staged '*.sh' '.githooks/*')" ]; then
+  if command -v shellcheck >/dev/null 2>&1; then
+    echo "pre-commit: shellcheck"
+    staged_z '*.sh' '.githooks/*' | xargs -0 shellcheck -x
+  else
+    # Not an npm package, so a fresh clone will not have it. Warn rather than
+    # fail: CI runs it unconditionally and is the real gate.
+    echo "pre-commit: shellcheck not installed, skipping (brew install shellcheck)"
+  fi
+fi
+
 echo "pre-commit: typecheck"
 # Whole-project: a staged file can break types in a file that is not staged.
 npx --no-install tsc --noEmit

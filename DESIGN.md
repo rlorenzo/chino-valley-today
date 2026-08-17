@@ -199,7 +199,7 @@ Borders are `1.5px` on stamps and chips, `2px` on section rules and crate seams,
 
 ## Do's and Don'ts
 
-**Do**
+### Do
 
 - Reserve violet for provenance, absolutely. A new component that needs "an accent"
   takes crate or placard.
@@ -209,7 +209,7 @@ Borders are `1.5px` on stamps and chips, `2px` on section rules and crate seams,
   no readers; nothing may imply an audience, subscribers, or a track record.
 - Keep corners square and depth flat when adding surfaces.
 
-**Don't**
+### Don't
 
 - Don't put violet on a focus ring, a heading, a hover state, or an icon. A focus
   ring lands on every link on the page and would dissolve the rule within a

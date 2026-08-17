@@ -158,7 +158,7 @@ emitted (never invented filler text).
 body content goes through `mdEscape()` (escapes `\ \` * _ [ ]`) so a
 title/body containing markdown-control characters can't alter the rendered
 document's structure (e.g. break a link, or create unintended emphasis).
-Block-level markdown injection (a title starting with `#`) is not defended
+Block-level markdown injection (a title starting with`#`) is not defended
 against — judged out of scope for a Tier A POC given real government/RSS
 titles essentially never start that way; worth hardening before Phase 2 if
 this generator's output is ever templated into a larger page without further
