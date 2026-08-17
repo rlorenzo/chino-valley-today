@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily agenda and listing scrape for Chino Valley Today
+
+[Timer]
+# Early morning Pacific: clerks post packets the afternoon or evening before a
+# meeting, so this catches yesterday's postings before anyone reads the site.
+OnCalendar=*-*-* 05:40:00 America/Los_Angeles
+Persistent=true
+RandomizedDelaySec=10min
+
+[Install]
+WantedBy=timers.target

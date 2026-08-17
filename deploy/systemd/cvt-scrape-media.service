@@ -1,0 +1,44 @@
+[Unit]
+Description=Chino Valley Today — media scrapers (meeting video, YouTube captions)
+Documentation=https://github.com/rlorenzo/chino-valley-today
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+EnvironmentFile=/srv/chino-valley-today/.env
+ExecStart=/usr/bin/env bash scripts/run-group.sh media
+
+# This droplet also serves four other unrelated production sites.
+# A scraper that runs away — a pathological feed, a huge PDF, a leak — must
+# not be able to OOM those. The box has ~480MB free plus 2GB swap, so a hard
+# cap well under that means the kernel kills this unit and nothing else.
+# Captions and video manifests are the heaviest thing the pipeline
+# handles, so this group gets more headroom than the feed pollers —
+# still capped well below what would disturb the other four sites.
+MemoryHigh=450M
+MemoryMax=600M
+# Same reasoning for CPU and disk: the interactive sites win every time.
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+
+# A scrape run has no business writing outside its own directory.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/srv/chino-valley-today/data /srv/chino-valley-today/content /srv/chino-valley-today/reports
+
+# A source being down is routine, not a reason to retry in a tight loop —
+# the next timer tick is the retry.
+TimeoutStartSec=90min
+
+[Install]
+WantedBy=multi-user.target

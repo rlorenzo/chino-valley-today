@@ -1,0 +1,56 @@
+# Append this block to /etc/caddy/Caddyfile on the droplet.
+#
+# It is kept OUT of the deploy script on purpose. That Caddyfile also serves
+# four other unrelated production sites; a config error takes all four
+# down, so this edit is made deliberately by a person who then runs:
+#
+#   caddy validate --config /etc/caddy/Caddyfile
+#   systemctl reload caddy      # reload, never restart — reload is graceful
+#
+# PREREQUISITE: chinovalley.today must already resolve to this droplet before
+# reloading, or Caddy's ACME challenge fails and it will retry in a loop while
+# logging errors. In Cloudflare, the A record must
+# be DNS-only (grey cloud), not proxied — a proxied record makes Cloudflare
+# terminate TLS and the HTTP-01 challenge never reaches Caddy.
+
+chinovalley.today, www.chinovalley.today {
+	# Static only. No application, no upstream, nothing to exploit — the whole
+	# site is files produced by `astro build`.
+	root * /var/www/chinovalley.today/current
+	file_server
+
+	# `current` is a symlink swapped atomically on each deploy. Caddy resolves
+	# it per request, so a deploy needs no reload.
+
+	encode zstd gzip
+
+	# Send www to the bare domain so there is one canonical origin, matching
+	# the canonical tags astro emits.
+	@www host www.chinovalley.today
+	redir @www https://chinovalley.today{uri} permanent
+
+	handle_errors {
+		rewrite * /404.html
+		file_server
+	}
+
+	header {
+		# The site ships zero client JS by default, so the CSP can be strict
+		# enough to be worth having. 'unsafe-inline' for style-src only:
+		# Astro emits scoped <style> blocks.
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# This is a public civic record; it is meant to be cited and archived.
+		X-Robots-Tag "index, follow"
+		-Server
+	}
+
+	log {
+		output file /var/log/caddy/chinovalley.today.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+	}
+}

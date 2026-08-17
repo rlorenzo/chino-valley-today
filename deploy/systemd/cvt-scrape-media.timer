@@ -1,0 +1,15 @@
+[Unit]
+Description=Post-meeting video and caption scrape for Chino Valley Today
+
+[Timer]
+# The morning after. Auto-captions do not exist until well after a meeting
+# ends, so polling during the meeting only wastes the source's bandwidth.
+# Daily rather than meeting-day-aware: the scrapers already no-op when there
+# is nothing new, and a calendar-driven schedule is one more thing to get
+# wrong when a body reschedules.
+OnCalendar=*-*-* 07:30:00 America/Los_Angeles
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target

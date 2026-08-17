@@ -1,0 +1,11 @@
+[Unit]
+Description=Nightly offsite backup to Backblaze B2
+
+[Timer]
+# After the day's scraping has settled, before the early-morning agenda run.
+OnCalendar=*-*-* 02:20:00 America/Los_Angeles
+Persistent=true
+RandomizedDelaySec=20min
+
+[Install]
+WantedBy=timers.target

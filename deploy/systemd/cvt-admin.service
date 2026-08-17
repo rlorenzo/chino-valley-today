@@ -1,0 +1,47 @@
+[Unit]
+Description=Chino Valley Today — review dashboard (localhost only)
+Documentation=https://github.com/rlorenzo/chino-valley-today
+After=network.target
+
+[Service]
+Type=simple
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+EnvironmentFile=/srv/chino-valley-today/.env
+# NOT the 8787 default: another service on this host already listens there,
+# so the default would collide with a running site.
+Environment=CVT_ADMIN_PORT=8788
+ExecStart=/usr/bin/node src/admin/server.ts
+Restart=on-failure
+RestartSec=5s
+
+# The server binds 127.0.0.1 in code and is NOT exposed through Caddy. Reach it
+# over an SSH tunnel:
+#
+#   ssh -N -L 8788:127.0.0.1:8788 $CVT_DEPLOY_HOST
+#   open http://127.0.0.1:8788
+#
+# This is a deliberate departure from PLAN.md's "Caddy basic auth". The
+# dashboard approves and publishes posts, so a leaked or brute-forced basic-auth
+# password is a publishing compromise, and basic auth gives no rate limiting,
+# no MFA, and no audit trail. A tunnel costs one command and removes the
+# surface entirely. deploy/README.md documents the basic-auth block if the
+# convenience ever outweighs that.
+
+MemoryHigh=150M
+MemoryMax=250M
+Nice=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/srv/chino-valley-today/data /srv/chino-valley-today/content
+
+[Install]
+WantedBy=multi-user.target

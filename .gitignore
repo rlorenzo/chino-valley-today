@@ -18,3 +18,7 @@ site/node_modules/
 
 # Transient decision-page state from design tooling
 .impeccable/questions/
+
+# Deployment target (host, paths). Infrastructure identifiers do not belong in
+# a public repo — see deploy/deploy.env.example.
+deploy/deploy.env
