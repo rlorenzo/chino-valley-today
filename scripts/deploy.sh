@@ -5,6 +5,12 @@
 #   scripts/deploy.sh code     update the pipeline checkout + deps + units
 #   scripts/deploy.sh all      both
 #
+# Two more run ON the droplet rather than from a developer machine, and are
+# what a forced-command SSH key invokes:
+#
+#   scripts/deploy.sh local        rebuild the site from the host's checkout
+#   scripts/deploy.sh host-update  update the checkout, THEN rebuild
+#
 # THE TARGET HOST IS SHARED with other, unrelated services. Nothing here
 # touches the web server's config or restarts it — adding the site block is a
 # one-time manual step documented in deploy/README.md, kept manual precisely
@@ -44,12 +50,23 @@ what="${1:-site}"
 
 # `local` runs ON the target and needs no ssh target; every other mode reaches
 # out over ssh and cannot proceed without one.
-if [ "$what" != "local" ] && [ -z "$HOST" ]; then
-	echo "deploy: CVT_DEPLOY_HOST is not set." >&2
-	echo "  cp deploy/deploy.env.example deploy/deploy.env  and fill it in," >&2
-	echo "  or pass it inline: CVT_DEPLOY_HOST=user@host $0 $*" >&2
-	exit 78
-fi
+# `local` and `host-update` run ON the droplet and never open an SSH
+# connection, so they must not require a target. The droplet has no
+# deploy/deploy.env (it is gitignored and belongs to developer machines) and no
+# CVT_DEPLOY_HOST in the unit environment, so demanding one here would exit 78
+# before either could run — which would leave the forced-command CI path unable
+# to update or rebuild the checkout at all.
+case "$what" in
+	local | host-update) ;;
+	*)
+		if [ -z "$HOST" ]; then
+			echo "deploy: CVT_DEPLOY_HOST is not set." >&2
+			echo "  cp deploy/deploy.env.example deploy/deploy.env  and fill it in," >&2
+			echo "  or pass it inline: CVT_DEPLOY_HOST=user@host $0 $*" >&2
+			exit 78
+		fi
+		;;
+esac
 
 deploy_site() {
 	echo "==> building the site"
@@ -89,57 +106,11 @@ deploy_site() {
 
 deploy_code() {
 	echo "==> updating the pipeline checkout"
-	# The repo is public, so this needs no deploy key. Hard reset rather than
-	# pull: the checkout is a deployment artifact for CODE, never a place where
-	# code work happens, and a merge conflict at 3am in a timer is not a thing
-	# worth supporting.
-	#
-	# BUT the checkout is NOT purely disposable, and this is the sharp edge:
-	# content/published/ is tracked, and the pipeline WRITES there when a human
-	# approves a post in the dashboard. A bare `git reset --hard` would delete
-	# any post published on the host but not yet in origin/main — a
-	# human-approved post, destroyed by a routine deploy.
-	#
-	# So published posts are preserved across the reset and restored after it.
-	# They are the one thing on this host that exists nowhere else.
-	ssh "$HOST" "
-		set -e
-		cd '$APP'
-		git fetch --quiet origin main
-
-		# Refuse to reset over divergent published content.
-		#
-		# An earlier version of this preserved-and-restored it, which was worse
-		# than useless: for a MODIFIED post (what a visible correction looks
-		# like) the reset restores origin's copy and the restore cannot tell
-		# which version should win, so it silently picked one. Losing a
-		# correction to a routine deploy is exactly the silent edit EDITORIAL.md
-		# forbids.
-		#
-		# Note new, untracked posts were never at risk — \`git reset --hard\`
-		# leaves untracked files alone. The real exposure is edits to posts
-		# already in git.
-		#
-		# So: back the divergence up where it cannot be lost, and stop. A human
-		# decides whether it belongs in the repo. Deploys resume once the tree
-		# is clean.
-		if [ -n \"\$(git status --porcelain content/published)\" ]; then
-			stamp=\$(date -u +%Y%m%dT%H%M%SZ)
-			safe=\"\$HOME/diverged-content/\$stamp\"
-			mkdir -p \"\$safe\"
-			cp -a content/published/. \"\$safe/\"
-			echo 'deploy: content/published on the host differs from origin/main.' >&2
-			echo \"  A copy is safe at \$safe\" >&2
-			echo '  Files:' >&2
-			git status --porcelain content/published | sed 's/^/    /' >&2
-			echo '  Commit them to the repo (or discard them), then deploy again.' >&2
-			exit 75
-		fi
-
-		git reset --hard --quiet origin/main
-		npm ci --omit=dev --silent
-		git log --oneline -1
-	"
+	# Piped over stdin rather than invoked from the host's checkout, so the
+	# version that runs is the one on THIS machine. Calling the host's own copy
+	# would run the pre-reset version of the very script doing the reset — and
+	# would fail outright on a host provisioned before the script existed.
+	ssh "$HOST" "cd '$APP' && bash -s" < "$ROOT/scripts/host-code-update.sh"
 
 	echo "==> syncing systemd units"
 	rsync -az -e ssh deploy/systemd/ "$HOST:/etc/systemd/system/"
@@ -180,10 +151,28 @@ deploy_local() {
 	echo "==> site live at $WEB/current -> releases/$release"
 }
 
+# Run ON the host: bring the checkout up to origin/main, then rebuild the site
+# from it. This is the whole-deploy path for CI.
+#
+# Everything here runs as the unprivileged service account — a git reset, an
+# npm ci and an Astro build, all inside the checkout it already owns. That is
+# what makes it safe to hand to a forced-command SSH key: unlike `code`, it
+# never writes to /etc/systemd/system and never reloads the daemon.
+#
+# Why CI needs this at all: the deploy workflow ran `local`, which rebuilds the
+# site but never updates the code. Merging to main therefore did NOT ship
+# pipeline changes, and nothing surfaced the drift — the droplet ran two merges
+# behind for a day without a single signal.
+deploy_host_update() {
+	bash "$ROOT/scripts/host-code-update.sh"
+	deploy_local
+}
+
 case "$what" in
 	site) deploy_site ;;
 	code) deploy_code ;;
 	all) deploy_code; deploy_site ;;
 	local) deploy_local ;;
-	*) echo "usage: $0 <site|code|all|local>" >&2; exit 64 ;;
+	host-update) deploy_host_update ;;
+	*) echo "usage: $0 <site|code|all|local|host-update>" >&2; exit 64 ;;
 esac
