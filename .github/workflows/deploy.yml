@@ -74,8 +74,19 @@ jobs:
           fi
 
           # The command sent here is IGNORED: the authorized_keys entry forces
-          # `scripts/deploy.sh local`. It is written out anyway so the intent is
-          # legible in the logs.
+          # `scripts/deploy.sh host-update`. It is written out anyway so the
+          # intent is legible in the logs.
+          #
+          # host-update, not local. `local` rebuilt the site from whatever code
+          # the host already had and never updated it, so merging to main did
+          # NOT ship pipeline changes — the droplet ran two merges behind for a
+          # day with nothing reporting the gap. host-update brings the checkout
+          # to origin/main first, then rebuilds.
+          #
+          # It stays within the unprivileged service account: a git reset, an
+          # npm ci and an Astro build inside the checkout it already owns. It
+          # never writes /etc/systemd/system and never reloads the daemon, so
+          # installing units remains a root step in `deploy.sh code`.
           ssh -i ~/.ssh/id_ed25519 \
               -o BatchMode=yes \
               -o StrictHostKeyChecking=$strict \

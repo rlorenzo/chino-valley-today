@@ -90,6 +90,15 @@ deploy_site() {
 		-e ssh \
 		site/dist/ "$HOST:$WEB/releases/$release/"
 
+	# Hand the release to the service account. rsync -a preserves the DEVELOPER
+	# machine's numeric uid, so a release uploaded from a laptop lands owned by
+	# whatever uid that user happens to be — 502 on macOS, which is nobody on
+	# the droplet. The on-host prune runs as cvtoday and then cannot delete it,
+	# so releases silently accumulate past the keep-5 policy. That already
+	# happened: one directory got stuck and every subsequent `deploy.sh local`
+	# printed "Permission denied" while still reporting success.
+	ssh "$HOST" "chown -R cvtoday:cvtoday '$WEB/releases/$release'"
+
 	echo "==> activating"
 	# ln -T -f -s writes the new link to a temp name and renames it over the
 	# old one, which is atomic. Without -T, ln would helpfully create the link
@@ -110,7 +119,100 @@ deploy_code() {
 	# version that runs is the one on THIS machine. Calling the host's own copy
 	# would run the pre-reset version of the very script doing the reset — and
 	# would fail outright on a host provisioned before the script existed.
-	ssh "$HOST" "cd '$APP' && bash -s" < "$ROOT/scripts/host-code-update.sh"
+	# Repair ownership FIRST, while still root, then drop privileges.
+	#
+	# Order matters and is not cosmetic: this ran git and npm as root, so every
+	# deploy rewrote the checkout as root — 4792 files by 2026-08-18, including
+	# .git/FETCH_HEAD. Dropping to cvtoday without repairing first fails at the
+	# very first `git fetch` with "cannot open '.git/FETCH_HEAD': Permission
+	# denied", so the updater could never fix the state that blocks it. Doing
+	# the chown here makes any host in that condition self-heal on the next
+	# deploy rather than needing a human with root.
+	#
+	# Idempotent and cheap once converged: a no-op chown on an already-correct
+	# tree.
+	ssh "$HOST" "chown -R cvtoday:cvtoday '$APP'"
+
+	# As cvtoday, NOT as root — the checkout belongs to the service account, and
+	# the timers, the pipeline and CI's host-update path all run as it. Running
+	# deploys as the owner keeps that consistent instead of quietly inverting it
+	# one deploy at a time.
+	ssh "$HOST" "cd '$APP' && sudo -u cvtoday bash -s" < "$ROOT/scripts/host-code-update.sh"
+
+	# Verify CI's forced command, rather than rewriting it.
+	#
+	# The SSH command CI sends is ignored; only this entry decides what runs. If
+	# it still says `local`, every push rebuilds the site from whatever code the
+	# host already has and ships no pipeline change at all, while the workflow
+	# reports success — the exact silent failure this work exists to end.
+	#
+	# Checked and failed, NOT auto-corrected, which is a deliberate departure
+	# from the timer block below. Enabling a timer that should not run is
+	# recoverable; a botched write to an SSH authorization file either locks CI
+	# out or loosens a restriction, and that is not a thing to do as a side
+	# effect of a routine deploy.
+	echo "==> checking CI forced command"
+	ssh "$HOST" "
+		keys='$APP/.ssh/authorized_keys'
+		want='$APP/scripts/deploy.sh host-update'
+
+		# Absent key is a failure, not a note. A deploy that reports success
+		# while no CI key exists is the same false all-clear as one reporting
+		# success over the wrong forced command.
+		if [ ! -f \"\$keys\" ]; then
+			echo \"  ERROR: no \$keys — CI deploy key not provisioned\" >&2
+			echo '    See deploy/README.md step 3b. Until then, pushes to main deploy nothing.' >&2
+			exit 1
+		fi
+
+		# EVERY key line must carry the host-update forced command — not merely
+		# one of them, and not merely 'a' forced command.
+		#
+		# Two holes this closes. A second restricted key still forcing \`local\`
+		# would pass a check that only looked for the wanted string somewhere,
+		# and we cannot tell from here which key GitHub's secret holds, so any
+		# non-host-update entry might be the one CI uses. And a BARE key line —
+		# no command= prefix — grants an unrestricted interactive shell as
+		# cvtoday, which matters more since that account has /bin/bash: it needs
+		# one to run a forced command at all, so the key file is the only thing
+		# keeping it to a single command.
+		lines=\"\$(grep -vE '^[[:space:]]*(#|\$)' \"\$keys\" || true)\"
+		if [ -z \"\$lines\" ]; then
+			echo \"  ERROR: \$keys has no key entries\" >&2
+			exit 1
+		fi
+		# ANCHORED to the start of the line, and requiring no-port-forwarding.
+		#
+		# A substring search certifies a key that merely mentions the command in
+		# its trailing COMMENT field — \`ssh-ed25519 AAAA... command=\"...\"\` — which
+		# sshd ignores entirely, so that key still opens a shell. The options
+		# must be the first thing on the line to mean anything.
+		#
+		# no-port-forwarding is checked because a forced command does NOT block
+		# forwarding on its own: without it the key is a tunnel into a droplet
+		# hosting four other people's sites, no matter what command it runs.
+		bad=''
+		while IFS= read -r line; do
+			case \"\$line\" in
+				\"command=\\\"\$want\\\"\",*no-port-forwarding*) continue ;;
+			esac
+			bad=\"\$bad\$line
+\"
+		done <<KEYS
+\$lines
+KEYS
+		if [ -n \"\$bad\" ]; then
+			echo '  ERROR: authorized_keys entry is not restricted to host-update' >&2
+			printf '%s\n' \"\$bad\" | grep -v '^\$' | cut -c1-70 | sed 's/^/    now: /' >&2
+			echo \"    want every line to BEGIN: command=\\\"\$want\\\",...,no-port-forwarding,...\" >&2
+			echo '    A wrong command ships no code on push. A bare key, or one' >&2
+			echo '    whose options sit in the comment field, is an unrestricted' >&2
+			echo '    shell as cvtoday. Without no-port-forwarding the key is a' >&2
+			echo '    tunnel into a shared droplet whatever command it runs.' >&2
+			exit 1
+		fi
+		echo \"  forced command runs host-update (\$(printf '%s\n' \"\$lines\" | wc -l | tr -d ' ') key(s))\"
+	"
 
 	echo "==> syncing systemd units"
 	rsync -az -e ssh deploy/systemd/ "$HOST:/etc/systemd/system/"
@@ -211,10 +313,26 @@ deploy_local() {
 	# Release names are ISO-8601 UTC stamps, so a reverse lexicographic sort is
 	# newest-first — and is stricter than sorting by mtime, which a restore or a
 	# touch could scramble.
-	find "$WEB/releases" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
-		sort -r | tail -n +6 | while read -r old; do
-		rm -rf "${WEB:?}/releases/${old:?}"
-	done
+	# A prune failure must be visible. `rm` inside a `while` loop reports through
+	# the loop's exit status, which is the LAST iteration's, so a failed delete
+	# vanished: the release stayed, the deploy printed "site live at ..." and
+	# exited 0, and only a stray "Permission denied" on stderr hinted anything
+	# was wrong. Releases then accumulate past the keep-5 policy on a 25GB disk,
+	# which is the kind of thing noticed when it is already a problem.
+	local prune_failed=0
+	while read -r old; do
+		rm -rf "${WEB:?}/releases/${old:?}" || {
+			echo "deploy: could not remove old release $old" >&2
+			prune_failed=1
+		}
+	done < <(find "$WEB/releases" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' |
+		sort -r | tail -n +6)
+	if [ "$prune_failed" -ne 0 ]; then
+		echo "deploy: old releases could not be pruned — check ownership under $WEB/releases" >&2
+		echo "  (a release uploaded by \`deploy.sh site\` from a developer machine" >&2
+		echo "   lands owned by that machine's uid unless chowned; see deploy_site)" >&2
+		exit 73
+	fi
 
 	echo "==> site live at $WEB/current -> releases/$release"
 }

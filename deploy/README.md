@@ -33,9 +33,16 @@ holds 8787.
 ## One-time provisioning
 
 ```bash
-# 1. Service account. --system, no login shell: this account exists to own
-#    files and run timers, never to be logged into.
-adduser --system --group --home /srv/chino-valley-today --shell /usr/sbin/nologin cvtoday
+# 1. Service account. --system, so it owns files and runs timers and is never
+#    logged into interactively.
+#
+#    NOT nologin, despite the instinct. sshd runs an authorized_keys forced
+#    command through the account's login SHELL, so nologin would refuse the
+#    connection and every CI deploy would fail — the account needs a shell it
+#    can execute one command with. The restriction that matters is on the key,
+#    not the shell: the forced command in step 3b permits exactly one command
+#    and nothing else, with no pty, no forwarding and no user rc.
+adduser --system --group --home /srv/chino-valley-today --shell /bin/bash cvtoday
 
 # 2. Checkout. The repo is public, so no deploy key is needed.
 git clone https://github.com/rlorenzo/chino-valley-today.git /srv/chino-valley-today
@@ -45,6 +52,19 @@ sudo -u cvtoday npm ci --omit=dev --prefix /srv/chino-valley-today
 # 3. Web root.
 mkdir -p /var/www/chinovalley.today/releases
 chown -R cvtoday:cvtoday /var/www/chinovalley.today
+
+# 3b. CI deploy key, on the SERVICE ACCOUNT, not root. The forced command is
+#     the only thing that decides what a push to main actually runs: the
+#     command CI sends over SSH is ignored. If this says `local` instead of
+#     `host-update`, every push rebuilds the site from whatever code the host
+#     already has and ships no pipeline change, while the workflow reports
+#     success. `scripts/deploy.sh code` verifies this on every run.
+install -d -m 700 -o cvtoday -g cvtoday /srv/chino-valley-today/.ssh
+cat >> /srv/chino-valley-today/.ssh/authorized_keys <<'KEY'
+command="/srv/chino-valley-today/scripts/deploy.sh host-update",no-agent-forwarding,no-port-forwarding,no-pty,no-user-rc,no-X11-forwarding ssh-ed25519 AAAA... cvt-ci
+KEY
+chown cvtoday:cvtoday /srv/chino-valley-today/.ssh/authorized_keys
+chmod 600 /srv/chino-valley-today/.ssh/authorized_keys
 
 # 4. rclone, for the offsite backup. Already present on this host for the
 #    other projects' backups; listed for a clean rebuild.
@@ -182,12 +202,49 @@ scripts/deploy.sh code    # update the checkout, deps, and systemd units
 scripts/deploy.sh all
 ```
 
-Two subcommands run **on the droplet** instead, and are what a forced-command
-SSH key invokes: `local` rebuilds the site from the host's own checkout, and
-`host-update` brings that checkout to `origin/main` first and then rebuilds.
-Both stay within the unprivileged service account. Installing systemd units is
-the one step that needs root, so it stays in `code` — units change far less
-often than pipeline code, which is what makes that split affordable.
+Two subcommands run **on the droplet** instead: `local` rebuilds the site from
+the host's own checkout, and `host-update` brings that checkout to
+`origin/main` first and then rebuilds. Both stay within the unprivileged
+service account. Installing systemd units is the one step that needs root, so
+it stays in `code` — units change far less often than pipeline code, which is
+what makes that split affordable.
+
+**CI's forced-command key runs `host-update`.** The entry in
+`/srv/chino-valley-today/.ssh/authorized_keys` is:
+
+```text
+command="/srv/chino-valley-today/scripts/deploy.sh host-update",no-port-forwarding,...
+```
+
+It was `local` until 2026-08-18, which meant "deploy on push to main" rebuilt
+the site from whatever code the host already had and never shipped pipeline
+changes at all. Nothing reported the gap; the droplet ran two merges behind for
+a day. If that entry is ever reset to `local`, code deploys silently stop again
+and only `cvt-drift-watch` will say so.
+
+### Upgrading a host provisioned before 2026-08-18
+
+The forced command lives on the host, not in this repo, so merging the change
+does not migrate an existing install. Two one-time steps as root, after which
+`scripts/deploy.sh code` verifies both on every run:
+
+```bash
+# 1. Point CI at host-update. Nothing else decides what a push to main runs.
+sudo -u cvtoday sed -i \
+  's|scripts/deploy.sh local|scripts/deploy.sh host-update|' \
+  /srv/chino-valley-today/.ssh/authorized_keys
+
+# 2. Give the checkout back to the service account. Deploys used to run git and
+#    npm as root, so the tree drifted to root ownership — 4792 files on this
+#    host — and a fetch as cvtoday then failed on .git/FETCH_HEAD. `deploy.sh
+#    code` now does this itself before dropping privileges, so this is only
+#    needed if you are repairing by hand.
+chown -R cvtoday:cvtoday /srv/chino-valley-today
+```
+
+Then `scripts/deploy.sh code` and confirm it prints `forced command runs
+host-update`. It exits non-zero if the entry is wrong, missing, unrestricted,
+or lacks `no-port-forwarding`.
 
 The checkout update refuses to run if `content/published` on the host holds
 anything that differs from `origin/main`, backs the directory up under
