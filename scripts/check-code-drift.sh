@@ -103,8 +103,13 @@ echo "  fix with: scripts/deploy.sh all   (from a developer machine)" >&2
 web_root="${CVT_WEB_ROOT:-/var/www/chinovalley.today}"
 health="$web_root/current/health"
 if [ -w "$health" ]; then
+	# Idempotent: strip any previous marker before writing this one. Drift
+	# persists until someone deploys, and nothing here un-flips, so an hourly
+	# timer would otherwise append a line every hour — an unbounded, live
+	# /health page carrying a stack of contradictory code= lines, each naming a
+	# different main sha as origin moves on. One marker, always current.
 	tmp="$(mktemp)"
-	sed 's/^pipeline=fresh$/pipeline=stale/' "$health" >"$tmp"
+	sed -e 's/^pipeline=fresh$/pipeline=stale/' -e '/^code=drifted /d' "$health" >"$tmp"
 	printf 'code=drifted head=%s main=%s\n' "${head_sha:0:7}" "${main_sha:0:7}" >>"$tmp"
 	cat "$tmp" >"$health"
 	rm -f "$tmp"

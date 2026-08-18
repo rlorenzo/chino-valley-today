@@ -145,14 +145,25 @@ deploy_code() {
 	# block exists to close, so enabling is the action and running is the test.
 	ssh "$HOST" '
 		enabled_now=""
+		enable_failed=""
 		for unit in /etc/systemd/system/cvt-*.timer; do
 			name="$(basename "$unit")"
 			systemctl is-enabled --quiet "$name" 2>/dev/null && continue
-			systemctl enable --now "$name" >/dev/null 2>&1 || true
-			enabled_now="$enabled_now $name"
+			if systemctl enable --now "$name" >/dev/null 2>&1; then
+				enabled_now="$enabled_now $name"
+			else
+				enable_failed="$enable_failed $name"
+			fi
 		done
 		if [ -n "$enabled_now" ]; then
 			echo "  enabled:$enabled_now"
+		fi
+		# Report what actually happened. The is-active check below is the
+		# authoritative test and would fail the deploy anyway, but a block whose
+		# whole purpose is refusing to be vague about timer state has no business
+		# printing "enabled: X" for a unit that did not enable.
+		if [ -n "$enable_failed" ]; then
+			echo "  enable failed:$enable_failed" >&2
 		fi
 
 		inactive=""

@@ -12,8 +12,8 @@ WorkingDirectory=/srv/chino-valley-today
 EnvironmentFile=/srv/chino-valley-today/.env
 ExecStart=/usr/bin/env bash scripts/check-code-drift.sh
 
-# A git fetch and two rev-parses. Far below the scrape units' ceiling, and
-# nowhere near the build units'.
+# One `git ls-remote` and one `git rev-parse`. Far below the scrape units'
+# ceiling, and nowhere near the build units'.
 MemoryHigh=100M
 MemoryMax=150M
 Nice=10
@@ -29,12 +29,13 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 # Only the web root, because a drift marks the LIVE health file. The checkout
 # needs no write access at all: the check uses `git ls-remote`, which writes
-# nothing (a fetch would need .git, which is root-owned here anyway). Nothing
-# under content/ or data/ either — this unit reports, it never fixes.
+# nothing. A fetch would need to write .git/FETCH_HEAD, which is root-owned
+# here, so this is the safer call twice over. Nothing under content/ or data/
+# either — this unit reports, it never fixes.
 ReadWritePaths=/var/www/chinovalley.today
 
-# A fetch that hangs should fail the unit rather than sit there until the next
-# tick overlaps it.
+# An ls-remote that hangs should fail the unit rather than sit there until the
+# next tick overlaps it.
 TimeoutStartSec=5min
 
 [Install]
