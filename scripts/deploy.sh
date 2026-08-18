@@ -119,20 +119,32 @@ deploy_code() {
 
 	# Syncing a unit does NOT enable it, and a timer that exists but is disabled
 	# looks identical to one that is working right up until you need it. That
-	# has already happened once: cvt-tiera shipped and sat disabled, so nothing
-	# published. Name the gap on every deploy rather than trusting the README.
-	echo "==> checking timers are enabled"
+	# has already happened: cvt-tiera shipped and sat disabled, so nothing
+	# published for weeks.
+	#
+	# So enable them, rather than printing a warning and hoping. A warning
+	# depends on a human reading deploy output, which is the same class of
+	# signal that already failed here twice — and a timer this repo ships is a
+	# timer meant to run, or it would not be in deploy/systemd/.
+	#
+	# Note for future units: `--now` starts the TIMER, not the service, but a
+	# unit with Persistent=true whose window was missed will fire straight away.
+	# If some later unit's first run has side effects you do not want on a
+	# deploy (cvt-tiera publishing a backlog was exactly this), enable it by
+	# hand once, deliberately, before it ships here.
+	echo "==> enabling timers"
 	ssh "$HOST" '
-		disabled=""
+		enabled_now=""
 		for unit in /etc/systemd/system/cvt-*.timer; do
 			name="$(basename "$unit")"
-			systemctl is-enabled --quiet "$name" 2>/dev/null || disabled="$disabled $name"
+			systemctl is-enabled --quiet "$name" 2>/dev/null && continue
+			systemctl enable --now "$name" >/dev/null 2>&1 &&
+				enabled_now="$enabled_now $name"
 		done
-		if [ -n "$disabled" ]; then
-			echo "  WARNING: installed but NOT enabled:$disabled" >&2
-			echo "  enable with: systemctl enable --now$disabled" >&2
+		if [ -n "$enabled_now" ]; then
+			echo "  enabled:$enabled_now"
 		else
-			echo "  all cvt-*.timer units enabled"
+			echo "  all cvt-*.timer units already enabled"
 		fi
 	'
 }
