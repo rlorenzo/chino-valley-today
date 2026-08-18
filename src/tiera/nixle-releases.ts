@@ -18,6 +18,7 @@ import type { NewPost } from "../pipeline/posts.ts";
 import { parseMeta, queryItems } from "./queries.ts";
 import {
 	cleanTitle,
+	humanDateFromLocal,
 	localMeetingDate,
 	mdEscape,
 	mdLink,
@@ -76,6 +77,37 @@ function isChinoRelevant(meta: Record<string, unknown>): boolean {
 interface GenResult {
 	posts: NewPost[];
 	notes: string[];
+}
+
+/**
+ * Reader-facing agency name.
+ *
+ * Prefer the display name the sender header already carries:
+ * `"SBSD - Chino Hills Police Department" <sbsd---...@emails.nixle.com>`.
+ * De-slugging channelSlug instead produced "sbsd — chino hills police
+ * department" — lowercased, with the triple hyphen that separates agency from
+ * station rendered as an em dash. The agency writes its own name; use it.
+ */
+export function agencyDisplayName(
+	from: string | null,
+	channelSlug: string | null,
+): string {
+	const quoted = (from ?? "").match(/^\s*"([^"]+)"/);
+	if (quoted) return quoted[1].trim();
+	// Unquoted display name ahead of the address: `SBSD - HQ <x@y>`.
+	const bare = (from ?? "").match(/^\s*([^<@]+?)\s*</);
+	if (bare && bare[1].trim() !== "") return bare[1].trim();
+	// Split on the agency/station separator FIRST, then de-hyphenate each half.
+	// Chaining two replaces does not work: the second one eats the hyphen the
+	// first just inserted, turning "sbsd---headquarters" into "sbsd
+	// headquarters" with a doubled space. (The original code survived that only
+	// because it inserted an em dash, which is what made the output ugly.)
+	if (channelSlug)
+		return channelSlug
+			.split(/-{2,}/)
+			.map((part) => part.replace(/-/g, " "))
+			.join(" - ");
+	return "San Bernardino County Sheriff's Department";
 }
 
 /** Strip Nixle's "Advisory Message:" style prefix for the post title. */
@@ -159,10 +191,10 @@ export function generateNixleReleases(db: Db, now: Date): GenResult {
 			.digest("hex")
 			.slice(0, 8);
 
-		const agency =
-			typeof meta.channelSlug === "string"
-				? meta.channelSlug.replace(/-{2,}/g, " — ").replace(/-/g, " ")
-				: "San Bernardino County Sheriff's Department";
+		const agency = agencyDisplayName(
+			typeof meta.from === "string" ? meta.from : null,
+			typeof meta.channelSlug === "string" ? meta.channelSlug : null,
+		);
 		const priority = typeof meta.priority === "string" ? meta.priority : null;
 
 		// Headline and link ONLY. The release body is never rendered.
@@ -191,7 +223,13 @@ export function generateNixleReleases(db: Db, now: Date): GenResult {
 		const lines: string[] = [];
 		lines.push(`- **Issued by:** ${mdEscape(agency)}`);
 		if (priority) lines.push(`- **Priority:** ${mdEscape(priority)}`);
-		lines.push(`- **Issued:** ${mdEscape(row.occurred_at)}`, "");
+		// Pacific, not the raw UTC instant. This release carries
+		// 2026-08-18T02:00:52Z, which is the evening of the 17th here, and the
+		// agency's own text reads "Monday August 17, 2026 7:00 PM PDT". A post
+		// dated a day later than the department's own wording is simply wrong
+		// to a local reader. localDate is already the Pacific day and the slug
+		// uses it too, so the date, the headline and the URL agree.
+		lines.push(`- **Issued:** ${mdEscape(humanDateFromLocal(localDate))}`, "");
 		lines.push(mdLink("Read the full release (Nixle)", row.source_url));
 
 		posts.push({

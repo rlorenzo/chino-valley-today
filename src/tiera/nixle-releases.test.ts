@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { type Db, openDb } from "../db/index.ts";
 import {
+	agencyDisplayName,
 	generateNixleReleases,
 	mentionsMinor,
 	stripMailPreamble,
@@ -19,6 +20,7 @@ function addRelease(
 		occurredAt: string;
 		chinoRelevant: boolean;
 		channelSlug?: string;
+		from?: string;
 	},
 ): void {
 	const sourceId = db.upsertSource({
@@ -48,6 +50,9 @@ function addRelease(
 		meta: {
 			chinoRelevant: opts.chinoRelevant,
 			channelSlug: opts.channelSlug ?? "sbsd---chino-hills-police-department",
+			from:
+				opts.from ??
+				'"SBSD - Chino Hills Police Department" <sbsd---chino-hills-police-department@emails.nixle.com>',
 			priority: "advisory",
 			tier: "C",
 		},
@@ -159,6 +164,45 @@ describe("title and body cleanup", () => {
 	});
 });
 
+describe("agency display name", () => {
+	test("uses the quoted display name from the sender header", () => {
+		assert.equal(
+			agencyDisplayName(
+				'"SBSD - Chino Hills Police Department" <sbsd---chino-hills-police-department@emails.nixle.com>',
+				"sbsd---chino-hills-police-department",
+			),
+			"SBSD - Chino Hills Police Department",
+		);
+	});
+
+	test("accepts an unquoted display name", () => {
+		assert.equal(
+			agencyDisplayName("SBSD - Headquarters <x@emails.nixle.com>", null),
+			"SBSD - Headquarters",
+		);
+	});
+
+	test("falls back to the slug when the header carries no name", () => {
+		// Readable, if not the agency's own capitalisation. A bare address is
+		// better served by this than by a generic department name that might be
+		// the wrong agency entirely.
+		assert.equal(
+			agencyDisplayName(
+				"sbsd---headquarters@emails.nixle.com",
+				"sbsd---headquarters",
+			),
+			"sbsd - headquarters",
+		);
+	});
+
+	test("falls back to the department when nothing is known", () => {
+		assert.equal(
+			agencyDisplayName(null, null),
+			"San Bernardino County Sheriff's Department",
+		);
+	});
+});
+
 describe("generateNixleReleases", () => {
 	test("publishes a Chino-relevant release as headline plus link, never body", () => {
 		const db = openDb(":memory:");
@@ -202,6 +246,33 @@ describe("generateNixleReleases", () => {
 		assert.ok(!p.bodyMd.includes("fixture%2Balerts"));
 		assert.ok(!p.bodyMd.includes("0000000000000000000000000000dead"));
 		assert.ok(!p.bodyMd.includes("settings/subscription"));
+	});
+
+	test("renders the agency's own name and a Pacific issue date", () => {
+		const db = openDb(":memory:");
+		// 02:00 UTC is the evening of the PREVIOUS day in Pacific. The agency's
+		// own text says "August 17 ... 7:00 PM PDT", so a post dated the 18th
+		// would contradict the release it links to.
+		addRelease(db, {
+			title: "Advisory Message: Vehicle Theft Investigation in Chino Hills",
+			body: "SUMMARY: An adult driver was cited.",
+			occurredAt: "2026-08-18T02:00:52.000Z",
+			chinoRelevant: true,
+		});
+		const { posts } = generateNixleReleases(
+			db,
+			new Date("2026-08-18T12:00:00.000Z"),
+		);
+		assert.equal(posts.length, 1);
+		assert.match(
+			posts[0].bodyMd,
+			/\*\*Issued by:\*\* SBSD - Chino Hills Police Department/,
+		);
+		assert.match(posts[0].bodyMd, /\*\*Issued:\*\* August 17, 2026/);
+		// No raw UTC instant anywhere in the rendered post.
+		assert.ok(!posts[0].bodyMd.includes("2026-08-18T02:00:52"));
+		// Slug uses the same Pacific day, so date and URL agree.
+		assert.match(posts[0].slug, /^2026-08-17-/);
 	});
 
 	test("does not publish county-wide releases about other cities", () => {
