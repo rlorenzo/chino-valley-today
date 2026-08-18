@@ -1,0 +1,27 @@
+---
+import { getCollection } from "astro:content";
+import PostArticle from "../../components/PostArticle.astro";
+import Base from "../../layouts/Base.astro";
+import { briefsOnly } from "../../lib/record.ts";
+
+export async function getStaticPaths() {
+	// One brief per LA calendar day; brief_date is the permalink. The pipeline
+	// enforces one-per-day (slug YYYY-MM-DD-daily-brief), and the collection
+	// schema requires brief_date on every daily-brief post.
+	const briefs = briefsOnly(await getCollection("posts"));
+	return briefs.map((post) => ({
+		params: { date: post.data.brief_date },
+		props: { post },
+	}));
+}
+
+const { post } = Astro.props;
+---
+
+<Base
+	title={`${post.data.title} — Chino Valley Today`}
+	description={`The Chino Valley daily brief for ${post.data.brief_date}: weather, today's meetings and events, and what's new on the record — every claim linked to its source.`}
+	current="record"
+>
+	<PostArticle post={post} />
+</Base>

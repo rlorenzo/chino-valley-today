@@ -1,0 +1,41 @@
+[Unit]
+Description=Chino Valley Today — morning daily brief (assemble + site rebuild)
+Documentation=https://github.com/rlorenzo/chino-valley-today
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+EnvironmentFile=/srv/chino-valley-today/.env
+ExecStart=/usr/bin/env bash scripts/run-brief.sh
+
+# Same shared-droplet discipline as the scrape units, with a higher ceiling:
+# this unit runs `npm ci` + the Astro build, which needs more than a scraper.
+# MemoryHigh throttles it into swap before MemoryMax lets the kernel kill it,
+# and the cap still protects the four co-tenant sites (~480MB free + 2GB swap).
+MemoryHigh=450M
+MemoryMax=768M
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# Beyond the scrape units' paths: site/ for npm ci + the build output, and the
+# web root because deploy.sh local publishes the release symlink swap there.
+ReadWritePaths=/srv/chino-valley-today/data /srv/chino-valley-today/content /srv/chino-valley-today/reports /srv/chino-valley-today/site /var/www/chinovalley.today
+
+# A morning without a brief should fail visibly, not hang; the whole run
+# (assembler + npm ci + build) fits well inside this on the droplet.
+TimeoutStartSec=20min
+
+[Install]
+WantedBy=multi-user.target

@@ -13,7 +13,8 @@
 		"site/node_modules",
 		"site/dist",
 		"content/published", // generated; see above
-		".impeccable" // design-tooling output, not authored docs
+		".impeccable", // design-tooling output, not authored docs
+		".claude" // agent worktrees and session state, not part of this checkout
 	],
 
 	"config": {

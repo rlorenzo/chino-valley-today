@@ -1,0 +1,15 @@
+[Unit]
+Description=Morning daily brief for Chino Valley Today
+
+[Timer]
+# 06:00 Pacific: after the 05:17 frequent scrape (forecast, fire feeds) and
+# the 05:40 daily scrape (agendas, calendars) have refreshed the database.
+# No politeness offset needed — the assembler makes no network fetches.
+OnCalendar=*-*-* 06:00:00 America/Los_Angeles
+# A missed run (reboot, droplet resize) executes once on the next boot instead
+# of being silently skipped — a morning with no brief is the failure mode this
+# project cares most about.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
