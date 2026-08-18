@@ -8,7 +8,8 @@
 // expressly prohibits automated scraping of the Service's web pages (search
 // engines excepted), so this ingester consumes the service's INTENDED delivery
 // mechanism: alert emails to a subscribed mailbox we control
-// (chinovalleytoday+nixle@gmail.com, subscribed 2026-08-13). Each message
+// (the address is deployment configuration, kept in .env and out of this
+// public repository; subscribed 2026-08-13). Each message
 // carries a local.nixle.com/alert/<id>/ permalink; that public URL — not the
 // mailbox — is what readers get as source_url.
 //
@@ -28,14 +29,15 @@
 // the mailbox itself remains the humans' archive.
 //
 // Config (.env):
-//   NIXLE_IMAP_USER      mailbox login (e.g. chinovalleytoday@gmail.com)
+//   NIXLE_IMAP_USER      mailbox login (a Gmail address)
 //   NIXLE_IMAP_PASSWORD  app password (Gmail: Account -> Security -> 2-Step
 //                        Verification -> App passwords)
 //   NIXLE_IMAP_HOST      default imap.gmail.com
 //   NIXLE_IMAP_PORT      default 993
-//   NIXLE_MAIL_ALIAS     default chinovalleytoday+nixle@gmail.com — messages
-//                        are matched on To/Cc/Delivered-To containing this,
-//                        OR a sender containing "nixle"
+//   NIXLE_MAIL_ALIAS     optional plus-alias the subscription was made with.
+//                        When set, messages match on To/Cc/Delivered-To
+//                        containing it OR a sender containing "nixle"; when
+//                        unset, on the sender alone.
 //   NIXLE_MAIL_SINCE_DAYS  IMAP search window, default 90
 // Without user+password the scraper notes the gap and returns cleanly, so
 // `npm run poc` stays green on machines without mailbox credentials.
@@ -176,6 +178,28 @@ export function messageToItemDraft(
 	};
 }
 
+/**
+ * Does this message belong to the Nixle subscription?
+ *
+ * Exported because of the empty-alias case: NIXLE_MAIL_ALIAS has no default
+ * (the address is deployment config, and this repository is public), and a
+ * naive `headerAddrs.includes(alias)` is TRUE for every string when alias is
+ * "". That would match every message in the mailbox, so an unconfigured alias
+ * would silently turn a targeted ingester into one that reads all mail.
+ *
+ * @param headerAddrs lowercased To/Cc/Delivered-To addresses, joined
+ * @param fromText    the From header text
+ * @param alias       plus-alias the subscription used, or "" when unset
+ */
+export function isNixleMessage(
+	headerAddrs: string,
+	fromText: string,
+	alias: string,
+): boolean {
+	if (alias !== "" && headerAddrs.includes(alias)) return true;
+	return fromText.toLowerCase().includes("nixle");
+}
+
 function parsedToFields(mail: ParsedMail): NixleMessageFields {
 	return {
 		subject: mail.subject ?? null,
@@ -212,9 +236,11 @@ async function run(ctx: ScraperContext): Promise<void> {
 	}
 	const host = process.env.NIXLE_IMAP_HOST ?? "imap.gmail.com";
 	const port = parseInt(process.env.NIXLE_IMAP_PORT ?? "993", 10);
-	const alias = (
-		process.env.NIXLE_MAIL_ALIAS ?? "chinovalleytoday+nixle@gmail.com"
-	).toLowerCase();
+	// No default. The subscribed mailbox is per-deployment configuration, and
+	// this repository is public, so the address lives in .env rather than in
+	// tracked source. Unset simply means "match on the sender alone", which is
+	// the check that actually identifies Nixle mail.
+	const alias = (process.env.NIXLE_MAIL_ALIAS ?? "").trim().toLowerCase();
 	const sinceDays = parseInt(process.env.NIXLE_MAIL_SINCE_DAYS ?? "90", 10);
 	const since = new Date(Date.now() - sinceDays * 86_400_000);
 
@@ -249,8 +275,7 @@ async function run(ctx: ScraperContext): Promise<void> {
 				if (!msg || !msg.source) continue;
 				const mail = await simpleParser(msg.source);
 				const fromText = (mail.from?.text ?? "").toLowerCase();
-				const isForUs =
-					headerAddresses(mail).includes(alias) || fromText.includes("nixle");
+				const isForUs = isNixleMessage(headerAddresses(mail), fromText, alias);
 				if (!isForUs) continue;
 				matched++;
 
@@ -291,13 +316,21 @@ async function run(ctx: ScraperContext): Promise<void> {
 				});
 				if (r.isNew) ingested++;
 			}
+			// Say which mode the filter actually ran in. An empty alias is
+			// normal (the address is deployment config, not a tracked default),
+			// but a run note reading `alias filter ""` invites the reader to
+			// think the filter broke.
+			const aliasNote =
+				alias === ""
+					? "no NIXLE_MAIL_ALIAS set, matching on sender only"
+					: `alias filter "${alias}"`;
 			const channelSummary =
 				[...channelCounts]
 					.sort((a, b) => b[1] - a[1])
 					.map(([slug, n]) => `${slug}=${n}`)
 					.join(", ") || "none";
 			ctx.note(
-				`Mailbox ${user} (alias filter "${alias}", since ${since.toISOString().slice(0, 10)}): ` +
+				`Mailbox ${user} (${aliasNote}, since ${since.toISOString().slice(0, 10)}): ` +
 					`${uids.length} message(s) in window, ${matched} matched Nixle filter, ` +
 					`${ingested} new item(s) ingested, ${skippedNoPermalink} matched message(s) skipped for ` +
 					`carrying no Nixle permalink (confirmations/service mail — never ingested, provenance rule). ` +
