@@ -60,12 +60,19 @@ function main(): void {
 			anyPosts++;
 
 			const { outcome } = createPost(db, post);
+			// A generator that set heldReason has decided this post needs a human
+			// before it can go out (Tier C content, EDITORIAL.md). Route it to the
+			// held queue the dashboard already reads, rather than publishing it —
+			// and rather than dropping it, which is what skipping it amounts to.
+			const target = post.heldReason ? "held" : "published";
 			if (outcome !== "skipped") {
-				transitionPost(db, post.slug, "published");
+				transitionPost(db, post.slug, target, {
+					heldReason: post.heldReason,
+				});
 			}
 			totals[gen.label][outcome]++;
 			console.log(
-				`  ${post.slug}: ${outcome}${outcome !== "skipped" ? " -> published" : ""}`,
+				`  ${post.slug}: ${outcome}${outcome !== "skipped" ? ` -> ${target}` : ""}`,
 			);
 		}
 		if (posts.length === 0) console.log("  (no posts generated)");

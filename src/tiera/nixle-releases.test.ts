@@ -208,7 +208,7 @@ describe("generateNixleReleases", () => {
 		assert.match(notes[0], /1 not Chino-relevant/);
 	});
 
-	test("holds a Chino release that involves a minor", () => {
+	test("a Chino release involving a minor is HELD, not dropped", () => {
 		const db = openDb(":memory:");
 		addRelease(db, {
 			title: "Advisory Message: Missing Juvenile Located in Chino",
@@ -217,9 +217,29 @@ describe("generateNixleReleases", () => {
 			chinoRelevant: true,
 		});
 		const { posts, notes } = generateNixleReleases(db, NOW);
-		assert.equal(posts.length, 0);
-		assert.match(notes[0], /1 held by the minors guard/);
-		assert.match(notes[1], /HELD for human review/);
+		// The post MUST still be produced. Skipping it is what made the hold
+		// invisible: the dashboard's held queue reads posts, so no post row meant
+		// nothing to review, and the note pointed at an empty queue.
+		assert.equal(posts.length, 1);
+		assert.ok(posts[0].heldReason, "held post must carry a heldReason");
+		assert.match(posts[0].heldReason, /minors guard/);
+		assert.equal(posts[0].tier, "C");
+		assert.match(notes[0], /1 to the held queue/);
+		assert.match(notes[1], /HELD for human review in the admin dashboard/);
+	});
+
+	test("a publishable release carries no heldReason and stays Tier A", () => {
+		const db = openDb(":memory:");
+		addRelease(db, {
+			title: "Advisory Message: Collision on Grand Ave in Chino Hills",
+			body: "SUMMARY: An adult driver was cited.",
+			occurredAt: "2026-08-16T16:15:00.000Z",
+			chinoRelevant: true,
+		});
+		const { posts } = generateNixleReleases(db, NOW);
+		assert.equal(posts.length, 1);
+		assert.equal(posts[0].heldReason, undefined);
+		assert.equal(posts[0].tier, "A");
 	});
 
 	test("does not publish releases older than the recency window", () => {

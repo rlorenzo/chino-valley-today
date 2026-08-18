@@ -43,6 +43,11 @@ export interface NewPost {
 	// site (the index's "coming up" rail) rather than by the markdown body.
 	eventsAhead?: BriefEventAhead[];
 	sources: string[]; // source_urls backing every claim in the post
+	// Set by a generator that has decided this post must NOT auto-publish, and
+	// why. The Tier A runner routes such a post to the held queue instead of
+	// publishing it, so it reaches the dashboard's existing approve/reject flow
+	// rather than being silently dropped. A hold nobody can see is a drop.
+	heldReason?: string;
 }
 
 export interface BriefEventAhead {
