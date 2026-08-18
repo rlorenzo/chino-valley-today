@@ -133,6 +133,11 @@ export function generateNixleReleases(db: Db, now: Date): GenResult {
 		}
 
 		const subject = cleanTitle(row.title) ?? "";
+		// Read for the guard below, never rendered. We still have to know what
+		// the release says in order to decide whether a human must see it —
+		// EDITORIAL.md makes anything involving a minor Tier C regardless of how
+		// we choose to present it, and "we only linked to it" is not an
+		// exemption the rule offers.
 		const body = stripMailPreamble(row.body ?? "");
 
 		// Minors guard. The post is still BUILT — it is routed to the held queue
@@ -160,21 +165,33 @@ export function generateNixleReleases(db: Db, now: Date): GenResult {
 				: "San Bernardino County Sheriff's Department";
 		const priority = typeof meta.priority === "string" ? meta.priority : null;
 
+		// Headline and link ONLY. The release body is never rendered.
+		//
+		// Two reasons, either sufficient on its own:
+		//
+		// 1. Private individuals. Bodies carry "SUSPECT1: <name>, Age <n>,
+		//    <city> Resident" lines, victims, and witnesses. Publishing them
+		//    verbatim put every one of those on the site; a headline names
+		//    nobody, and readers who want the detail follow the agency's own
+		//    link to the agency's own page.
+		// 2. Credentials. Every message ends with a per-recipient account link
+		//    carrying the subscription id, the mailbox address and an auth
+		//    token (.../settings/subscription/<id>/<email>/<token>/). Rendering
+		//    the body verbatim would have published the operator's email and a
+		//    live token able to alter the subscription.
+		//
+		// This is the same shape as the fire & safety section of the daily
+		// brief (src/pipeline/daily-brief.ts): verbatim title, source link,
+		// never body text.
 		const lines: string[] = [];
 		lines.push(`- **Issued by:** ${mdEscape(agency)}`);
 		if (priority) lines.push(`- **Priority:** ${mdEscape(priority)}`);
 		lines.push(`- **Issued:** ${mdEscape(row.occurred_at)}`, "");
 		lines.push(
-			"The full text of the agency's release follows, reproduced verbatim:",
+			"This is the agency's own headline. Full details, including any names the department chose to release, are on its page:",
 			"",
 		);
-		for (const para of body.split(/\n{2,}/)) {
-			const clean = para.replace(/\s+/g, " ").trim();
-			if (clean) lines.push(`> ${mdEscape(clean)}`, ">");
-		}
-		if (lines.at(-1) === ">") lines.pop();
-		lines.push("");
-		lines.push(mdLink("Original release (Nixle)", row.source_url));
+		lines.push(mdLink("Read the full release (Nixle)", row.source_url));
 
 		posts.push({
 			slug: `${localDate}-${slugify(headline)}-nixle-${hash}`,

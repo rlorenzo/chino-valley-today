@@ -87,10 +87,27 @@ reviewer. Changes to this file are editorial decisions — date them.
 
 **Operator decision, 2026-08-17.** Press releases received through a subscribed
 agency notification channel (today: the Sheriff's Nixle channels) auto-publish
-in full, body text included, without the per-item acknowledgment Tier C
-otherwise requires. Rationale given: the agency has already published the text
-to the public through its own channel, and we redistribute it verbatim rather
-than making a claim of our own.
+without the per-item acknowledgment Tier C otherwise requires.
+
+**Amended 2026-08-18, superseding the full-text form above.** What publishes is
+the agency's own headline and a link to its page. **The release body is never
+rendered.** The original decision allowed full body text on the reasoning that
+the agency had already published it; reading the first real Chino Hills release
+changed the calculation:
+
+- Bodies carry `SUSPECT1: <name>, Age <n>, <city> Resident` lines, plus victims
+  and witnesses. A headline names nobody, and a reader who wants the detail
+  follows the department's own link to the department's own page. We point at
+  the record instead of rehosting it.
+- Every message ends with a per-recipient account link containing the
+  subscription id, our mailbox address and an auth token
+  (`/settings/subscription/<id>/<email>/<token>/`). Rendering bodies verbatim
+  would have published a live credential. Nothing leaked, because the only
+  Chino-relevant release to date was held by the minors guard, but that was
+  luck rather than design.
+
+This is the same shape the daily brief already uses for fire and safety:
+verbatim title, source link, never body text.
 
 - **What this overrides:** the Tier C "human always … no exceptions" clause,
   for this source class only. Tier C is unchanged for every other source, and
@@ -104,9 +121,12 @@ than making a claim of our own.
   - **Geography.** Only releases flagged `chinoRelevant` publish. A Nixle
     subscription delivers every agency channel covering the area, so
     county-wide releases about other cities are archived, not published.
-  - **Verbatim only.** No LLM touches these. The agency's text renders as an
-    attributed blockquote with a permalink. Nothing is summarized,
+  - **Headline and link only.** No LLM touches these. The agency's own title
+    renders verbatim above a link to its page. Nothing is summarized,
     characterized, or restated as our own claim, so these render Tier A.
+    Residual risk recorded honestly: an agency headline *could* name someone,
+    since nothing but convention stops it. Bodies are where names actually
+    live, and those no longer reach the site at all.
 - **Risk accepted by the operator:** these releases name arrested and suspected
   individuals, some of whom will never be charged or convicted, and those names
   publish without human review. The corrections policy below applies, and a

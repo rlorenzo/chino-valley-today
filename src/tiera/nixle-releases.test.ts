@@ -160,7 +160,7 @@ describe("title and body cleanup", () => {
 });
 
 describe("generateNixleReleases", () => {
-	test("publishes a Chino-relevant adult release verbatim, with the permalink", () => {
+	test("publishes a Chino-relevant release as headline plus link, never body", () => {
 		const db = openDb(":memory:");
 		addRelease(db, {
 			title: "Advisory Message: Deputies Investigate Collision on Grand Ave",
@@ -172,6 +172,11 @@ describe("generateNixleReleases", () => {
 				"DATE: August 16, 2026, at about 9:15 a.m.",
 				"",
 				"SUMMARY: Deputies responded to a collision in Chino Hills. The driver, a 45-year-old resident, was cited.",
+				"",
+				// The real footer of every Nixle message. It carries the mailbox
+				// address and a live subscription token, which is why body text
+				// must never reach a published post.
+				"To manage your email settings, please log into your account at https://local.nixle.com/settings/subscription/00000/fixture%2Balerts%40example%2Etest/0000000000000000000000000000dead/?pub_id=00000000.",
 			].join("\n"),
 			occurredAt: "2026-08-16T16:15:00.000Z",
 			chinoRelevant: true,
@@ -183,15 +188,20 @@ describe("generateNixleReleases", () => {
 		assert.equal(p.tier, "A");
 		assert.equal(p.postType, "alert");
 		assert.equal(p.title, "Deputies Investigate Collision on Grand Ave");
-		// Verbatim agency text, quoted and attributed.
-		assert.match(p.bodyMd, /> DATE: August 16, 2026/);
-		assert.match(p.bodyMd, /45-year-old resident, was cited/);
-		assert.ok(!p.bodyMd.includes("Dear Nixle User"));
 		assert.match(
 			p.bodyMd,
-			/\[Original release \(Nixle\)\]\(https:\/\/local\.nixle\.com\/alert\/\d+\/\)/,
+			/\[Read the full release \(Nixle\)\]\(https:\/\/local\.nixle\.com\/alert\/\d+\/\)/,
 		);
 		assert.equal(p.sources.length, 1);
+
+		// No release text, ever.
+		assert.ok(!p.bodyMd.includes("DATE: August 16"));
+		assert.ok(!p.bodyMd.includes("45-year-old"));
+		assert.ok(!p.bodyMd.includes("Dear Nixle User"));
+		// And specifically none of the credential material in the footer.
+		assert.ok(!p.bodyMd.includes("fixture%2Balerts"));
+		assert.ok(!p.bodyMd.includes("0000000000000000000000000000dead"));
+		assert.ok(!p.bodyMd.includes("settings/subscription"));
 	});
 
 	test("does not publish county-wide releases about other cities", () => {
