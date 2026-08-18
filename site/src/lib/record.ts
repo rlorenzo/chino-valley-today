@@ -129,6 +129,24 @@ export function laDatePlus(date: string, days: number): string {
 	return d.toISOString().slice(0, 10);
 }
 
+/**
+ * The brief date /health may fairly expect at a given build moment: today's
+ * once the 06:00 Pacific assembly has had an hour to land, yesterday's
+ * before that. Keeps a pre-dawn deploy from stamping the site stale for a
+ * brief that is not due yet.
+ */
+export function expectedBriefDate(now: Date = new Date()): string {
+	const today = laToday(now);
+	const hour = Number(
+		new Intl.DateTimeFormat("en-US", {
+			timeZone: "America/Los_Angeles",
+			hour: "numeric",
+			hourCycle: "h23",
+		}).format(now),
+	);
+	return hour >= 7 ? today : laDatePlus(today, -1);
+}
+
 /** "Tue, Aug 18" for a YYYY-MM-DD local calendar date. */
 export function formatLocalDateShort(date: string): string {
 	return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {

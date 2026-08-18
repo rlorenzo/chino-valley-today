@@ -1,0 +1,14 @@
+[Unit]
+Description=Morning-brief watchdog for Chino Valley Today
+
+[Timer]
+# 08:00 Pacific: two hours after cvt-brief was due at 06:00, enough for a
+# slow run or a Persistent catch-up after a reboot to have finished.
+OnCalendar=*-*-* 08:00:00 America/Los_Angeles
+# If the host was down at 08:00, check once on boot rather than skipping the
+# day — a skipped watchdog is a silent morning, the exact failure it exists
+# to catch.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
