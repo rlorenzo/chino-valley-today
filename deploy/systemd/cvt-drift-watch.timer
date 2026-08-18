@@ -1,0 +1,14 @@
+[Unit]
+Description=Code-drift check for Chino Valley Today
+
+[Timer]
+# Hourly at :47, offset from every other cvt-* unit so a fetch never lands on
+# top of a scrape or a build. Hourly rather than daily because the cost is one
+# `git fetch` against GitHub, and the failure being watched for — a deploy that
+# silently did not happen — is measured in hours of stale code, not days.
+OnCalendar=*-*-* *:47:00 America/Los_Angeles
+Persistent=true
+RandomizedDelaySec=2min
+
+[Install]
+WantedBy=timers.target
