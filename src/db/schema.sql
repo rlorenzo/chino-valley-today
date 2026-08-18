@@ -73,3 +73,17 @@ CREATE TABLE IF NOT EXISTS items (
 -- The UNIQUE constraint above leads with document_id, so its autoindex can't
 -- serve that lookup; this one can.
 CREATE INDEX IF NOT EXISTS idx_items_external_id ON items(external_id, item_type);
+
+CREATE TABLE IF NOT EXISTS scrape_runs (
+  id INTEGER PRIMARY KEY,
+  source_key TEXT NOT NULL REFERENCES sources(key),
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  status TEXT NOT NULL CHECK (status IN ('running', 'success', 'failure')),
+  error_message TEXT,
+  documents_count INTEGER DEFAULT 0,
+  items_count INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_scrape_runs_source_id ON scrape_runs(source_key, id DESC);
+

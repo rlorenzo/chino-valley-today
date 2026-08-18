@@ -257,6 +257,38 @@ export function openDb(path: string = DB_PATH) {
 		}
 	}
 
+	function startScrapeRun(sourceKey: string): number {
+		const res = db
+			.prepare(
+				"INSERT INTO scrape_runs (source_key, started_at, status) VALUES (?, ?, 'running')",
+			)
+			.run(sourceKey, nowIso());
+		return Number(res.lastInsertRowid);
+	}
+
+	function finishScrapeRun(
+		id: number,
+		opts: {
+			status: "success" | "failure";
+			errorMessage?: string | null;
+			documentsCount?: number;
+			itemsCount?: number;
+		},
+	): void {
+		db.prepare(
+			`UPDATE scrape_runs
+       SET finished_at = ?, status = ?, error_message = ?, documents_count = ?, items_count = ?
+       WHERE id = ?`,
+		).run(
+			nowIso(),
+			opts.status,
+			opts.errorMessage ?? null,
+			opts.documentsCount ?? 0,
+			opts.itemsCount ?? 0,
+			id,
+		);
+	}
+
 	return {
 		raw: db,
 		path,
@@ -265,6 +297,8 @@ export function openDb(path: string = DB_PATH) {
 		touchDocument,
 		insertDocument,
 		insertItem,
+		startScrapeRun,
+		finishScrapeRun,
 	};
 }
 

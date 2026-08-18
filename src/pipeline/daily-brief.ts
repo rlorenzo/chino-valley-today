@@ -64,6 +64,26 @@ const AGENDA_SOURCES = [
 	"chinohills-agendas",
 ];
 
+export const DAILY_BRIEF_PREREQUISITE_SOURCES = [
+	// 6 Frequent Sources (05:17 PT group)
+	"nws-forecast",
+	"nws-alerts",
+	"sbcfire-news",
+	"cvfd-news",
+	"chino-news-rss",
+	"chinohills-news-rss",
+	// 9 Daily Sources (05:40 PT group)
+	"chino-legistar",
+	"chino-agendacenter",
+	"chinohills-agendas",
+	"cvusd-board",
+	"sbclib-events",
+	"sbparks-events",
+	"cbwcd-events",
+	"yanksair-events",
+	"abc-licenses",
+] as const;
+
 const FARMERS_MARKET_URL = "https://heritagefarmersmarket.org/chino-hills";
 
 export function laDateOf(occurredAt: string | null): string | null {
@@ -628,10 +648,133 @@ export function buildDailyBrief(
 	return assembleBrief(inputs, now, postTitleFromFile);
 }
 
+export interface PrereqCheckResult {
+	fresh: boolean;
+	staleSources: Array<{ sourceKey: string; reason: string }>;
+}
+
+export function assertPrerequisitesFresh(
+	db: Db,
+	now: Date,
+	prereqSources: readonly string[] = DAILY_BRIEF_PREREQUISITE_SOURCES,
+): PrereqCheckResult {
+	const laToday = laDateOf(now.toISOString());
+	const staleSources: Array<{ sourceKey: string; reason: string }> = [];
+
+	for (const key of prereqSources) {
+		const latestRun = db.raw
+			.prepare(
+				`SELECT status, finished_at, error_message
+				 FROM scrape_runs
+				 WHERE source_key = ?
+				 ORDER BY id DESC
+				 LIMIT 1`,
+			)
+			.get(key) as
+			| {
+					status: string;
+					finished_at: string | null;
+					error_message: string | null;
+			  }
+			| undefined;
+
+		if (!latestRun) {
+			staleSources.push({
+				sourceKey: key,
+				reason: "no scrape run recorded",
+			});
+			continue;
+		}
+
+		if (latestRun.status === "running") {
+			staleSources.push({
+				sourceKey: key,
+				reason: "scrape run is in progress",
+			});
+			continue;
+		}
+
+		if (latestRun.status !== "success") {
+			staleSources.push({
+				sourceKey: key,
+				reason: `latest scrape run failed (${latestRun.error_message ?? "unknown error"})`,
+			});
+			continue;
+		}
+
+		if (laDateOf(latestRun.finished_at) !== laToday) {
+			staleSources.push({
+				sourceKey: key,
+				reason: `latest scrape completed on ${laDateOf(latestRun.finished_at) ?? "unknown"}, expected ${laToday}`,
+			});
+			continue;
+		}
+
+		const latestDoc = db.raw
+			.prepare(
+				`SELECT d.fetched_at
+				 FROM documents d
+				 JOIN sources s ON d.source_id = s.id
+				 WHERE s.key = ?
+				 ORDER BY d.id DESC
+				 LIMIT 1`,
+			)
+			.get(key) as { fetched_at: string } | undefined;
+
+		if (!latestDoc) {
+			staleSources.push({
+				sourceKey: key,
+				reason: "no documents recorded for source",
+			});
+			continue;
+		}
+
+		if (laDateOf(latestDoc.fetched_at) !== laToday) {
+			staleSources.push({
+				sourceKey: key,
+				reason: `latest document fetched on ${laDateOf(latestDoc.fetched_at) ?? "unknown"}, expected ${laToday}`,
+			});
+		}
+	}
+
+	return {
+		fresh: staleSources.length === 0,
+		staleSources,
+	};
+}
+
 function main(): void {
 	const db = openDb();
 	const now = new Date();
+
+	if (process.argv.includes("--check-prereqs")) {
+		const check = assertPrerequisitesFresh(db, now);
+		if (!check.fresh) {
+			console.error(
+				`Prerequisite freshness check FAILED (${check.staleSources.length} source(s) not fresh):`,
+			);
+			for (const s of check.staleSources) {
+				console.error(`  - ${s.sourceKey}: ${s.reason}`);
+			}
+			process.exitCode = 1;
+			return;
+		}
+		console.log(
+			`Prerequisite freshness check OK: all ${DAILY_BRIEF_PREREQUISITE_SOURCES.length} sources fresh for ${laDateOf(now.toISOString())}.`,
+		);
+		return;
+	}
+
 	console.log(`Daily brief run started at ${now.toISOString()}`);
+	const prereqs = assertPrerequisitesFresh(db, now);
+	if (!prereqs.fresh) {
+		console.warn(
+			`  warning: prerequisites not fresh (${prereqs.staleSources.length} stale source(s)):`,
+		);
+		for (const s of prereqs.staleSources) {
+			console.warn(`    - ${s.sourceKey}: ${s.reason}`);
+		}
+	}
 
 	const { post, notes } = buildDailyBrief(db, now);
 	for (const note of notes) console.log(`  note: ${note}`);
@@ -656,6 +799,9 @@ function main(): void {
 	console.log(`  ${post.slug}: ${outcome} -> published`);
 }
 
-if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (
+	process.argv[1] &&
+	import.meta.url === pathToFileURL(process.argv[1]).href
+) {
 	main();
 }

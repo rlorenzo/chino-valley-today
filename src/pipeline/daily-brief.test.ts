@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { openDb } from "../db/index.ts";
 import type { ItemRow } from "../tiera/queries.ts";
 import {
 	assembleBrief,
+	assertPrerequisitesFresh,
 	type BriefInputs,
+	DAILY_BRIEF_PREREQUISITE_SOURCES,
 	decodeEntities,
 	isLaWednesday,
 	laTimeOf,
@@ -746,5 +749,177 @@ describe("assembleBrief", () => {
 		);
 		assert.ok(isLaWednesday(WEDNESDAY));
 		assert.ok(!isLaWednesday(NOW));
+	});
+});
+
+describe("DAILY_BRIEF_PREREQUISITE_SOURCES", () => {
+	test("contains exactly the 15 canonical prerequisite source keys", () => {
+		assert.equal(DAILY_BRIEF_PREREQUISITE_SOURCES.length, 15);
+		assert.deepEqual(
+			[...DAILY_BRIEF_PREREQUISITE_SOURCES],
+			[
+				"nws-forecast",
+				"nws-alerts",
+				"sbcfire-news",
+				"cvfd-news",
+				"chino-news-rss",
+				"chinohills-news-rss",
+				"chino-legistar",
+				"chino-agendacenter",
+				"chinohills-agendas",
+				"cvusd-board",
+				"sbclib-events",
+				"sbparks-events",
+				"cbwcd-events",
+				"yanksair-events",
+				"abc-licenses",
+			],
+		);
+	});
+});
+
+describe("assertPrerequisitesFresh", () => {
+	function populateSource(
+		db: ReturnType<typeof openDb>,
+		sourceKey: string,
+		opts: {
+			runStatus?: "success" | "failure" | "running";
+			runFinishedAt?: string;
+			docFetchedAt?: string | null;
+			errorMessage?: string;
+		} = {},
+	) {
+		const sourceId = db.upsertSource({
+			key: sourceKey,
+			name: sourceKey,
+			base_url: `https://example.org/${sourceKey}`,
+			method: "html",
+		});
+
+		const status = opts.runStatus ?? "success";
+		const finishedAt =
+			status === "running"
+				? null
+				: (opts.runFinishedAt ?? "2026-08-17T12:55:00.000Z");
+
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, error_message, documents_count, items_count)
+         VALUES (?, '2026-08-17T12:50:00.000Z', ?, ?, ?, 1, 1)`,
+			)
+			.run(sourceKey, finishedAt, status, opts.errorMessage ?? null);
+
+		if (opts.docFetchedAt !== null) {
+			const fetchedAt = opts.docFetchedAt ?? "2026-08-17T12:52:00.000Z";
+			db.raw
+				.prepare(
+					`INSERT INTO documents (source_id, url, doc_type, fetched_at, content_hash, raw_path)
+           VALUES (?, ?, 'agenda', ?, 'hash', '/raw/path')`,
+				)
+				.run(sourceId, `https://example.org/${sourceKey}/doc`, fetchedAt);
+		}
+	}
+
+	function createAllFreshDb() {
+		const db = openDb(":memory:");
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			populateSource(db, key);
+		}
+		return db;
+	}
+
+	test("passes when all 15 sources succeeded and fetched today", () => {
+		const db = createAllFreshDb();
+		const res = assertPrerequisitesFresh(db, NOW);
+		assert.equal(res.fresh, true);
+		assert.equal(res.staleSources.length, 0);
+	});
+
+	test("fails when a single scrape run failed", () => {
+		const db = openDb(":memory:");
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			if (key === "sbcfire-news") {
+				populateSource(db, key, {
+					runStatus: "failure",
+					errorMessage: "HTTP 500",
+				});
+			} else {
+				populateSource(db, key);
+			}
+		}
+		const res = assertPrerequisitesFresh(db, NOW);
+		assert.equal(res.fresh, false);
+		assert.equal(res.staleSources.length, 1);
+		assert.equal(res.staleSources[0].sourceKey, "sbcfire-news");
+		assert.match(res.staleSources[0].reason, /latest scrape run failed/);
+	});
+
+	test("fails in partial-success-then-failure case (document saved but scrape run failed)", () => {
+		const db = openDb(":memory:");
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			if (key === "nws-forecast") {
+				populateSource(db, key, {
+					runStatus: "failure",
+					docFetchedAt: "2026-08-17T12:52:00.000Z",
+					errorMessage: "SyntaxError",
+				});
+			} else {
+				populateSource(db, key);
+			}
+		}
+		const res = assertPrerequisitesFresh(db, NOW);
+		assert.equal(res.fresh, false);
+		assert.equal(res.staleSources.length, 1);
+		assert.equal(res.staleSources[0].sourceKey, "nws-forecast");
+		assert.match(res.staleSources[0].reason, /latest scrape run failed/);
+	});
+
+	test("fails when scrape run is in-flight (running)", () => {
+		const db = openDb(":memory:");
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			if (key === "cvusd-board") {
+				populateSource(db, key, { runStatus: "running" });
+			} else {
+				populateSource(db, key);
+			}
+		}
+		const res = assertPrerequisitesFresh(db, NOW);
+		assert.equal(res.fresh, false);
+		assert.equal(res.staleSources.length, 1);
+		assert.equal(res.staleSources[0].sourceKey, "cvusd-board");
+		assert.match(res.staleSources[0].reason, /in progress/);
+	});
+
+	test("fails when scrape run is from yesterday", () => {
+		const db = openDb(":memory:");
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			if (key === "sbclib-events") {
+				populateSource(db, key, {
+					runFinishedAt: "2026-08-16T12:55:00.000Z",
+					docFetchedAt: "2026-08-16T12:55:00.000Z",
+				});
+			} else {
+				populateSource(db, key);
+			}
+		}
+		const res = assertPrerequisitesFresh(db, NOW);
+		assert.equal(res.fresh, false);
+		assert.equal(res.staleSources.length, 1);
+		assert.equal(res.staleSources[0].sourceKey, "sbclib-events");
+		assert.match(res.staleSources[0].reason, /expected 2026-08-17/);
+	});
+
+	test("fails when a source has no scrape run recorded", () => {
+		const db = openDb(":memory:");
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			if (key !== "yanksair-events") {
+				populateSource(db, key);
+			}
+		}
+		const res = assertPrerequisitesFresh(db, NOW);
+		assert.equal(res.fresh, false);
+		assert.equal(res.staleSources.length, 1);
+		assert.equal(res.staleSources[0].sourceKey, "yanksair-events");
+		assert.match(res.staleSources[0].reason, /no scrape run recorded/);
 	});
 });

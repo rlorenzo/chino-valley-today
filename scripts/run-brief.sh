@@ -13,6 +13,28 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
+# Bounded retry loop for prerequisite freshness: up to 3 minutes (6 attempts x 30s)
+# Allows in-flight or slightly delayed scrapers from the 05:40 group to finish cleanly.
+ATTEMPTS="${CVT_PREREQ_MAX_ATTEMPTS:-6}"
+DELAY="${CVT_PREREQ_RETRY_DELAY_SEC:-30}"
+success=0
+
+for ((i=1; i<=ATTEMPTS; i++)); do
+	if node src/pipeline/daily-brief.ts --check-prereqs; then
+		success=1
+		break
+	fi
+	if [ "$i" -lt "$ATTEMPTS" ]; then
+		echo "Prerequisites not ready (attempt $i/$ATTEMPTS). Retrying in ${DELAY}s..." >&2
+		sleep "$DELAY"
+	fi
+done
+
+if [ "$success" -ne 1 ]; then
+	echo "ERROR: Prerequisite scrape sources failed freshness gate after $ATTEMPTS attempts." >&2
+	exit 1
+fi
+
 node src/pipeline/daily-brief.ts
 scripts/deploy.sh local
 
