@@ -62,7 +62,14 @@ fi
 echo "DRIFT: checkout does not match origin/main" >&2
 echo "  HEAD:        $head_sha" >&2
 echo "  origin/main: $main_sha" >&2
-echo "  fix with: scripts/deploy.sh code   (from a developer machine)" >&2
+# `all`, not `code`. Two reasons, and the second is what makes the marker below
+# safe: new pipeline code can change how posts render, so the site should be
+# rebuilt from it anyway; and a rebuild regenerates the health file from
+# scratch, which is what clears the markers written below. `code` alone updates
+# the checkout and leaves the alarm firing after the cause is gone — an alert
+# that outlives its fault is worse than none, because it teaches you to ignore
+# it. (CI's host-update path rebuilds too, so it self-clears.)
+echo "  fix with: scripts/deploy.sh all   (from a developer machine)" >&2
 
 # Flip the LIVE health file, the way brief-health.ts does for a missing brief.
 #
@@ -74,6 +81,14 @@ echo "  fix with: scripts/deploy.sh code   (from a developer machine)" >&2
 # a slightly ambiguous one that actually pages. The `code=drifted` line below
 # disambiguates on inspection, and if a second monitor is ever configured it
 # should watch for `code=current` instead, at which point this flip can go.
+#
+# Nothing here ever un-flips, which is the same contract brief-health.ts works
+# under: the markers live in the BUILT health file, so the next site rebuild
+# regenerates the page and clears them. That is why the remediation printed
+# above is `deploy.sh all` rather than `code` — the rebuild is what closes the
+# alarm. Un-flipping from here would be worse than useless, since this script
+# cannot tell whether `pipeline=stale` was set by itself or by the brief
+# watchdog, and restoring it could silence a real missing-brief alert.
 web_root="${CVT_WEB_ROOT:-/var/www/chinovalley.today}"
 health="$web_root/current/health"
 if [ -w "$health" ]; then

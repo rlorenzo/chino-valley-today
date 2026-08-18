@@ -115,7 +115,26 @@ deploy_code() {
 	echo "==> syncing systemd units"
 	rsync -az -e ssh deploy/systemd/ "$HOST:/etc/systemd/system/"
 	ssh "$HOST" "systemctl daemon-reload"
-	echo "==> units reloaded (enable them per deploy/README.md)"
+	echo "==> units reloaded"
+
+	# Syncing a unit does NOT enable it, and a timer that exists but is disabled
+	# looks identical to one that is working right up until you need it. That
+	# has already happened once: cvt-tiera shipped and sat disabled, so nothing
+	# published. Name the gap on every deploy rather than trusting the README.
+	echo "==> checking timers are enabled"
+	ssh "$HOST" '
+		disabled=""
+		for unit in /etc/systemd/system/cvt-*.timer; do
+			name="$(basename "$unit")"
+			systemctl is-enabled --quiet "$name" 2>/dev/null || disabled="$disabled $name"
+		done
+		if [ -n "$disabled" ]; then
+			echo "  WARNING: installed but NOT enabled:$disabled" >&2
+			echo "  enable with: systemctl enable --now$disabled" >&2
+		else
+			echo "  all cvt-*.timer units enabled"
+		fi
+	'
 }
 
 # Run ON the host, not from a developer machine. This is what CI invokes over

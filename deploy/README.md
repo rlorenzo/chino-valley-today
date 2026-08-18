@@ -214,6 +214,7 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 | `cvt-scrape-media` | 07:30 | Swagit video, YouTube captions |
 | `cvt-brief` | 06:00 | daily brief assembly + site rebuild (no scraping) |
 | `cvt-brief-watch` | 08:00 | flips `/health` to `pipeline=stale` if today's brief is missing |
+| `cvt-drift-watch` | hourly at :47 | flips `/health` if the checkout is not running `origin/main` |
 | `cvt-backup` | 02:20 | rclone → B2 |
 
 `cvt-tiera` is the only unit here that publishes rather than ingests. It exists
@@ -231,6 +232,7 @@ run missed during a reboot fires once afterwards instead of being skipped.
 ```bash
 systemctl enable --now cvt-scrape-frequent.timer cvt-scrape-daily.timer \
                        cvt-tiera.timer cvt-scrape-media.timer cvt-brief.timer \
+                       cvt-drift-watch.timer \
                        cvt-brief-watch.timer cvt-backup.timer
 systemctl enable --now cvt-admin.service
 
