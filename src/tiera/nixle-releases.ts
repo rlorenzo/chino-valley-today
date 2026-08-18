@@ -183,14 +183,15 @@ export function generateNixleReleases(db: Db, now: Date): GenResult {
 		// This is the same shape as the fire & safety section of the daily
 		// brief (src/pipeline/daily-brief.ts): verbatim title, source link,
 		// never body text.
+		//
+		// No explanatory sentence above the link either. "Read the full release"
+		// already says what the link is for, and a line of our prose framing the
+		// agency's headline is us talking about the record rather than showing
+		// it.
 		const lines: string[] = [];
 		lines.push(`- **Issued by:** ${mdEscape(agency)}`);
 		if (priority) lines.push(`- **Priority:** ${mdEscape(priority)}`);
 		lines.push(`- **Issued:** ${mdEscape(row.occurred_at)}`, "");
-		lines.push(
-			"This is the agency's own headline. Full details, including any names the department chose to release, are on its page:",
-			"",
-		);
 		lines.push(mdLink("Read the full release (Nixle)", row.source_url));
 
 		posts.push({
