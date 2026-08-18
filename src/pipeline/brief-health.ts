@@ -53,7 +53,7 @@ export async function checkBriefHttp(
 	opts: { baseUrl?: string; fetchFn?: typeof fetch } = {},
 ): Promise<{ ok: boolean; status?: number; error?: string }> {
 	const baseUrl =
-		opts.baseUrl ?? process.env.CVT_BASE_URL ?? "http://127.0.0.1";
+		opts.baseUrl ?? process.env.CVT_BASE_URL ?? "https://chinovalley.today";
 	const url = `${baseUrl.replace(/\/+$/, "")}/brief/${dateStr}/`;
 	const fetcher = opts.fetchFn ?? fetch;
 
@@ -138,7 +138,7 @@ async function main(): Promise<void> {
 	const healthPath = join(webRoot, "current", "health");
 
 	const result = await verifyBriefHealth(db, now, {
-		baseUrl: process.env.CVT_BASE_URL ?? "http://127.0.0.1",
+		baseUrl: process.env.CVT_BASE_URL ?? "https://chinovalley.today",
 	});
 
 	if (result.healthy) {

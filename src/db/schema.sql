@@ -85,5 +85,5 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
   items_count INTEGER DEFAULT 0
 );
 
-CREATE INDEX IF NOT EXISTS idx_scrape_runs_source_status ON scrape_runs(source_key, status, finished_at);
+CREATE INDEX IF NOT EXISTS idx_scrape_runs_source_id ON scrape_runs(source_key, id DESC);
 
