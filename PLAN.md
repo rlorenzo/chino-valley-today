@@ -715,7 +715,7 @@ is always a 1-2 sentence attributed summary + link (EDITORIAL.md amendment
 regardless of robots). Verbatim feed title/description renders Tier A; any
 LLM-written summary is Tier B behind the full gate path.
 
-### Task 4.3 - Daily brief assembler
+### Task 4.3 - Daily brief assembler — CODE COMPLETE & MERGED (PR #27, 2026-08-18)
 
 New post type `daily-brief`, one per morning (~6am Pacific systemd timer, new
 `cvt-brief.timer`): deterministic assembly of last-24h items + today's
@@ -727,6 +727,15 @@ Tier A frame; per-item tier routing unchanged (an incident naming a private
 individual stays Tier C and simply doesn't appear until cleared). Quiet day =
 weather + schedule, honestly labeled. Frontmatter extends the schema; the
 Astro content collection stays the last-line validator.
+
+**Reliability hardening landed (PR #27):**
+
+- 15 canonical prerequisite sources contract across frequent & daily scraper groups.
+- Prerequisite freshness gate (`DAILY_BRIEF_PREREQUISITE_SOURCES`, `assertPrerequisitesFresh(db, now)` / `--check-prereqs`).
+- Scrape run outcome tracking schema (`scrape_runs` table & index) in `src/db/schema.sql` and lifecycle tracking in `src/run-one.ts`.
+- Service dependencies (`After`/`Wants` in `deploy/systemd/cvt-brief.service`) and runner retry loop in `scripts/run-brief.sh` (6 attempts $\times$ 30s).
+- Public HTTP watchdog (`src/pipeline/brief-health.ts`) verifying DB status + bounded HTTP GET to `/brief/YYYY-MM-DD/` (10s timeout), marking `/health` `pipeline=stale` on failure.
+- Active in 7-day operational verification gate.
 
 ### Task 4.4 - Front page leads with Today
 
