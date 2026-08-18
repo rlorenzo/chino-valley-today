@@ -31,11 +31,22 @@ if ! git rev-parse --git-dir >/dev/null 2>&1 || [ ! -d scripts ]; then
 	exit 66
 fi
 
-# ls-remote, NOT fetch. A fetch writes .git/FETCH_HEAD and any new objects, and
-# this checkout's .git is root-owned because deploys run git as root — so a
-# fetch as the service account dies with "cannot open '.git/FETCH_HEAD'". More
-# to the point, a watchdog has no business mutating the thing it watches.
-# ls-remote asks the remote for one ref and writes nothing.
+# ls-remote, NOT fetch.
+#
+# A fetch writes .git/FETCH_HEAD. The checkout directory and .git itself are
+# owned by the service account, but individual files inside .git — FETCH_HEAD,
+# index, ORIG_HEAD, config — are root-owned, because `deploy.sh code` runs git
+# as root. So a fetch as the service account dies with
+# "cannot open '.git/FETCH_HEAD': Permission denied", which is how this was
+# found.
+#
+# Read-only plumbing is unaffected: rev-parse and ls-remote work fine as the
+# service account (verified on the droplet), and git's dubious-ownership check
+# keys off the repository directory's owner, which is cvtoday — not off the
+# root-owned files within it.
+#
+# More to the point than either: a watchdog has no business mutating the thing
+# it watches. ls-remote asks the remote for one ref and writes nothing.
 main_sha="$(git ls-remote origin refs/heads/main | cut -f1)"
 head_sha="$(git rev-parse HEAD)"
 
