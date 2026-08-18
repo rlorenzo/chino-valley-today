@@ -1,0 +1,35 @@
+[Unit]
+Description=Chino Valley Today — verify the morning brief published (flips /health to stale if not)
+Documentation=https://github.com/rlorenzo/chino-valley-today
+
+[Service]
+Type=oneshot
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+EnvironmentFile=/srv/chino-valley-today/.env
+ExecStart=/usr/bin/env node src/pipeline/brief-health.ts
+
+# Same shared-droplet discipline as the scrape units; this reads one DB row
+# and rewrites one small file, so the smallest caps in the fleet suffice.
+MemoryHigh=150M
+MemoryMax=200M
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# data for the posts-table read (WAL needs the directory writable), and the
+# web root because a missed morning rewrites the live health file there.
+ReadWritePaths=/srv/chino-valley-today/data /var/www/chinovalley.today
+
+TimeoutStartSec=2min
+
+[Install]
+WantedBy=multi-user.target

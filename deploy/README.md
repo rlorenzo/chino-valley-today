@@ -199,6 +199,7 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 | `cvt-scrape-daily` | 05:40 | Legistar, Agenda Center, AgendaQuick, CVUSD, ABC, event calendars |
 | `cvt-scrape-media` | 07:30 | Swagit video, YouTube captions |
 | `cvt-brief` | 06:00 | daily brief assembly + site rebuild (no scraping) |
+| `cvt-brief-watch` | 08:00 | flips `/health` to `pipeline=stale` if today's brief is missing |
 | `cvt-backup` | 02:20 | rclone → B2 |
 
 Schedules are Pacific because meeting times are; systemd 255 on Ubuntu 24.04
@@ -207,7 +208,8 @@ run missed during a reboot fires once afterwards instead of being skipped.
 
 ```bash
 systemctl enable --now cvt-scrape-frequent.timer cvt-scrape-daily.timer \
-                       cvt-scrape-media.timer cvt-brief.timer cvt-backup.timer
+                       cvt-scrape-media.timer cvt-brief.timer \
+                       cvt-brief-watch.timer cvt-backup.timer
 systemctl enable --now cvt-admin.service
 
 systemctl list-timers 'cvt-*'
@@ -263,15 +265,37 @@ symlink resolves. Caddy sets `Cache-Control: no-store` on it, because a cached
 
 ### Pipeline liveness — the check that actually matters
 
-**`/health` cannot tell you the pipeline is alive.** The site is static: if
-every scrape timer died tonight, `/health` would keep answering `ok` while the
-site served a frozen record, and nothing would alert. For a publication whose
-claim is currency, silently going stale is a worse failure than visibly going
-down — nobody is paged by content that simply stops changing.
+**A bare `ok` on `/health` cannot tell you the pipeline is alive.** The site
+is static: if every scrape timer died tonight, `/health` would keep answering
+`ok` while the site served a frozen record, and nothing would alert. For a
+publication whose claim is currency, silently going stale is a worse failure
+than visibly going down — nobody is paged by content that simply stops
+changing. Two ways to close that gap, by plan tier:
 
-So the check is inverted. Each scrape group pings a dead-man's-switch URL after
+#### Free plan: keyword monitor on `pipeline=fresh`
+
+`/health` carries a `pipeline=fresh|stale` line. It is stamped at build time
+(fresh only when the latest brief is the one that build moment may fairly
+expect — today's after 07:00 Pacific, yesterday's before), and
+`cvt-brief-watch.timer` (08:00 Pacific) rewrites the **live** file to
+`pipeline=stale` when today's brief has not published — covering the case
+where no rebuild happened at all.
+
+Create a keyword monitor on `https://chinovalley.today/health` with keyword
+`pipeline=fresh`, configured to alert when the keyword is **absent**. One
+monitor then fires on: a missed or failed morning brief, a mangled health
+page, and the site being down outright.
+
+Residual blind spot, recorded honestly: systemd's timers dying wholesale
+(the watchdog included) while Caddy keeps serving. Only the heartbeat scheme
+below catches that; the keyword monitor is the free-plan approximation, and
+the plain `ok` uptime check still covers the host itself going down.
+
+#### Paid plan (or healthchecks.io): dead-man's-switch heartbeats
+
+The check is inverted. Each scrape group pings a dead-man's-switch URL after
 a clean run, and the monitoring service alerts when the ping **stops arriving**.
-Create three UptimeRobot *heartbeat* monitors (or healthchecks.io checks) and
+Create UptimeRobot *heartbeat* monitors (or healthchecks.io checks) and
 set them in `.env`:
 
 | Variable | Group schedule | Suggested period |
