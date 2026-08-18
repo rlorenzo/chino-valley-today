@@ -16,6 +16,7 @@ import { generateAlerts } from "./alerts.ts";
 import { generateBusinessTracker } from "./business-tracker.ts";
 import { generateMeetingPreviews } from "./meeting-previews.ts";
 import { generateNewsDigest } from "./news-digest.ts";
+import { generateNixleReleases } from "./nixle-releases.ts";
 
 interface Generator {
 	label: string;
@@ -30,6 +31,7 @@ function main(): void {
 	const generators: Generator[] = [
 		{ label: "meeting_preview", run: () => generateMeetingPreviews(db, now) },
 		{ label: "alert", run: () => generateAlerts(db, now) },
+		{ label: "nixle_release", run: () => generateNixleReleases(db, now) },
 		{ label: "business_tracker", run: () => generateBusinessTracker(db, now) },
 		{ label: "news_digest", run: () => generateNewsDigest(db, now) },
 	];

@@ -27,7 +27,8 @@ reviewer. Changes to this file are editorial decisions — date them.
 - **Tier C — human always, judge cannot override:** crime items naming private
   individuals, anything involving minors, personnel or legal allegations,
   corrections, and anything the judge flags private_individual. Publish
-  requires an explicit per-item acknowledgment. No exceptions.
+  requires an explicit per-item acknowledgment. No exceptions — except the one
+  carved out below for agency alert channels (amended 2026-08-17).
 - **Audit:** weekly human review of a 10–15% ISO-week-seeded sample of
   auto-published Tier B. Two substantive misses in a rolling month → the post
   type is demoted to held-by-default until gates are tightened.
@@ -81,6 +82,35 @@ reviewer. Changes to this file are editorial decisions — date them.
   student-athlete is named or identifiably described, including from official
   releases — the minors rule takes precedence until an explicit carve-out is
   decided (open decision recorded in PRODUCT.md).
+
+## Agency alert channels (amended 2026-08-17)
+
+**Operator decision, 2026-08-17.** Press releases received through a subscribed
+agency notification channel (today: the Sheriff's Nixle channels) auto-publish
+in full, body text included, without the per-item acknowledgment Tier C
+otherwise requires. Rationale given: the agency has already published the text
+to the public through its own channel, and we redistribute it verbatim rather
+than making a claim of our own.
+
+- **What this overrides:** the Tier C "human always … no exceptions" clause,
+  for this source class only. Tier C is unchanged for every other source, and
+  items are still stored with `meta.tier = "C"` — the carve-out is about
+  publication, not classification.
+- **What still binds, enforced deterministically before publication:**
+  - **Minors.** Any release whose text indicates a minor is involved is HELD,
+    never auto-published. The minors rule under "Private persons" is a separate
+    and stronger prohibition; it was not part of this decision and still holds
+    even when the source document names them.
+  - **Geography.** Only releases flagged `chinoRelevant` publish. A Nixle
+    subscription delivers every agency channel covering the area, so
+    county-wide releases about other cities are archived, not published.
+  - **Verbatim only.** No LLM touches these. The agency's text renders as an
+    attributed blockquote with a permalink. Nothing is summarized,
+    characterized, or restated as our own claim, so these render Tier A.
+- **Risk accepted by the operator:** these releases name arrested and suspected
+  individuals, some of whom will never be charged or convicted, and those names
+  publish without human review. The corrections policy below applies, and a
+  correction here counts as an audit miss like any other.
 
 ## Source channels (decision 2026-08-12)
 

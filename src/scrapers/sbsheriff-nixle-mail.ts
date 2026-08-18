@@ -9,8 +9,15 @@
 // engines excepted), so this ingester consumes the service's INTENDED delivery
 // mechanism: alert emails to a subscribed mailbox we control
 // (chinovalleytoday+nixle@gmail.com, subscribed 2026-08-13). Each message
-// carries a nixle.us short-link permalink; that public URL — not the mailbox —
-// is what readers get as source_url.
+// carries a local.nixle.com/alert/<id>/ permalink; that public URL — not the
+// mailbox — is what readers get as source_url.
+//
+// Scope note (2026-08-17): a Nixle subscription delivers every agency channel
+// covering the subscribed area, so this mailbox receives county-wide SBSD
+// releases (Loma Linda, Mentone, Hesperia…) alongside anything the Chino Hills
+// station posts. All of it is ingested with the true channel recorded and
+// Chino relevance flagged in meta — the archive stays complete and the
+// editorial call happens downstream (same policy as sbcfire-news).
 //
 // Editorial: Tier C source. Releases routinely name private individuals; the
 // pipeline must never auto-publish items from this source (PLAN Phase 1 tier
@@ -47,21 +54,70 @@ try {
 	// no .env — the credential guard in run() reports the gap
 }
 
+// The Chino Hills station channel — the reason this source exists, but NOT the
+// only channel that reaches the mailbox. A Nixle subscription covers every
+// agency serving the subscribed area, so county-wide channels (SBSD -
+// Headquarters, SBSD - Central) deliver here too. The real channel is derived
+// per message from the sender; this constant is only the source's baseUrl.
 const CHANNEL_URL =
 	"https://local.nixle.com/sbsd---chino-hills-police-department/";
 
-// nixle.us short-link permalink carried in each alert message (observed form:
-// https://nixle.us/HG583). Case-sensitive code; tolerate an optional www.
-const NIXLE_PERMALINK_RE =
+// Permalink forms, in priority order:
+//
+//  1. https://local.nixle.com/alert/<numeric id>/ — what alert EMAILS actually
+//     carry. Verified against live messages 2026-08-17.
+//  2. https://nixle.us/<code> — the short link seen on the web channel pages
+//     during the 2026-08-12 research pass. Kept as a fallback because it is a
+//     real Nixle permalink shape, but no email has been observed using it.
+//
+// Form 1 is why this scraper ingested nothing for its first four days: it
+// required form 2 and silently counted every real press release as service
+// mail. Match against the text/plain part first — the HTML part wraps every
+// link in AWS `awstrack.me` click tracking with the target percent-encoded,
+// which these patterns deliberately do not match (an unwrapped, canonical URL
+// is what a reader should get as source_url).
+const ALERT_PERMALINK_RE =
+	/https?:\/\/(?:www\.)?local\.nixle\.com\/alert\/(\d+)\/?/;
+const SHORTLINK_PERMALINK_RE =
 	/https?:\/\/(?:www\.)?nixle\.us\/([A-Za-z0-9]{3,12})\b/;
 
 export function extractNixlePermalink(
 	text: string,
 ): { url: string; code: string } | null {
-	const m = text.match(NIXLE_PERMALINK_RE);
-	if (!m) return null;
-	return { url: `https://nixle.us/${m[1]}`, code: m[1] };
+	const alert = text.match(ALERT_PERMALINK_RE);
+	if (alert) {
+		return {
+			url: `https://local.nixle.com/alert/${alert[1]}/`,
+			code: alert[1],
+		};
+	}
+	const short = text.match(SHORTLINK_PERMALINK_RE);
+	if (short) return { url: `https://nixle.us/${short[1]}`, code: short[1] };
+	return null;
 }
+
+// Nixle sends each agency's alerts from its own address —
+// "SBSD - Headquarters" <sbsd---headquarters@emails.nixle.com> — and the local
+// part is the channel slug on local.nixle.com. Deriving the channel per message
+// keeps provenance honest: a county-wide release must never be stamped with the
+// Chino Hills station's channel URL.
+const CHANNEL_SENDER_RE = /([a-z0-9-]+)@emails\.nixle\.com/i;
+
+export function channelFromSender(
+	from: string | null,
+): { slug: string; url: string } | null {
+	const m = (from ?? "").match(CHANNEL_SENDER_RE);
+	if (!m) return null;
+	const slug = m[1].toLowerCase();
+	// Service mail from the platform itself, not an agency channel.
+	if (slug === "thenixleteam") return null;
+	return { slug, url: `https://local.nixle.com/${slug}/` };
+}
+
+// County-wide channels carry releases for the whole of San Bernardino County.
+// Relevance is FLAGGED, not filtered at ingest — same policy as sbcfire-news:
+// the archive stays complete and the editorial call happens downstream.
+const CHINO_RE = /\bchino\b|\bchino hills\b/i;
 
 export interface NixleMessageFields {
 	subject: string | null;
@@ -82,7 +138,7 @@ export interface NixleItemDraft {
 }
 
 // Pure mapping from parsed message fields to an item draft; null when the
-// message carries no nixle.us permalink (subscription confirmations, digests,
+// message carries no Nixle permalink (subscription confirmations, digests,
 // service mail) — provenance is non-negotiable, so those are never ingested.
 export function messageToItemDraft(
 	msg: NixleMessageFields,
@@ -92,13 +148,16 @@ export function messageToItemDraft(
 		extractNixlePermalink(msg.html ?? "");
 	if (!permalink) return null;
 	const subject = (msg.subject ?? "").trim();
-	// Nixle subjects carry the priority tag as a prefix ("Advisory: ...",
-	// "Alert: ...", "Community: ..."); keep the full subject as title and
-	// record the tag separately when present.
+	// Nixle subjects carry the priority tag as a prefix. The real emails use
+	// "<Type> Message: ..." ("Advisory Message: Deputy Involved Shooting…",
+	// observed 2026-08-17); the bare "<Type>: ..." form is accepted too since
+	// the web channel pages render it that way. Keep the full subject as title
+	// and record the tag separately.
 	const priorityMatch = subject.match(
-		/^(Alert|Advisory|Community|Traffic)\s*:/i,
+		/^(Alert|Advisory|Community|Traffic)(?:\s+Message)?\s*:/i,
 	);
 	const body = (msg.text ?? "").trim();
+	const channel = channelFromSender(msg.from);
 	return {
 		external_id: permalink.code,
 		source_url: permalink.url,
@@ -106,7 +165,9 @@ export function messageToItemDraft(
 		body,
 		occurred_at: msg.date ? msg.date.toISOString() : null,
 		meta: {
-			channel: CHANNEL_URL,
+			channel: channel?.url ?? null,
+			channelSlug: channel?.slug ?? null,
+			chinoRelevant: CHINO_RE.test(`${subject} ${body}`),
 			priority: priorityMatch ? priorityMatch[1].toLowerCase() : null,
 			from: msg.from,
 			messageId: msg.messageId,
@@ -173,6 +234,8 @@ async function run(ctx: ScraperContext): Promise<void> {
 			let matched = 0;
 			let ingested = 0;
 			let skippedNoPermalink = 0;
+			let chinoRelevant = 0;
+			const channelCounts = new Map<string, number>();
 			for (const uid of uids) {
 				const msg = await client.fetchOne(
 					String(uid),
@@ -196,6 +259,9 @@ async function run(ctx: ScraperContext): Promise<void> {
 					skippedNoPermalink++;
 					continue;
 				}
+				if (draft.meta.chinoRelevant) chinoRelevant++;
+				const slug = (draft.meta.channelSlug as string | null) ?? "(unknown)";
+				channelCounts.set(slug, (channelCounts.get(slug) ?? 0) + 1);
 
 				// Document = the raw RFC822 message, content-addressed like every
 				// other raw artifact; documents.url = the public permalink (where a
@@ -225,16 +291,27 @@ async function run(ctx: ScraperContext): Promise<void> {
 				});
 				if (r.isNew) ingested++;
 			}
+			const channelSummary =
+				[...channelCounts]
+					.sort((a, b) => b[1] - a[1])
+					.map(([slug, n]) => `${slug}=${n}`)
+					.join(", ") || "none";
 			ctx.note(
 				`Mailbox ${user} (alias filter "${alias}", since ${since.toISOString().slice(0, 10)}): ` +
 					`${uids.length} message(s) in window, ${matched} matched Nixle filter, ` +
 					`${ingested} new item(s) ingested, ${skippedNoPermalink} matched message(s) skipped for ` +
-					`carrying no nixle.us permalink (confirmations/service mail — never ingested, provenance rule).`,
+					`carrying no Nixle permalink (confirmations/service mail — never ingested, provenance rule). ` +
+					`Channels seen: ${channelSummary}. ${chinoRelevant} of ${matched - skippedNoPermalink} ` +
+					`alert(s) mention Chino/Chino Hills (county-wide channels reach this mailbox too — ` +
+					`relevance is flagged in meta, not filtered at ingest).`,
 			);
 			if (matched === 0) {
 				ctx.note(
-					"No Nixle messages found yet — expected until the first alert lands (channel cadence is " +
-						"roughly one message per 1-2 weeks; see reports/notes/sbsheriff-news.md).",
+					"No Nixle messages matched — this means NO MAIL REACHED THE FILTER, not that mail " +
+						"arrived and was discarded: mail that arrived without a Nixle permalink is counted " +
+						"separately above. The Chino Hills station posts in bursts " +
+						"with month-long gaps (see reports/notes/sbsheriff-news.md), so silence here is " +
+						"unremarkable; sustained silence is worth checking against the subscription list.",
 				);
 			}
 		} finally {
