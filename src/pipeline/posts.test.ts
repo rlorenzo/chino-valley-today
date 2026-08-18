@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { describe, test } from "node:test";
+import { openDb } from "../db/index.ts";
 import { validateDraft } from "../gates/validators.ts";
-import { glossaryFor, type NewPost, renderPostFile } from "./posts.ts";
+import { ROOT } from "../store.ts";
+import {
+	createPost,
+	glossaryFor,
+	type NewPost,
+	renderPostFile,
+} from "./posts.ts";
 
 const SOURCE =
 	"https://www.abc.ca.gov/licensing/licensing-reports/status-changes/";
@@ -162,5 +171,62 @@ describe("the glossary is invisible to the gates", () => {
 			names.some((d) => d.includes("Alcoholic Beverage Control")),
 			false,
 		);
+	});
+});
+
+// --- the published-file guard -------------------------------------------
+//
+// Regression for 2026-08-18: a Tier A run recreated three already-published
+// previews and silently stripped their dated correction notes. createPost's
+// "already published" check read the DATABASE, but the published artifact is
+// the FILE, and the rows for those posts were missing — so it took the create
+// path and overwrote live, hand-edited content.
+//
+// These exercise content/rejected/ and content/queue/, both gitignored, so a
+// stray fixture can never land in the repo. The guard loop treats published and
+// rejected identically, so rejected is a faithful stand-in for the real case.
+
+describe("createPost respects a terminal post on disk with no DB row", () => {
+	const slug = "zz-test-fixture-published-file-guard";
+	const draft: NewPost = {
+		slug,
+		postType: "alert",
+		tier: "A",
+		title: "Fixture",
+		bodyMd: "regenerated body — must never overwrite a terminal post",
+		sources: ["https://example.test/fixture"],
+	};
+
+	test("skips when a rejected file exists but the database has no row", () => {
+		const db = openDb(":memory:");
+		const rel = join("content", "rejected", `${slug}.md`);
+		const abs = join(ROOT, rel);
+		mkdirSync(dirname(abs), { recursive: true });
+		writeFileSync(abs, "original content a human decided on\n");
+		try {
+			const res = createPost(db, draft);
+			assert.equal(res.outcome, "skipped");
+			assert.equal(res.id, null, "no row exists, so no id may be invented");
+			assert.equal(res.filePath, rel);
+			// The whole point: the file on disk is untouched.
+			assert.equal(
+				readFileSync(abs, "utf8"),
+				"original content a human decided on\n",
+			);
+		} finally {
+			rmSync(abs, { force: true });
+		}
+	});
+
+	test("creates normally when no terminal file exists", () => {
+		const db = openDb(":memory:");
+		const queued = join(ROOT, "content", "queue", `${slug}.md`);
+		try {
+			const res = createPost(db, draft);
+			assert.equal(res.outcome, "created");
+			assert.ok(typeof res.id === "number");
+		} finally {
+			rmSync(queued, { force: true });
+		}
 	});
 });

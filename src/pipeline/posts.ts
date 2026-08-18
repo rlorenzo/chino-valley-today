@@ -223,12 +223,16 @@ export function listPosts(db: Db, status?: PostStatus): PostRow[] {
 // `replacePublished` is the daily-brief exception: a same-day re-run must
 // replace that day's already-published brief rather than duplicate or skip it.
 // Rejected posts stay untouchable on every path — a human said no.
+//
+// `id` is null in one case: a terminal post was found on disk with no database
+// row backing it (see the filesystem check below). There is no row to return an
+// id for, and inventing one would be a lie. Callers care about `outcome`.
 export function createPost(
 	db: Db,
 	p: NewPost,
 	opts: { replacePublished?: boolean } = {},
 ): {
-	id: number;
+	id: number | null;
 	filePath: string;
 	outcome: "created" | "updated" | "skipped";
 } {
@@ -264,6 +268,25 @@ export function createPost(
 			outcome: "updated",
 		};
 	}
+	// No database row — but the published artifact is the FILE, and the two can
+	// drift apart: a database restored from backup, or a post generated on one
+	// machine and committed as markdown while the row stayed behind. Trusting
+	// the database alone is what let a generator recreate an already-live post
+	// and overwrite hand-authored content — on 2026-08-18 a Tier A run silently
+	// stripped three dated correction notes off published previews, which is
+	// precisely the silent edit EDITORIAL.md forbids.
+	//
+	// So for the two TERMINAL states the filesystem gets the final say. `held`
+	// and `queued` are deliberately not checked: nobody has decided about those
+	// yet, and regenerating them in place is the idempotency the runners rely on.
+	for (const status of ["published", "rejected"] as const) {
+		if (status === "published" && opts.replacePublished) continue;
+		const onDisk = join(DIR_BY_STATUS[status], `${p.slug}.md`);
+		if (existsSync(join(ROOT, onDisk))) {
+			return { id: null, filePath: onDisk, outcome: "skipped" };
+		}
+	}
+
 	const createdAt = nowIso();
 	const filePath = join(DIR_BY_STATUS.queued, `${p.slug}.md`);
 	writePostFile(filePath, renderPostFile(p, createdAt));
