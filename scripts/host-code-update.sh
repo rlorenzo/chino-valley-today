@@ -15,7 +15,9 @@
 #   scripts/host-code-update.sh
 set -euo pipefail
 
-if [ ! -d .git ] || [ ! -d content ]; then
+# `git rev-parse`, not `[ -d .git ]`: in a git worktree .git is a FILE pointing
+# at the real git dir, so the directory test rejects every worktree.
+if ! git rev-parse --git-dir >/dev/null 2>&1 || [ ! -d content ]; then
 	echo "host-code-update: run this from the pipeline checkout root" >&2
 	exit 66
 fi

@@ -115,7 +115,75 @@ deploy_code() {
 	echo "==> syncing systemd units"
 	rsync -az -e ssh deploy/systemd/ "$HOST:/etc/systemd/system/"
 	ssh "$HOST" "systemctl daemon-reload"
-	echo "==> units reloaded (enable them per deploy/README.md)"
+	echo "==> units reloaded"
+
+	# Syncing a unit does NOT enable it, and a timer that exists but is disabled
+	# looks identical to one that is working right up until you need it. That
+	# has already happened: cvt-tiera shipped and sat disabled, so nothing
+	# published for weeks.
+	#
+	# So enable them, rather than printing a warning and hoping. A warning
+	# depends on a human reading deploy output, which is the same class of
+	# signal that already failed here twice — and a timer this repo ships is a
+	# timer meant to run, or it would not be in deploy/systemd/.
+	#
+	# Note for future units: `--now` starts the TIMER, not the service, but a
+	# unit with Persistent=true whose window was missed will fire straight away.
+	# If some later unit's first run has side effects you do not want on a
+	# deploy (cvt-tiera publishing a backlog was exactly this), enable it by
+	# hand once, deliberately, before it ships here.
+	echo "==> enabling timers"
+	# A failure to enable must FAIL the deploy. Swallowing it (`enable ... &&
+	# record`) left `enabled_now` empty on error, so the run went on to print
+	# "all units already enabled" — a false all-clear over the exact silent gap
+	# this block exists to close.
+	# The check is is-ACTIVE, not is-enabled, and that distinction is load
+	# bearing. Tested with a deliberately malformed unit: systemd logged
+	# "Timer unit lacks value setting. Refusing." and left it inactive, while
+	# `systemctl enable --now` still exited 0 and `is-enabled` reported
+	# "enabled". An enabled-but-inactive timer is precisely the silent gap this
+	# block exists to close, so enabling is the action and running is the test.
+	ssh "$HOST" '
+		enabled_now=""
+		enable_failed=""
+		for unit in /etc/systemd/system/cvt-*.timer; do
+			name="$(basename "$unit")"
+			systemctl is-enabled --quiet "$name" 2>/dev/null && continue
+			if systemctl enable --now "$name" >/dev/null 2>&1; then
+				enabled_now="$enabled_now $name"
+			else
+				enable_failed="$enable_failed $name"
+			fi
+		done
+		if [ -n "$enabled_now" ]; then
+			echo "  enabled:$enabled_now"
+		fi
+		# Report what actually happened. The is-active check below is the
+		# authoritative test and would fail the deploy anyway, but a block whose
+		# whole purpose is refusing to be vague about timer state has no business
+		# printing "enabled: X" for a unit that did not enable.
+		if [ -n "$enable_failed" ]; then
+			echo "  enable failed:$enable_failed" >&2
+		fi
+
+		inactive=""
+		for unit in /etc/systemd/system/cvt-*.timer; do
+			name="$(basename "$unit")"
+			systemctl is-active --quiet "$name" 2>/dev/null ||
+				inactive="$inactive $name"
+		done
+		if [ -n "$inactive" ]; then
+			echo "  ERROR: timer(s) installed but NOT running:$inactive" >&2
+			for name in $inactive; do
+				systemctl status "$name" --no-pager -n 5 2>&1 | sed "s/^/    /" >&2
+			done
+			exit 1
+		fi
+		if [ -z "$enabled_now" ]; then
+			echo "  all cvt-*.timer units already running"
+		fi
+		exit 0
+	'
 }
 
 # Run ON the host, not from a developer machine. This is what CI invokes over
