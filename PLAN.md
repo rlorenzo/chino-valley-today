@@ -85,7 +85,8 @@ recommended next step.
   names, covered by the Gate 2 judge.
 - **Nixle email ingester LIVE** (sbsheriff-nixle-mail, commits c61185e,
   639c7d6) — completes amended Task 0.9. Mailbox
-  <chinovalleytoday+nixle@gmail.com> subscribed; IMAP read-only polling;
+  a controlled mailbox subscribed (address in .env, not tracked); IMAP
+  read-only polling;
   ingests only nixle.us-permalink-carrying messages (provenance rule),
   everything Tier C. First live poll verified; first real alert (~1-2 wk
   cadence) will validate email-template assumptions.

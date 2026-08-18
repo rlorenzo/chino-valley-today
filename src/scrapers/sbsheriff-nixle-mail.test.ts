@@ -4,6 +4,7 @@ import { simpleParser } from "mailparser";
 import {
 	channelFromSender,
 	extractNixlePermalink,
+	isNixleMessage,
 	messageToItemDraft,
 } from "./sbsheriff-nixle-mail.ts";
 
@@ -32,8 +33,8 @@ function fieldsOf(eml: Buffer) {
 const CHINO_HILLS_EML = Buffer.from(
 	[
 		'From: "SBSD - Chino Hills Police Department" <sbsd---chino-hills-police-department@emails.nixle.com>',
-		"To: chinovalleytoday+nixle@gmail.com",
-		"Delivered-To: chinovalleytoday+nixle@gmail.com",
+		"To: alerts+nixle@example.test",
+		"Delivered-To: alerts+nixle@example.test",
 		"Message-ID: <alert-1@emails.nixle.com>",
 		"Date: Thu, 16 Jul 2026 10:38:00 -0700",
 		"Subject: Advisory Message: Traffic collision investigation on Grand Ave",
@@ -56,7 +57,7 @@ const CHINO_HILLS_EML = Buffer.from(
 const COUNTYWIDE_EML = Buffer.from(
 	[
 		'From: "SBSD - Headquarters" <sbsd---headquarters@emails.nixle.com>',
-		"To: chinovalleytoday+nixle@gmail.com",
+		"To: alerts+nixle@example.test",
 		"Message-ID: <alert-2@emails.nixle.com>",
 		"Date: Fri, 14 Aug 2026 16:25:53 -0700",
 		"Subject: Advisory Message: Deputy Involved Shooting Occurs in Mentone",
@@ -76,7 +77,7 @@ const COUNTYWIDE_EML = Buffer.from(
 const CONFIRMATION_EML = Buffer.from(
 	[
 		"From: TheNixleTeam@emails.nixle.com",
-		"To: chinovalleytoday+nixle@gmail.com",
+		"To: alerts+nixle@example.test",
 		"Message-ID: <welcome-1@emails.nixle.com>",
 		"Date: Wed, 13 Aug 2026 19:16:49 -0700",
 		"Subject: Welcome to Nixle",
@@ -180,5 +181,41 @@ describe("message -> item draft", () => {
 
 	test("fail-closed: a message without a Nixle permalink is never ingested", async () => {
 		assert.equal(messageToItemDraft(await fieldsOf(CONFIRMATION_EML)), null);
+	});
+});
+
+describe("mailbox filter", () => {
+	const alias = "alerts+nixle@example.test";
+
+	test("matches on the subscription alias", () => {
+		assert.equal(
+			isNixleMessage(`to: ${alias}`, "someone@elsewhere", alias),
+			true,
+		);
+	});
+
+	test("matches on a Nixle sender regardless of alias", () => {
+		assert.equal(
+			isNixleMessage("to: someone@else", '"SBSD" <x@emails.nixle.com>', ""),
+			true,
+		);
+	});
+
+	test("an unset alias must not match every message", () => {
+		// The bug this guards: `headerAddrs.includes("")` is true for every
+		// string, so an unconfigured alias would turn a targeted ingester into
+		// one that reads the whole mailbox.
+		assert.equal(
+			isNixleMessage("to: bank@example.test", "statements@bank.example", ""),
+			false,
+		);
+		assert.equal(isNixleMessage("", "", ""), false);
+	});
+
+	test("unrelated mail does not match even with an alias set", () => {
+		assert.equal(
+			isNixleMessage("to: someone@else", "statements@bank.example", alias),
+			false,
+		);
 	});
 });
