@@ -135,12 +135,15 @@ export function generateNixleReleases(db: Db, now: Date): GenResult {
 		const subject = cleanTitle(row.title) ?? "";
 		const body = stripMailPreamble(row.body ?? "");
 
-		// Minors guard: held, not dropped — the item stays in the archive and a
-		// human can publish it deliberately.
-		if (mentionsMinor(`${subject} ${body}`)) {
+		// Minors guard. The post is still BUILT — it is routed to the held queue
+		// via heldReason below, not skipped. Skipping it produced a hold that
+		// existed only as a line in the run log: the dashboard's held queue reads
+		// posts, so with no post row there was nothing for a human to review, and
+		// the "held for human review" note pointed at a queue that stayed empty.
+		const minor = mentionsMinor(`${subject} ${body}`);
+		if (minor) {
 			heldMinor++;
 			heldSlugs.push(row.external_id ?? row.source_url);
-			continue;
 		}
 
 		const headline = stripPriorityPrefix(subject) || "Sheriff's release";
@@ -176,21 +179,35 @@ export function generateNixleReleases(db: Db, now: Date): GenResult {
 		posts.push({
 			slug: `${localDate}-${slugify(headline)}-nixle-${hash}`,
 			postType: "alert",
-			tier: "A",
+			// A held post is Tier C: it reached a human precisely because the
+			// verbatim-render exemption did not cover it. Published ones stay Tier
+			// A — deterministic render, no LLM (EDITORIAL.md "Agency alert
+			// channels"). The badge a reviewer sees should say which one it is.
+			tier: minor ? "C" : "A",
 			title: headline,
 			bodyMd: lines.join("\n"),
 			sources: [row.source_url],
+			...(minor
+				? {
+						heldReason:
+							"minors guard: the release text indicates a minor is involved " +
+							"(EDITORIAL.md 'Private persons' — never named or identifiably " +
+							"described, even when the source document names them)",
+					}
+				: {}),
 		});
 	}
 
 	notes.push(
-		`${items.length} Nixle item(s) in DB -> ${posts.length} post(s). ` +
+		`${items.length} Nixle item(s) in DB -> ${posts.length} post(s) ` +
+			`(${posts.length - heldMinor} to publish, ${heldMinor} to the held queue). ` +
 			`Filtered: ${offArea} not Chino-relevant (county-wide channels), ` +
-			`${stale} older than ${MAX_AGE_DAYS} days, ${heldMinor} held by the minors guard.`,
+			`${stale} older than ${MAX_AGE_DAYS} days.`,
 	);
 	if (heldMinor > 0) {
 		notes.push(
-			`HELD for human review (minors guard, EDITORIAL.md "Private persons"): ${heldSlugs.join(", ")}`,
+			`HELD for human review in the admin dashboard (minors guard, ` +
+				`EDITORIAL.md "Private persons"): ${heldSlugs.join(", ")}`,
 		);
 	}
 	return { posts, notes };
