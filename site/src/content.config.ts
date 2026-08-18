@@ -50,6 +50,21 @@ const posts = defineCollection({
 				.regex(/^\d{4}-\d{2}-\d{2}$/)
 				.optional(),
 
+			// daily-brief only: the week-ahead calendar events the index's
+			// "coming up" rail renders. Structured data from the assembler —
+			// the site lays it out, it does not compose it.
+			events_ahead: z
+				.array(
+					z.object({
+						date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+						time: z.string().nullable(),
+						title: z.string(),
+						venue: z.string().nullable(),
+						url: z.string().url(),
+					}),
+				)
+				.optional(),
+
 			// Provenance is structural, not decorative: EDITORIAL.md's first rule is
 			// "no source, no claim". A post with an empty sources list is a build
 			// failure, not a page with a missing footer.

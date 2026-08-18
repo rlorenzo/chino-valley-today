@@ -129,6 +129,16 @@ export function laDatePlus(date: string, days: number): string {
 	return d.toISOString().slice(0, 10);
 }
 
+/** "Tue, Aug 18" for a YYYY-MM-DD local calendar date. */
+export function formatLocalDateShort(date: string): string {
+	return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
+		weekday: "short",
+		month: "short",
+		day: "numeric",
+		timeZone: "UTC",
+	});
+}
+
 /** "Monday, August 17, 2026" for a YYYY-MM-DD local calendar date. */
 export function formatLocalDateLong(date: string): string {
 	return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {

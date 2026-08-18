@@ -7,6 +7,7 @@ import {
 	briefsOnly,
 	formatDate,
 	formatLocalDateLong,
+	formatLocalDateShort,
 	laDatePlus,
 	laToday,
 	postUrl,
@@ -26,6 +27,16 @@ const record = recordOnly(posts);
 // Rendered only when a real brief exists. The build must never fake one:
 // until the assembler has shipped a brief, the index stays record-led.
 const BriefContent = currentBrief ? (await render(currentBrief)).Content : null;
+
+// The "coming up" rail beside the brief: tomorrow's events only — today's
+// schedule is in the brief itself, and the full week lives at /calendar/.
+// Data is the assembler's events_ahead frontmatter, already sorted by start.
+const ahead = currentBrief?.data.events_ahead ?? [];
+const tomorrow = currentBrief?.data.brief_date
+	? laDatePlus(currentBrief.data.brief_date, 1)
+	: null;
+const tomorrowEvents = ahead.filter((e) => e.date === tomorrow);
+const lastAheadDate = ahead.at(-1)?.date ?? null;
 
 // "This week" is computed from the published record — meeting previews are
 // the only forward-dated posts — so it can never claim a meeting the record
@@ -83,10 +94,47 @@ const marks = TOPICS.map((t) => {
 						{currentBrief.data.sources.length === 1 ? " source" : " sources"}
 					</a>
 				</div>
-				<div class="shell">
+				<div class="shell today__cols">
 					<div class="prose today__prose">
 						<BriefContent />
 					</div>
+					<aside class="today__rail" aria-labelledby="comingup-heading">
+						<h3 id="comingup-heading" class="mark today__rail-label">
+							Tomorrow{tomorrow && ` · ${formatLocalDateShort(tomorrow)}`}
+						</h3>
+						{
+							tomorrowEvents.length === 0 ? (
+								<p class="today__rail-empty">
+									Nothing on the posted calendars for tomorrow.
+								</p>
+							) : (
+								<ul class="today__rail-items">
+									{tomorrowEvents.map((e) => (
+										<li class="today__rail-item">
+											{e.time && (
+												<span class="mark today__rail-time">{e.time}</span>
+											)}
+											<a href={e.url} rel="noopener noreferrer">
+												{e.title}
+											</a>
+											{e.venue && (
+												<span class="today__rail-venue">{e.venue}</span>
+											)}
+										</li>
+									))}
+								</ul>
+							)
+						}
+						{
+							ahead.length > 0 && lastAheadDate && (
+								<a class="mark today__rail-more" href="/calendar/">
+									Full calendar — {ahead.length}
+									{ahead.length === 1 ? " event" : " events"} through{" "}
+									{formatLocalDateShort(lastAheadDate)}
+								</a>
+							)
+						}
+					</aside>
 				</div>
 			</section>
 		) : (
@@ -240,8 +288,88 @@ const marks = TOPICS.map((t) => {
 	.today__perma:hover {
 		text-decoration: underline;
 	}
+	.today__cols {
+		display: grid;
+		grid-template-columns: minmax(0, var(--measure)) 1fr;
+		gap: 1.4rem 3rem;
+		align-items: start;
+	}
+	@media (max-width: 56rem) {
+		.today__cols {
+			grid-template-columns: 1fr;
+		}
+		.today__rail {
+			border-left: 0;
+			border-top: 2px solid var(--galv-edge);
+			padding-left: 0;
+			padding-top: 1.1rem;
+		}
+	}
 	.today__prose {
 		max-width: var(--measure);
+	}
+
+	/* COMING UP — the week ahead, filling the field beside the brief. A dense
+	   dated list, same ledger discipline as the record: rules, marks, no cards. */
+	.today__rail {
+		border-left: 2px solid var(--galv-edge);
+		padding-left: 1.8rem;
+	}
+	.today__rail-label {
+		margin: 0 0 0.7rem;
+		font-size: 0.72rem;
+		letter-spacing: 0.13em;
+		color: var(--muted);
+	}
+	.today__rail-empty {
+		margin: 0;
+		font-size: 0.92rem;
+		color: var(--muted);
+	}
+	.today__rail-items {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.today__rail-item {
+		display: grid;
+		grid-template-columns: 4.4rem 1fr;
+		gap: 0 0.6rem;
+		padding-block: 0.3rem;
+		font-size: 0.92rem;
+		line-height: 1.4;
+	}
+	.today__rail-time {
+		font-size: 0.68rem;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+		padding-top: 0.2rem;
+		text-transform: uppercase;
+	}
+	.today__rail-item > a {
+		grid-column: 2;
+		grid-row: 1;
+		color: var(--stencil);
+	}
+	.today__rail-venue {
+		grid-column: 2;
+		font-size: 0.78rem;
+		color: var(--muted);
+	}
+	.today__rail-more {
+		display: inline-block;
+		margin-top: 0.9rem;
+		font-size: 0.7rem;
+		letter-spacing: 0.08em;
+		color: var(--crate);
+		text-decoration: none;
+		border-bottom: 2px solid var(--placard);
+		padding-bottom: 0.15rem;
+	}
+	.today__rail-more:hover {
+		background: var(--crate);
+		color: #fff;
+		border-bottom-color: var(--crate);
 	}
 
 	/* Record-led fallback, shown only before the first real brief exists. */

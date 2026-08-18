@@ -39,7 +39,18 @@ export interface NewPost {
 	bodyMd: string; // markdown body; the disclosure footer is appended automatically
 	meetingDate?: string;
 	briefDate?: string; // daily-brief only: the LA calendar day the brief covers
+	// daily-brief only: structured week-ahead calendar events, rendered by the
+	// site (the index's "coming up" rail) rather than by the markdown body.
+	eventsAhead?: BriefEventAhead[];
 	sources: string[]; // source_urls backing every claim in the post
+}
+
+export interface BriefEventAhead {
+	date: string; // LA calendar day, YYYY-MM-DD
+	time: string | null; // "6:00 PM" | "all day" | null when the source has none
+	title: string;
+	venue: string | null;
+	url: string; // the event's source_url — provenance, like every claim
 }
 
 const DIR_BY_STATUS: Record<PostStatus, string> = {
@@ -152,6 +163,18 @@ export function renderPostFile(p: NewPost, createdAt: string): string {
 		`date: ${y(createdAt)}`,
 		...(p.meetingDate ? [`meeting_date: ${y(p.meetingDate)}`] : []),
 		...(p.briefDate ? [`brief_date: ${y(p.briefDate)}`] : []),
+		...(p.eventsAhead?.length
+			? [
+					"events_ahead:",
+					...p.eventsAhead.flatMap((e) => [
+						`  - date: ${y(e.date)}`,
+						`    time: ${e.time === null ? "null" : y(e.time)}`,
+						`    title: ${y(e.title)}`,
+						`    venue: ${e.venue === null ? "null" : y(e.venue)}`,
+						`    url: ${y(e.url)}`,
+					]),
+				]
+			: []),
 		"sources:",
 		...p.sources.map((s) => `  - ${y(s)}`),
 		"---",

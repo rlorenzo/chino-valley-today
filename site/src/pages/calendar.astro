@@ -1,0 +1,181 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../layouts/Base.astro";
+import {
+	briefsOnly,
+	formatLocalDateLong,
+	formatLocalDateShort,
+	laDatePlus,
+	postUrl,
+} from "../lib/record.ts";
+
+// The week ahead, from the latest daily brief's events_ahead frontmatter —
+// the site lays out what the assembler shipped; it composes nothing. Today's
+// own schedule lives in the brief on the front page.
+const briefs = briefsOnly(await getCollection("posts"));
+const currentBrief = briefs[0] ?? null;
+const ahead = currentBrief?.data.events_ahead ?? [];
+
+// All seven day slots, including the quiet ones — an empty shelf is
+// information in a record, so a day with nothing posted says so.
+const briefDate = currentBrief?.data.brief_date ?? null;
+const days = briefDate
+	? Array.from({ length: 7 }, (_, i) => {
+			const date = laDatePlus(briefDate, i + 1);
+			return { date, items: ahead.filter((e) => e.date === date) };
+		})
+	: [];
+---
+
+<Base
+	title="Calendar — Chino Valley Today"
+	description="The week ahead in Chino and Chino Hills: library, parks, water district, and city calendar events, each linked to its source calendar."
+	current="record"
+>
+	<section class="shell cal" aria-labelledby="cal-heading">
+		<div class="cal__head">
+			<h1 id="cal-heading" class="mark cal__label">The week ahead</h1>
+			<p class="cal__count mark">
+				{ahead.length} {ahead.length === 1 ? "event" : "events"}
+			</p>
+		</div>
+		{
+			currentBrief && (
+				<p class="cal__note">
+					As posted on the source calendars, gathered with the{" "}
+					<a href={postUrl(currentBrief)}>
+						{formatLocalDateLong(currentBrief.data.brief_date ?? "")} brief
+					</a>
+					. Every entry links to its calendar listing.
+				</p>
+			)
+		}
+
+		{
+			days.length === 0 ? (
+				<p class="cal__empty">
+					{currentBrief
+						? "Nothing on the posted calendars for the next seven days."
+						: "The calendar begins with the first daily brief; nothing is shown until it is real."}
+				</p>
+			) : (
+				<ol class="cal__days">
+					{days.map((day) => (
+						<li>
+							<h2 class="mark cal__date">{formatLocalDateShort(day.date)}</h2>
+							{
+								day.items.length === 0 ? (
+									<p class="cal__none">Nothing posted.</p>
+								) : (
+									<ul class="cal__items">
+										{day.items.map((e) => (
+											<li class="cal__item">
+												{e.time && <span class="mark cal__time">{e.time}</span>}
+												<a href={e.url} rel="noopener noreferrer">
+													{e.title}
+												</a>
+												{e.venue && <span class="cal__venue">{e.venue}</span>}
+											</li>
+										))}
+									</ul>
+								)
+							}
+						</li>
+					))}
+				</ol>
+			)
+		}
+	</section>
+</Base>
+
+<style>
+	.cal {
+		padding-block: 1.8rem 2.6rem;
+	}
+	.cal__head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		gap: 1rem;
+		margin-bottom: 0.5rem;
+	}
+	.cal__label {
+		margin: 0;
+		font-size: 0.82rem;
+		letter-spacing: 0.14em;
+	}
+	.cal__count {
+		margin: 0;
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+	.cal__note {
+		margin: 0 0 1.6rem;
+		font-size: 0.92rem;
+		color: var(--muted);
+		max-width: 44rem;
+	}
+	.cal__note a {
+		color: var(--crate);
+	}
+	.cal__empty {
+		border: 2px dashed var(--galv-edge);
+		padding: 2rem;
+		color: var(--muted);
+		text-align: center;
+	}
+	.cal__days {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(19rem, 1fr));
+		gap: 1.6rem 2.6rem;
+		align-items: start;
+	}
+	.cal__date {
+		margin: 0 0 0.35rem;
+		font-size: 0.72rem;
+		letter-spacing: 0.11em;
+		color: var(--crate);
+		border-bottom: 2px solid var(--galv-edge);
+		padding-bottom: 0.3rem;
+	}
+	.cal__items {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+	}
+	.cal__none {
+		margin: 0;
+		padding-block: 0.32rem;
+		font-size: 0.85rem;
+		color: var(--muted);
+	}
+	.cal__item {
+		display: grid;
+		grid-template-columns: 4.4rem 1fr;
+		gap: 0 0.6rem;
+		padding-block: 0.32rem;
+		font-size: 0.92rem;
+		line-height: 1.4;
+	}
+	.cal__time {
+		font-size: 0.68rem;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+		padding-top: 0.2rem;
+		text-transform: uppercase;
+	}
+	.cal__item > a {
+		grid-column: 2;
+		grid-row: 1;
+		color: var(--stencil);
+	}
+	.cal__venue {
+		grid-column: 2;
+		font-size: 0.78rem;
+		color: var(--muted);
+	}
+</style>

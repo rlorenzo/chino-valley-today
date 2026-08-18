@@ -212,44 +212,95 @@ export interface TodayEvent {
 	occurredAt: string;
 }
 
+// A calendar event row that passed selection: titled, and not a CBWCD
+// "District Holiday" office-closure notice (a closure is not an event).
+function isRenderableEvent(row: ItemRow): boolean {
+	const title = cleanTitle(row.title);
+	if (!title) return false;
+	if (row.source_key === "cbwcd-events" && /^district holiday/i.test(title))
+		return false;
+	return true;
+}
+
+function eventRowToEntry(row: ItemRow): TodayEvent {
+	const meta = parseMeta(row.meta);
+	const allDay = meta.allDay === true;
+	const civicTimes = normalizeTimes(metaString(meta, "eventTimes"));
+	const timeLabel = allDay
+		? "all day"
+		: (civicTimes ?? laTimeOf(row.occurred_at));
+	const venueRaw =
+		metaString(meta, "venue") ??
+		normalizeLocation(metaString(meta, "location"));
+	return {
+		title: cleanTitle(row.title) as string,
+		sourceUrl: row.source_url,
+		timeLabel,
+		venue: venueRaw ? decodeEntities(venueRaw) : null,
+		occurredAt: row.occurred_at ?? "",
+	};
+}
+
+function byStartThenTitle(a: TodayEvent, b: TodayEvent): number {
+	return (
+		a.occurredAt.localeCompare(b.occurredAt) || a.title.localeCompare(b.title)
+	);
+}
+
 export function selectTodayEvents(
 	eventItems: ItemRow[],
 	now: Date,
 ): TodayEvent[] {
 	const laToday = laDateOf(now.toISOString());
-	const todays = eventItems.filter((row) => {
-		const title = cleanTitle(row.title);
-		if (!title) return false;
-		if (laDateOf(row.occurred_at) !== laToday) return false;
-		// CBWCD "District Holiday" items are office-closure notices, not events.
-		if (row.source_key === "cbwcd-events" && /^district holiday/i.test(title))
-			return false;
-		return true;
-	});
+	const todays = eventItems.filter(
+		(row) => isRenderableEvent(row) && laDateOf(row.occurred_at) === laToday,
+	);
 	return dedupeByKey(todays, (r) => r.source_url)
-		.map((row) => {
-			const meta = parseMeta(row.meta);
-			const allDay = meta.allDay === true;
-			const civicTimes = normalizeTimes(metaString(meta, "eventTimes"));
-			const timeLabel = allDay
-				? "all day"
-				: (civicTimes ?? laTimeOf(row.occurred_at));
-			const venueRaw =
-				metaString(meta, "venue") ??
-				normalizeLocation(metaString(meta, "location"));
-			return {
-				title: cleanTitle(row.title) as string,
-				sourceUrl: row.source_url,
-				timeLabel,
-				venue: venueRaw ? decodeEntities(venueRaw) : null,
-				occurredAt: row.occurred_at ?? "",
-			};
-		})
-		.sort(
-			(a, b) =>
-				a.occurredAt.localeCompare(b.occurredAt) ||
-				a.title.localeCompare(b.title),
-		);
+		.map(eventRowToEntry)
+		.sort(byStartThenTitle);
+}
+
+// YYYY-MM-DD plus N calendar days, same UTC-field arithmetic as laStartDate
+// in src/scrapers/tribe-events.ts (calendar-day math, DST-proof).
+function laDatePlusDays(date: string, days: number): string {
+	const [y, m, d] = date.split("-").map(Number);
+	return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
+export interface UpcomingEvent extends TodayEvent {
+	date: string; // LA calendar day the event falls on
+}
+
+// Rail times are compact: the start instant only ("06:00 PM - 08:00 PM" →
+// "6:00 PM"); the brief body keeps the source's full range.
+export function railTimeLabel(label: string | null): string | null {
+	if (!label || label === "all day") return label;
+	const start = label.split(/\s*[-–]\s*/)[0].trim();
+	return start.replace(/^0(\d:)/, "$1") || null;
+}
+
+// The week ahead, exclusive of today (today's events live in the brief body):
+// LA days (today, today + horizonDays], deduped by source_url. Rendered by
+// the site from frontmatter, not by the markdown body.
+export function selectUpcomingEvents(
+	eventItems: ItemRow[],
+	now: Date,
+	horizonDays = 7,
+): UpcomingEvent[] {
+	const laToday = laDateOf(now.toISOString());
+	if (!laToday) return [];
+	const horizon = laDatePlusDays(laToday, horizonDays);
+	const ahead = eventItems.filter((row) => {
+		if (!isRenderableEvent(row)) return false;
+		const day = laDateOf(row.occurred_at);
+		return day !== null && day > laToday && day <= horizon;
+	});
+	return dedupeByKey(ahead, (r) => r.source_url)
+		.map((row) => ({
+			...eventRowToEntry(row),
+			date: laDateOf(row.occurred_at) as string,
+		}))
+		.sort(byStartThenTitle);
 }
 
 export interface TodayMeeting {
@@ -436,6 +487,19 @@ export function assembleBrief(
 	}
 	notes.push(`today: ${meetings.length} meeting(s), ${events.length} event(s)`);
 
+	// The week ahead, as structured frontmatter for the site's "coming up"
+	// rail. Not rendered into the body — the body is today's brief; the rail
+	// is layout. Their source URLs still join the post's provenance union.
+	const upcoming = selectUpcomingEvents(inputs.calendarEvents, now);
+	const eventsAhead = upcoming.map((e) => ({
+		date: e.date,
+		time: railTimeLabel(e.timeLabel),
+		title: e.title,
+		venue: e.venue,
+		url: cite(e.sourceUrl),
+	}));
+	notes.push(`coming up: ${upcoming.length} event(s) in the next 7 days`);
+
 	// New on the record: posts published since the previous brief (internal
 	// links — their provenance lives on the posts themselves), plus fresh
 	// license events (title + link; business principals in the context of
@@ -459,16 +523,17 @@ export function assembleBrief(
 		`new on the record: ${newPosts.length} post(s) since ${sinceIso}, ${licenses.length} license event(s)`,
 	);
 
-	// A quiet day ships honestly: weather + schedule, plainly labeled.
+	// A quiet day ships honestly: weather + schedule, plainly labeled. The
+	// label states what the morning is, not a roll call of alarming things
+	// that didn't happen — the omitted sections already say the rest.
 	if (fire.length === 0 && newPosts.length === 0 && licenses.length === 0) {
-		const parts = [
-			"no new fire or safety releases in the last 24 hours",
-			"nothing new on the record since the last brief",
-		];
-		if (meetings.length === 0 && events.length === 0 && !marketDay) {
-			parts.splice(1, 0, "nothing on today's schedule");
-		}
-		body.push(`*A quiet morning: ${parts.join(", ")}.*`, "");
+		const hasSchedule = meetings.length > 0 || events.length > 0 || marketDay;
+		body.push(
+			hasSchedule
+				? "*A quiet morning — nothing new beyond the forecast and today's schedule.*"
+				: "*A quiet morning — nothing new beyond the forecast.*",
+			"",
+		);
 	}
 
 	const post: NewPost = {
@@ -478,6 +543,7 @@ export function assembleBrief(
 		title: `Daily Brief — ${humanDateFromLocal(laToday)}`,
 		bodyMd: body.join("\n").trim(),
 		briefDate: laToday,
+		eventsAhead,
 		sources: [...new Set(sources)],
 	};
 	return { post, notes };

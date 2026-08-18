@@ -14,9 +14,10 @@ import {
 	selectNewRecordPosts,
 	selectTodayEvents,
 	selectTodayMeetings,
+	selectUpcomingEvents,
 	selectWeather,
 } from "./daily-brief.ts";
-import type { PostRow } from "./posts.ts";
+import { type PostRow, renderPostFile } from "./posts.ts";
 
 // 6:05 AM PDT, Monday 2026-08-17 — the timer's real run window.
 const NOW = new Date("2026-08-17T13:05:00.000Z");
@@ -397,6 +398,51 @@ describe("selectTodayEvents", () => {
 	});
 });
 
+describe("selectUpcomingEvents", () => {
+	test("the window is (today, today+7] in LA days; closures stay filtered", () => {
+		const rows = [
+			// Today: excluded — it lives in the brief body.
+			item({
+				source_key: "sbclib-events",
+				title: "Today's storytime",
+				occurred_at: "2026-08-17T18:00:00.000Z",
+			}),
+			// Tomorrow evening (UTC already Aug 19): included, dated Aug 18.
+			item({
+				source_key: "sbclib-events",
+				title: "Tomorrow's craft corner",
+				occurred_at: "2026-08-19T01:00:00.000Z",
+			}),
+			// Day 7 exactly: included.
+			item({
+				source_key: "cbwcd-events",
+				title: "Garden class",
+				occurred_at: "2026-08-24T16:00:00.000Z",
+			}),
+			// Day 8: out of the horizon.
+			item({
+				source_key: "cbwcd-events",
+				title: "Too far out",
+				occurred_at: "2026-08-25T16:00:00.000Z",
+			}),
+			// Closure notice inside the window: still filtered.
+			item({
+				source_key: "cbwcd-events",
+				title: "District Holiday: Christmas Eve",
+				occurred_at: "2026-08-20T16:00:00.000Z",
+			}),
+		];
+		const out = selectUpcomingEvents(rows, NOW);
+		assert.deepEqual(
+			out.map((e) => [e.date, e.title]),
+			[
+				["2026-08-18", "Tomorrow's craft corner"],
+				["2026-08-24", "Garden class"],
+			],
+		);
+	});
+});
+
 describe("selectTodayMeetings", () => {
 	test("agenda items group to one line per document; cvusd date-only events carry no time", () => {
 		const agenda = [
@@ -558,7 +604,13 @@ describe("assembleBrief", () => {
 			"https://forecast.weather.gov/chino",
 			"https://forecast.weather.gov/chino-hills",
 		]);
-		assert.match(p.bodyMd, /A quiet morning:/);
+		// The quiet label states what the morning is; it does not roll-call
+		// alarming things that didn't happen.
+		assert.match(
+			p.bodyMd,
+			/A quiet morning — nothing new beyond the forecast\./,
+		);
+		assert.doesNotMatch(p.bodyMd, /fire/i);
 		assert.doesNotMatch(p.bodyMd, /## Fire & safety/);
 		assert.doesNotMatch(p.bodyMd, /## Today/);
 		assert.doesNotMatch(p.bodyMd, /## New on the record/);
@@ -612,12 +664,50 @@ describe("assembleBrief", () => {
 		assert.equal(new Set(p.sources).size, p.sources.length);
 	});
 
+	test("week-ahead events ship as frontmatter, not body, and join sources", () => {
+		const inputs = quietInputs();
+		inputs.calendarEvents = [
+			item({
+				source_key: "sbclib-events",
+				title: "Tomorrow's craft corner",
+				source_url: "https://library.sbcounty.gov/event/craft-tomorrow",
+				occurred_at: "2026-08-18T18:00:00.000Z",
+				meta: JSON.stringify({ venue: "Chino Branch Library" }),
+			}),
+		];
+		const { post: p } = assembleBrief(inputs, NOW);
+		assert.deepEqual(p.eventsAhead, [
+			{
+				date: "2026-08-18",
+				time: "11:00 AM",
+				title: "Tomorrow's craft corner",
+				venue: "Chino Branch Library",
+				url: "https://library.sbcounty.gov/event/craft-tomorrow",
+			},
+		]);
+		// The rail is layout; the body stays today's brief.
+		assert.doesNotMatch(p.bodyMd, /craft corner/i);
+		assert.ok(
+			new Set(p.sources).has(
+				"https://library.sbcounty.gov/event/craft-tomorrow",
+			),
+		);
+		// And the frontmatter serializes as a structured list the site schema
+		// can validate.
+		const file = renderPostFile(p, "2026-08-17T13:05:00.000Z");
+		assert.match(file, /events_ahead:\n {2}- date: "2026-08-18"/);
+		assert.match(file, /"Tomorrow's craft corner"/);
+	});
+
 	test("the farmers market line renders on Wednesdays only, with its source", () => {
 		const monday = assembleBrief(quietInputs(), NOW);
 		assert.doesNotMatch(monday.post.bodyMd, /Heritage Farmers Market/);
 		const wednesday = assembleBrief(quietInputs(), WEDNESDAY);
 		assert.equal(wednesday.post.slug, "2026-08-19-daily-brief");
-		assert.doesNotMatch(wednesday.post.bodyMd, /A quiet morning:.*schedule/);
+		assert.match(
+			wednesday.post.bodyMd,
+			/A quiet morning — nothing new beyond the forecast and today's schedule\./,
+		);
 		assert.match(wednesday.post.bodyMd, /Heritage Farmers Market/);
 		assert.ok(
 			new Set(wednesday.post.sources).has(
