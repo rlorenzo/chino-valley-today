@@ -19,6 +19,9 @@ site/node_modules/
 # Transient decision-page state from design tooling
 .impeccable/questions/
 
+# Per-PR scratch from the review-pr workflow
+.review-pr-ignored*
+
 # Deployment target (host, paths). Infrastructure identifiers do not belong in
 # a public repo — see deploy/deploy.env.example.
 deploy/deploy.env
