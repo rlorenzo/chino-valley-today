@@ -197,10 +197,19 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 | --- | --- | --- |
 | `cvt-scrape-frequent` | hourly at :17 | news RSS, NWS alerts + forecast, fire feeds, sheriff, Nixle mail |
 | `cvt-scrape-daily` | 05:40 | Legistar, Agenda Center, AgendaQuick, CVUSD, ABC, event calendars |
+| `cvt-tiera` | 05:50 | *not a scrape* — generates + publishes Tier A posts, rebuilds the site |
 | `cvt-scrape-media` | 07:30 | Swagit video, YouTube captions |
 | `cvt-brief` | 06:00 | daily brief assembly + site rebuild (no scraping) |
 | `cvt-brief-watch` | 08:00 | flips `/health` to `pipeline=stale` if today's brief is missing |
 | `cvt-backup` | 02:20 | rclone → B2 |
+
+`cvt-tiera` is the only unit here that publishes rather than ingests. It exists
+because `src/tiera/run.ts` previously had no caller anywhere in `deploy/`,
+`scripts/` or `.github/`: the generators ran only when someone typed
+`npm run tiera`, so on the droplet the scrapers filled the database every hour
+and nothing was ever published from it. It sits between the 05:40 daily scrape
+and the 06:00 brief on purpose: it generates against fresh data, and the brief
+then assembles against Tier A posts that already exist.
 
 Schedules are Pacific because meeting times are; systemd 255 on Ubuntu 24.04
 accepts a timezone directly in `OnCalendar`. All are `Persistent=true`, so a
@@ -208,7 +217,7 @@ run missed during a reboot fires once afterwards instead of being skipped.
 
 ```bash
 systemctl enable --now cvt-scrape-frequent.timer cvt-scrape-daily.timer \
-                       cvt-scrape-media.timer cvt-brief.timer \
+                       cvt-tiera.timer cvt-scrape-media.timer cvt-brief.timer \
                        cvt-brief-watch.timer cvt-backup.timer
 systemctl enable --now cvt-admin.service
 

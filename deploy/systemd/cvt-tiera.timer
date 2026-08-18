@@ -1,0 +1,15 @@
+[Unit]
+Description=Tier A post generation for Chino Valley Today
+
+[Timer]
+# 05:50 Pacific: after the 05:40 daily scrape (agendas, calendars) has
+# refreshed the database, and ten minutes ahead of the 06:00 brief so the
+# morning brief assembles against Tier A posts that already exist.
+# No politeness offset needed — generation makes no network fetches.
+OnCalendar=*-*-* 05:50:00 America/Los_Angeles
+# A missed run (reboot, droplet resize) executes once on the next boot instead
+# of being silently skipped.
+Persistent=true
+
+[Install]
+WantedBy=timers.target
