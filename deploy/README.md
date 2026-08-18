@@ -182,6 +182,19 @@ scripts/deploy.sh code    # update the checkout, deps, and systemd units
 scripts/deploy.sh all
 ```
 
+Two subcommands run **on the droplet** instead, and are what a forced-command
+SSH key invokes: `local` rebuilds the site from the host's own checkout, and
+`host-update` brings that checkout to `origin/main` first and then rebuilds.
+Both stay within the unprivileged service account. Installing systemd units is
+the one step that needs root, so it stays in `code` — units change far less
+often than pipeline code, which is what makes that split affordable.
+
+The checkout update refuses to run if `content/published` on the host holds
+anything that differs from `origin/main`, backs the directory up under
+`~/diverged-content/<stamp>`, and stops. A post approved in the dashboard
+exists nowhere else until it is committed, and a correction edited onto a live
+post is the one thing a routine deploy must never quietly discard.
+
 Site releases are published by swapping the `current` symlink, so a reader
 always sees a whole release and never a half-synced one. The last 5 are kept;
 rollback is a swap:
