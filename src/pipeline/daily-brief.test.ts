@@ -399,7 +399,33 @@ describe("selectTodayEvents", () => {
 });
 
 describe("selectUpcomingEvents", () => {
-	test("the window is (today, today+7] in LA days; closures stay filtered", () => {
+	test("the default horizon is 30 LA days, exclusive of today", () => {
+		const rows = [
+			item({
+				source_key: "sbclib-events",
+				title: "Day 8",
+				occurred_at: "2026-08-25T18:00:00.000Z",
+			}),
+			// Day 30 exactly: included.
+			item({
+				source_key: "cbwcd-events",
+				title: "Day 30",
+				occurred_at: "2026-09-16T16:00:00.000Z",
+			}),
+			// Day 31: out of the horizon.
+			item({
+				source_key: "cbwcd-events",
+				title: "Day 31",
+				occurred_at: "2026-09-17T16:00:00.000Z",
+			}),
+		];
+		assert.deepEqual(
+			selectUpcomingEvents(rows, NOW).map((e) => e.title),
+			["Day 8", "Day 30"],
+		);
+	});
+
+	test("the window is (today, today+horizon] in LA days; closures stay filtered", () => {
 		const rows = [
 			// Today: excluded — it lives in the brief body.
 			item({
@@ -432,7 +458,7 @@ describe("selectUpcomingEvents", () => {
 				occurred_at: "2026-08-20T16:00:00.000Z",
 			}),
 		];
-		const out = selectUpcomingEvents(rows, NOW);
+		const out = selectUpcomingEvents(rows, NOW, 7);
 		assert.deepEqual(
 			out.map((e) => [e.date, e.title]),
 			[

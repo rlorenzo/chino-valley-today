@@ -279,13 +279,15 @@ export function railTimeLabel(label: string | null): string | null {
 	return start.replace(/^0(\d:)/, "$1") || null;
 }
 
-// The week ahead, exclusive of today (today's events live in the brief body):
-// LA days (today, today + horizonDays], deduped by source_url. Rendered by
-// the site from frontmatter, not by the markdown body.
+// The month ahead, exclusive of today (today's events live in the brief
+// body): LA days (today, today + horizonDays], deduped by source_url.
+// Rendered by the site from frontmatter, not by the markdown body — the
+// calendar page shows the first week openly and the rest behind a native
+// disclosure, so the horizon here is coverage, not page length.
 export function selectUpcomingEvents(
 	eventItems: ItemRow[],
 	now: Date,
-	horizonDays = 7,
+	horizonDays = 30,
 ): UpcomingEvent[] {
 	const laToday = laDateOf(now.toISOString());
 	if (!laToday) return [];
@@ -498,7 +500,7 @@ export function assembleBrief(
 		venue: e.venue,
 		url: cite(e.sourceUrl),
 	}));
-	notes.push(`coming up: ${upcoming.length} event(s) in the next 7 days`);
+	notes.push(`coming up: ${upcoming.length} event(s) in the next 30 days`);
 
 	// New on the record: posts published since the previous brief (internal
 	// links — their provenance lives on the posts themselves), plus fresh

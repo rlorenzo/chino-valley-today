@@ -16,27 +16,40 @@ const briefs = briefsOnly(await getCollection("posts"));
 const currentBrief = briefs[0] ?? null;
 const ahead = currentBrief?.data.events_ahead ?? [];
 
-// All seven day slots, including the quiet ones — an empty shelf is
-// information in a record, so a day with nothing posted says so.
+// The first week renders openly, all seven day slots including the quiet
+// ones — an empty shelf is information in a record, so a day with nothing
+// posted says so. The rest of the 30-day horizon sits behind a native
+// disclosure; there only days with postings are listed, and the summary
+// line carries the full count so nothing is dropped silently.
 const briefDate = currentBrief?.data.brief_date ?? null;
-const days = briefDate
+const week = briefDate
 	? Array.from({ length: 7 }, (_, i) => {
 			const date = laDatePlus(briefDate, i + 1);
 			return { date, items: ahead.filter((e) => e.date === date) };
 		})
 	: [];
+const weekEnd = briefDate ? laDatePlus(briefDate, 7) : null;
+const farEvents = weekEnd ? ahead.filter((e) => e.date > weekEnd) : [];
+const farDays: { date: string; items: typeof ahead }[] = [];
+for (const e of farEvents) {
+	const last = farDays.at(-1);
+	if (last && last.date === e.date) last.items.push(e);
+	else farDays.push({ date: e.date, items: [e] });
+}
+const farLastDate = farEvents.at(-1)?.date ?? null;
 ---
 
 <Base
 	title="Calendar — Chino Valley Today"
-	description="The week ahead in Chino and Chino Hills: library, parks, water district, and city calendar events, each linked to its source calendar."
+	description="Coming up in Chino and Chino Hills: library, parks, water district, and city calendar events for the next 30 days, each linked to its source calendar."
 	current="record"
 >
 	<section class="shell cal" aria-labelledby="cal-heading">
 		<div class="cal__head">
-			<h1 id="cal-heading" class="mark cal__label">The week ahead</h1>
+			<h1 id="cal-heading" class="mark cal__label">Coming up</h1>
 			<p class="cal__count mark">
-				{ahead.length} {ahead.length === 1 ? "event" : "events"}
+				{ahead.length}
+				{ahead.length === 1 ? " event" : " events"} · next 30 days
 			</p>
 		</div>
 		{
@@ -52,15 +65,14 @@ const days = briefDate
 		}
 
 		{
-			days.length === 0 ? (
+			week.length === 0 ? (
 				<p class="cal__empty">
-					{currentBrief
-						? "Nothing on the posted calendars for the next seven days."
-						: "The calendar begins with the first daily brief; nothing is shown until it is real."}
+					The calendar begins with the first daily brief; nothing is shown
+					until it is real.
 				</p>
 			) : (
 				<ol class="cal__days">
-					{days.map((day) => (
+					{week.map((day) => (
 						<li>
 							<h2 class="mark cal__date">{formatLocalDateShort(day.date)}</h2>
 							{
@@ -83,6 +95,68 @@ const days = briefDate
 						</li>
 					))}
 				</ol>
+			)
+		}
+
+		{
+			/*
+			  Days 8-30, deep on demand — the same native-disclosure idiom as a
+			  post's inspection record: zero JS, keyboard operable, searchable
+			  when open. Only days with postings are listed inside; the summary
+			  states the full count so nothing is dropped silently.
+			*/
+			farDays.length > 0 && farLastDate && (
+				<section class="cal__far">
+					<details>
+						<summary>
+							<svg
+								class="cal__caret"
+								viewBox="0 0 12 12"
+								width="11"
+								height="11"
+								aria-hidden="true"
+								focusable="false"
+							>
+								<path
+									d="M3 1.5 L9 6 L3 10.5"
+									fill="none"
+									stroke="currentColor"
+									stroke-width="2"
+								/>
+							</svg>
+							<span class="mark cal__far-label">Further out</span>
+							<span class="mark cal__far-count">
+								{farEvents.length}
+								{farEvents.length === 1 ? " event" : " events"} through{" "}
+								{formatLocalDateShort(farLastDate)}
+							</span>
+						</summary>
+						<ol class="cal__days cal__days--far">
+							{farDays.map((day) => (
+								<li>
+									<h2 class="mark cal__date">
+										{formatLocalDateShort(day.date)}
+									</h2>
+									<ul class="cal__items">
+										{day.items.map((e) => (
+											<li class="cal__item">
+												{e.time && <span class="mark cal__time">{e.time}</span>}
+												<a href={e.url} rel="noopener noreferrer">
+													{e.title}
+												</a>
+												{e.venue && <span class="cal__venue">{e.venue}</span>}
+											</li>
+										))}
+									</ul>
+								</li>
+							))}
+						</ol>
+						<p class="cal__far-note">
+							Only days with postings are listed here; the source calendars
+							thin out this far ahead.
+						</p>
+					</details>
+				</section>
 			)
 		}
 	</section>
@@ -150,6 +224,51 @@ const days = briefDate
 	.cal__none {
 		margin: 0;
 		padding-block: 0.32rem;
+		font-size: 0.85rem;
+		color: var(--muted);
+	}
+
+	/* FURTHER OUT — same disclosure discipline as the inspection record. */
+	.cal__far {
+		margin-top: 2.2rem;
+		border-top: 2px solid var(--galv-edge);
+	}
+	.cal__far summary {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		padding: 0.85rem 0;
+		cursor: pointer;
+		list-style: none;
+	}
+	.cal__far summary::-webkit-details-marker {
+		display: none;
+	}
+	.cal__caret {
+		color: var(--crate);
+		flex: none;
+		transition: rotate 120ms linear;
+	}
+	.cal__far details[open] .cal__caret,
+	details[open] .cal__caret {
+		rotate: 90deg;
+	}
+	.cal__far-label {
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--crate);
+	}
+	.cal__far-count {
+		margin-left: auto;
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+	.cal__days--far {
+		padding-top: 0.4rem;
+	}
+	.cal__far-note {
+		margin: 1.4rem 0 0.6rem;
 		font-size: 0.85rem;
 		color: var(--muted);
 	}
