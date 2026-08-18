@@ -1,8 +1,8 @@
 [Unit]
 Description=Chino Valley Today — morning daily brief (assemble + site rebuild)
 Documentation=https://github.com/rlorenzo/chino-valley-today
-After=network-online.target
-Wants=network-online.target
+After=network-online.target cvt-scrape-frequent.service cvt-scrape-daily.service
+Wants=cvt-scrape-frequent.service cvt-scrape-daily.service
 
 [Service]
 Type=oneshot

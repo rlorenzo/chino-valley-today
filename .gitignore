@@ -34,3 +34,7 @@ deploy/deploy.env
 # rclone remote config — holds the B2 application key. Same convention as the
 # other projects: credentials live only here, mode 600, never in git.
 rclone.conf
+
+# Temporary or task-specific plan scratch files
+PLAN-*
+

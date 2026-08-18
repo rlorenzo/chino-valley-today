@@ -18,14 +18,24 @@ const def = mod.default as ScraperDef;
 const db = openDb();
 const { ctx, notes } = buildContext(db, def);
 
+const runId = db.startScrapeRun(def.key);
 const t0 = Date.now();
 let ok = true;
+let errorMsg: string | null = null;
 try {
 	await def.run(ctx, process.argv.slice(3));
 } catch (err) {
 	ok = false;
+	errorMsg = err instanceof Error ? err.message : String(err);
 	console.error(`FAILED after ${Date.now() - t0}ms:`, err);
 }
+
+db.finishScrapeRun(runId, {
+	status: ok ? "success" : "failure",
+	errorMessage: errorMsg,
+	documentsCount: ctx.counts.documentsFetched,
+	itemsCount: ctx.counts.itemsSeen,
+});
 
 console.log(
 	`\n=== ${def.key} ${ok ? "OK" : "FAILED"} in ${Date.now() - t0}ms ===`,
