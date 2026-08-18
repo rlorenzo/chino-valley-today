@@ -50,12 +50,23 @@ what="${1:-site}"
 
 # `local` runs ON the target and needs no ssh target; every other mode reaches
 # out over ssh and cannot proceed without one.
-if [ "$what" != "local" ] && [ -z "$HOST" ]; then
-	echo "deploy: CVT_DEPLOY_HOST is not set." >&2
-	echo "  cp deploy/deploy.env.example deploy/deploy.env  and fill it in," >&2
-	echo "  or pass it inline: CVT_DEPLOY_HOST=user@host $0 $*" >&2
-	exit 78
-fi
+# `local` and `host-update` run ON the droplet and never open an SSH
+# connection, so they must not require a target. The droplet has no
+# deploy/deploy.env (it is gitignored and belongs to developer machines) and no
+# CVT_DEPLOY_HOST in the unit environment, so demanding one here would exit 78
+# before either could run — which would leave the forced-command CI path unable
+# to update or rebuild the checkout at all.
+case "$what" in
+	local | host-update) ;;
+	*)
+		if [ -z "$HOST" ]; then
+			echo "deploy: CVT_DEPLOY_HOST is not set." >&2
+			echo "  cp deploy/deploy.env.example deploy/deploy.env  and fill it in," >&2
+			echo "  or pass it inline: CVT_DEPLOY_HOST=user@host $0 $*" >&2
+			exit 78
+		fi
+		;;
+esac
 
 deploy_site() {
 	echo "==> building the site"
