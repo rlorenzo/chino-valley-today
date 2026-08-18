@@ -133,19 +133,45 @@ deploy_code() {
 	# deploy (cvt-tiera publishing a backlog was exactly this), enable it by
 	# hand once, deliberately, before it ships here.
 	echo "==> enabling timers"
+	# A failure to enable must FAIL the deploy. Swallowing it (`enable ... &&
+	# record`) left `enabled_now` empty on error, so the run went on to print
+	# "all units already enabled" — a false all-clear over the exact silent gap
+	# this block exists to close.
+	# The check is is-ACTIVE, not is-enabled, and that distinction is load
+	# bearing. Tested with a deliberately malformed unit: systemd logged
+	# "Timer unit lacks value setting. Refusing." and left it inactive, while
+	# `systemctl enable --now` still exited 0 and `is-enabled` reported
+	# "enabled". An enabled-but-inactive timer is precisely the silent gap this
+	# block exists to close, so enabling is the action and running is the test.
 	ssh "$HOST" '
 		enabled_now=""
 		for unit in /etc/systemd/system/cvt-*.timer; do
 			name="$(basename "$unit")"
 			systemctl is-enabled --quiet "$name" 2>/dev/null && continue
-			systemctl enable --now "$name" >/dev/null 2>&1 &&
-				enabled_now="$enabled_now $name"
+			systemctl enable --now "$name" >/dev/null 2>&1 || true
+			enabled_now="$enabled_now $name"
 		done
 		if [ -n "$enabled_now" ]; then
 			echo "  enabled:$enabled_now"
-		else
-			echo "  all cvt-*.timer units already enabled"
 		fi
+
+		inactive=""
+		for unit in /etc/systemd/system/cvt-*.timer; do
+			name="$(basename "$unit")"
+			systemctl is-active --quiet "$name" 2>/dev/null ||
+				inactive="$inactive $name"
+		done
+		if [ -n "$inactive" ]; then
+			echo "  ERROR: timer(s) installed but NOT running:$inactive" >&2
+			for name in $inactive; do
+				systemctl status "$name" --no-pager -n 5 2>&1 | sed "s/^/    /" >&2
+			done
+			exit 1
+		fi
+		if [ -z "$enabled_now" ]; then
+			echo "  all cvt-*.timer units already running"
+		fi
+		exit 0
 	'
 }
 
