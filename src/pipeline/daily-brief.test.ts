@@ -578,14 +578,18 @@ describe("new on the record", () => {
 });
 
 describe("postTitleFromFile", () => {
-	test("reads the real frontmatter title, falling back to slug words", () => {
-		const real = post({
-			slug: "2026-W33-news-digest",
-			file_path: "content/published/2026-W33-news-digest.md",
+	test("reads the frontmatter title, falling back to slug words", () => {
+		// A committed fixture, not a real published post — corrections
+		// legitimately edit those, and this test must not break on one. The
+		// fixture body carries a decoy `title:` line, pinning that a body line
+		// can never shadow the frontmatter title (first match wins).
+		const fixture = post({
+			slug: "2026-08-17-fixture-post",
+			file_path: "src/pipeline/__fixtures__/frontmatter-title.md",
 		});
 		assert.equal(
-			postTitleFromFile(real),
-			"Chino Valley News Digest — 2026-W33",
+			postTitleFromFile(fixture),
+			"Fixture Post — Title Reader Check",
 		);
 		const gone = post({
 			slug: "2026-08-16-vanished-preview",
