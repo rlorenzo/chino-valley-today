@@ -262,6 +262,44 @@ export function selectWeather(
 	return out;
 }
 
+// NWS shortForecast is a bounded, documented vocabulary ("Sunny", "Patchy Fog
+// then Sunny", "Chance Rain Showers"), so the glyph is chosen by keyword in
+// priority order — a thunderstorm outranks the rain in its own description.
+// Anything unrecognised returns null and simply renders no glyph: a wrong
+// picture of the weather is worse than none, and the words always carry the
+// actual forecast.
+export function weatherGlyph(shortForecast: string | null): string | null {
+	const f = (shortForecast ?? "").toLowerCase();
+	if (!f) return null;
+	if (f.includes("thunder")) return "storm";
+	if (f.includes("snow") || f.includes("sleet") || f.includes("wintry")) {
+		return "snow";
+	}
+	if (f.includes("rain") || f.includes("shower") || f.includes("drizzle")) {
+		return "rain";
+	}
+	if (f.includes("fog") || f.includes("haze") || f.includes("smoke")) {
+		return "fog";
+	}
+	if (f.includes("wind") || f.includes("breezy")) return "wind";
+	if (f.includes("partly") || f.includes("mostly sunny")) return "partly";
+	if (f.includes("cloud") || f.includes("overcast")) return "cloudy";
+	if (f.includes("sunny") || f.includes("clear") || f.includes("fair")) {
+		return "clear";
+	}
+	if (f.includes("hot")) return "clear";
+	return null;
+}
+
+// Decorative only: aria-hidden, because the condition is already stated in
+// words immediately after it. The published markdown carries a class hook
+// rather than inline SVG so the glyph can be restyled later — EDITORIAL.md
+// forbids editing a post once published.
+function glyphSpan(shortForecast: string | null): string {
+	const name = weatherGlyph(shortForecast);
+	return name ? `<span class="wx wx--${name}" aria-hidden="true"></span> ` : "";
+}
+
 // The forecast is the least urgent thing in the brief, so it earns one line
 // rather than two paragraphs. When every city shares a condition the condition
 // is said once and only the numbers split; when the conditions genuinely
@@ -323,14 +361,14 @@ export function renderWeatherLine(
 		const highs = joinNamed((c) => c.day?.temperature ?? 0);
 		const lows = joinBare((c) => c.night?.temperature ?? 0);
 		const lowLabel = cities.length === 1 ? "low" : "lows";
-		return `${day.charAt(0).toUpperCase()}${day.slice(1)} today, high ${highs}; ${night} overnight, ${lowLabel} ${lows}. ${attribution}`;
+		return `${glyphSpan(dayCond(cities[0]))}${day.charAt(0).toUpperCase()}${day.slice(1)} today, high ${highs}; ${night} overnight, ${lowLabel} ${lows}. ${attribution}`;
 	}
 
 	// Conditions differ, so each city has to be named with its own.
 	const perCity = cities
 		.map(
 			(c) =>
-				`**${mdEscape(c.city)}**: ${mdEscape(
+				`${glyphSpan(dayCond(c))}**${mdEscape(c.city)}**: ${mdEscape(
 					dayCond(c).toLowerCase(),
 				)}, ${c.day?.temperature}/${c.night?.temperature}`,
 		)

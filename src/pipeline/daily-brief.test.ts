@@ -26,6 +26,7 @@ import {
 	selectUpcomingEvents,
 	selectWeather,
 	titleTokens,
+	weatherGlyph,
 } from "./daily-brief.ts";
 import { type PostRow, renderPostFile } from "./posts.ts";
 
@@ -1445,7 +1446,8 @@ describe("renderWeatherLine", () => {
 		);
 		assert.equal(
 			line,
-			"Sunny today, high 95 in Chino and 90 in Chino Hills; mostly clear overnight, lows 69 and 65. " +
+			'<span class="wx wx--clear" aria-hidden="true"></span> ' +
+				"Sunny today, high 95 in Chino and 90 in Chino Hills; mostly clear overnight, lows 69 and 65. " +
 				"(NWS: [Chino](https://forecast.weather.gov/Chino) · [Chino Hills](https://forecast.weather.gov/Chino Hills))",
 		);
 	});
@@ -1605,5 +1607,65 @@ describe("brief section order", () => {
 		assert.ok(post.bodyMd.includes("## Weather"));
 		// The verbose NWS sentence must not also be rendered.
 		assert.ok(!post.bodyMd.includes("West wind 0 to 10 mph"));
+	});
+});
+
+describe("weatherGlyph", () => {
+	test("maps the NWS vocabulary in priority order", () => {
+		assert.equal(weatherGlyph("Sunny"), "clear");
+		assert.equal(weatherGlyph("Mostly Clear"), "clear");
+		assert.equal(weatherGlyph("Partly Cloudy"), "partly");
+		assert.equal(weatherGlyph("Mostly Sunny"), "partly");
+		assert.equal(weatherGlyph("Mostly Cloudy"), "cloudy");
+		assert.equal(weatherGlyph("Overcast"), "cloudy");
+		assert.equal(weatherGlyph("Chance Rain Showers"), "rain");
+		assert.equal(weatherGlyph("Patchy Fog"), "fog");
+		assert.equal(weatherGlyph("Breezy"), "wind");
+		assert.equal(weatherGlyph("Slight Chance Snow Showers"), "snow");
+	});
+
+	test("a thunderstorm outranks the rain in its own description", () => {
+		// "Chance Showers And Thunderstorms" contains both; the storm is the
+		// thing a reader needs to see.
+		assert.equal(weatherGlyph("Chance Showers And Thunderstorms"), "storm");
+	});
+
+	test("renders no glyph rather than a wrong one", () => {
+		// A wrong picture of the weather is worse than none; the words always
+		// carry the real forecast.
+		assert.equal(weatherGlyph("Areas Of Blowing Dust"), null);
+		assert.equal(weatherGlyph(""), null);
+		assert.equal(weatherGlyph(null), null);
+	});
+
+	test("the glyph is decorative and hidden from assistive tech", () => {
+		const line = renderWeatherLine(
+			[
+				{
+					city: "Chino",
+					sourceUrl: "https://forecast.weather.gov/Chino",
+					periods: [
+						{
+							name: "Today",
+							body: "",
+							isDaytime: true,
+							temperature: 95,
+							shortForecast: "Sunny",
+						},
+						{
+							name: "Tonight",
+							body: "",
+							isDaytime: false,
+							temperature: 69,
+							shortForecast: "Mostly Clear",
+						},
+					],
+				},
+			],
+			(label, url) => `[${label}](${url})`,
+		);
+		assert.ok(line?.includes('<span class="wx wx--clear" aria-hidden="true">'));
+		// The condition still reads in words immediately after the glyph.
+		assert.ok(line?.includes("Sunny today, high 95 in Chino"));
 	});
 });

@@ -79,6 +79,18 @@ test("attribution styling keeps violet reserved for primary records", async (t) 
 		assert.match(css, /\.prose a\[href\^="http"\]:not\(\.headline-link\)/);
 	});
 
+	await t.test("weather glyphs are ink, never violet", () => {
+		// DESIGN.md: violet marks a primary record — never a heading, a focus
+		// ring, or an icon. The glyph is a mask filled with currentColor, so it
+		// takes the ink of its paragraph and cannot introduce its own colour.
+		const body = ruleBody(".wx");
+		assert.match(body, /background-color:\s*currentColor/);
+		assert.doesNotMatch(body, /var\(--stamp\)/);
+		assert.doesNotMatch(body, /#5b2d8e/i);
+		// Self-hosted: no reader's browser should be fetching weather art.
+		assert.doesNotMatch(css, /api\.weather\.gov\/icons/);
+	});
+
 	await t.test("counts report primary and secondary separately", () => {
 		// Folding attributions into the source count inflates the provenance
 		// claim the inspection panel is making.
