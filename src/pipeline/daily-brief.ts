@@ -726,7 +726,15 @@ const DEDUP_STOP_WORDS = new Set([
 export function titleTokens(title: string): Set<string> {
 	const words = title
 		.toLowerCase()
-		.replace(/[^\w\s]/g, " ")
+		// \w is ASCII-only, so an accented headline tokenised badly and two
+		// outlets covering the same story stopped looking similar. Same bug
+		// class as the name-extraction fix in this branch. Diacritics are then
+		// folded, because the case this dedup exists for is two papers writing
+		// up one event — and one of them spelling it "Jose" where the other
+		// writes "José" must not read as two different stories.
+		.normalize("NFD")
+		.replace(/\p{M}+/gu, "")
+		.replace(/[^\p{L}\p{N}\s]/gu, " ")
 		.split(/\s+/)
 		.filter((w) => w.length > 2 && !DEDUP_STOP_WORDS.has(w));
 	return new Set(words);

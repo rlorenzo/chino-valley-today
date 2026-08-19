@@ -941,6 +941,18 @@ describe("assertPrerequisitesFresh", () => {
 });
 
 describe("headlines elsewhere deduplication and selection", () => {
+	test("dedup tokenisation survives accents and differing spellings", () => {
+		// \w is ASCII-only: "José" tokenised as "jos", so an accented headline
+		// and its unaccented twin stopped looking like the same story. The case
+		// this dedup exists for is two papers writing up one event, and they do
+		// not agree on diacritics.
+		const accented = titleTokens("José Hernández to open bakery on Central");
+		const ascii = titleTokens("Jose Hernandez to open bakery on Central");
+		assert.ok(accented.has("hernandez"));
+		assert.ok(!accented.has("hern"));
+		assert.equal(jaccardSimilarity(accented, ascii), 1);
+	});
+
 	test("jaccardSimilarity computes overlap on title token sets", () => {
 		const t1 = titleTokens(
 			"7-Eleven, gas station, car wash to replace Corner Bar area",

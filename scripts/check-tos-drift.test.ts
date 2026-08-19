@@ -35,9 +35,16 @@ test("check-tos-drift watchdog and reset suite", async (t) => {
 	);
 	const matchingHash = createHash("sha256").update(matchingBody).digest("hex");
 
-	// Temporarily override reviewed_hash on config for deterministic unit testing
+	// Temporarily override reviewed_hash on config for deterministic unit
+	// testing. SOURCE_TOS_REGISTRY is module state shared with every other
+	// test in this file, so the restore is registered with the runner rather
+	// than written at the bottom of the suite: a failing assertion would skip
+	// a trailing restore and leave the registry mutated for whatever ran next.
 	const originalReviewedHash = config.reviewed_hash;
 	(config as { reviewed_hash: string }).reviewed_hash = matchingHash;
+	t.after(() => {
+		(config as { reviewed_hash: string }).reviewed_hash = originalReviewedHash;
+	});
 
 	// Reset db row to match
 	db.raw
@@ -223,7 +230,4 @@ test("check-tos-drift watchdog and reset suite", async (t) => {
 			assert.equal(inDb.status, "enabled"); // from previous test
 		},
 	);
-
-	// Restore original reviewed hash
-	(config as { reviewed_hash: string }).reviewed_hash = originalReviewedHash;
 });
