@@ -88,7 +88,12 @@ test("attribution styling keeps violet reserved for primary records", async (t) 
 		assert.doesNotMatch(body, /var\(--stamp\)/);
 		assert.doesNotMatch(body, /#5b2d8e/i);
 		// Self-hosted: no reader's browser should be fetching weather art.
-		assert.doesNotMatch(css, /api\.weather\.gov\/icons/);
+		// Substring, not a regex: an unanchored host pattern is the shape
+		// CodeQL flags, and a literal check says exactly what is meant here.
+		assert.ok(
+			!css.includes("api.weather.gov/icons"),
+			"weather glyphs must be self-hosted, not hotlinked from the NWS API",
+		);
 	});
 
 	await t.test("counts report primary and secondary separately", () => {
