@@ -706,7 +706,7 @@ tribe-events scraper parameterized by host/venue. Each: source row, scraper,
 dossier in reports/notes/, items with stable source_urls. All Tier A-able
 content.
 
-### Task 4.2 - Headlines-elsewhere ingestion — IN REVIEW (PR #28, 2026-08-18)
+### Task 4.2 - Headlines-elsewhere ingestion — MERGED (PR #28, 2026-08-19)
 
 Implemented fail-closed secondary community press ingestion for The Champion
 (`champion-news`) and Inland Valley Daily Bulletin (`dailybulletin-news`):
@@ -794,6 +794,18 @@ never run against a live site until this point:
 - The cross-outlet dedup path remains unexercised against real data: every
   Daily Bulletin article fell outside its 48h window, so only Champion's
   weekly edition qualified and precedence never had to fire.
+
+**Merged 2026-08-19; NOT YET RUNNING IN PRODUCTION.** The droplet's checkout
+is at origin/main (verified: the live stylesheet carries `wx--clear`,
+`stamp--attribution`), so the pipeline code shipped with the merge. But
+`host-update` deliberately never touches `/etc/systemd/system`, so
+`cvt-scrape-press.timer` and `cvt-check-tos.timer` are not installed: nothing
+schedules the press scrapers and the weekly ToS drift watchdog does not run.
+Both require one root `scripts/deploy.sh code` from a developer machine.
+Until then the feature is inert in production — the code is there and nothing
+calls it, which is precisely the failure mode that left cvt-tiera shipped and
+disabled. `checkDegradedSources` needs no new unit; it rides the existing
+`cvt-brief-watch.timer`.
 
 ### Task 4.3 - Daily brief assembler — CODE COMPLETE & MERGED (PR #27, 2026-08-18)
 
