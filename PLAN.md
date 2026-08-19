@@ -795,16 +795,22 @@ never run against a live site until this point:
   Daily Bulletin article fell outside its 48h window, so only Champion's
   weekly edition qualified and precedence never had to fire.
 
-**Merged 2026-08-19; NOT YET RUNNING IN PRODUCTION.** The droplet's checkout
+**LIVE IN PRODUCTION 2026-08-19.** The front page carries a real "In the
+local press" section with two Champion stories. Getting there took one manual
+step, recorded because it will recur: The droplet's checkout
 is at origin/main (verified: the live stylesheet carries `wx--clear`,
 `stamp--attribution`), so the pipeline code shipped with the merge. But
 `host-update` deliberately never touches `/etc/systemd/system`, so
 `cvt-scrape-press.timer` and `cvt-check-tos.timer` are not installed: nothing
 schedules the press scrapers and the weekly ToS drift watchdog does not run.
-Both require one root `scripts/deploy.sh code` from a developer machine.
-Until then the feature is inert in production — the code is there and nothing
-calls it, which is precisely the failure mode that left cvt-tiera shipped and
-disabled. `checkDegradedSources` needs no new unit; it rides the existing
+Both needed one root `scripts/deploy.sh code`, run 2026-08-19; the timers are
+now armed (press 4x daily, ToS check Sundays) and a smoke run of
+`cvt-scrape-press.service` succeeded under its real systemd constraints.
+Until that step the feature was inert — the code was there and nothing called
+it, precisely the failure mode that left cvt-tiera shipped and disabled, and
+nothing alerted because the drift watchdog only compares the checkout to
+origin/main. A unit-install drift check is the follow-up.
+`checkDegradedSources` needed no new unit; it rides the existing
 `cvt-brief-watch.timer`.
 
 ### Task 4.3 - Daily brief assembler — CODE COMPLETE & MERGED (PR #27, 2026-08-18)
