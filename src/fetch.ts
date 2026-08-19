@@ -34,6 +34,12 @@ function sleep(ms: number): Promise<void> {
 	return new Promise((r) => setTimeout(r, ms));
 }
 
+// One polite pause before a single retry. A seam, not a knob: tests drive
+// scrapers whose failure path goes through this backoff, and a suite has no
+// business sleeping for real on production politeness. Unset in production,
+// where the 5s pause is the point.
+const RETRY_PAUSE_MS = Number(process.env.CVT_FETCH_RETRY_MS ?? 5000);
+
 // ---- per-host rate limiting ----
 
 const lastByHost = new Map<string, number>();
@@ -214,7 +220,7 @@ export async function politeFetch(
 		try {
 			res = await attempt(currentUrl, headers, redirectMode);
 			if (res.status >= 500) {
-				await sleep(5000);
+				await sleep(RETRY_PAUSE_MS);
 				res = await attempt(currentUrl, headers, redirectMode);
 			}
 		} catch (err) {
@@ -222,7 +228,7 @@ export async function politeFetch(
 			// silently retrying: for those, whether the request happened at all is
 			// part of what the caller is being asked to decide.
 			if (opts.failClosedRobots) throw err;
-			await sleep(5000);
+			await sleep(RETRY_PAUSE_MS);
 			res = await attempt(currentUrl, headers, redirectMode);
 		}
 

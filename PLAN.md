@@ -706,7 +706,7 @@ tribe-events scraper parameterized by host/venue. Each: source row, scraper,
 dossier in reports/notes/, items with stable source_urls. All Tier A-able
 content.
 
-### Task 4.2 - Headlines-elsewhere ingestion — DONE 2026-08-18
+### Task 4.2 - Headlines-elsewhere ingestion — IN REVIEW (PR #28, 2026-08-18)
 
 Implemented fail-closed secondary community press ingestion for The Champion
 (`champion-news`) and Inland Valley Daily Bulletin (`dailybulletin-news`):
@@ -756,7 +756,44 @@ once and naming each city only when their conditions differ, falling back to
 the full NWS text when a period is missing. The heading reads "In the local
 press" rather than "Headlines elsewhere"; the `.headlines-elsewhere` CSS class
 and internal identifiers keep their names, because already-published briefs
-carry that class in their stored HTML.
+carry that class in their stored HTML. Weather gained a `## Weather` heading
+when it moved off the top — unheaded mid-document it read as an orphan
+sentence trailing the section above it.
+
+**Weather glyphs (2026-08-18):** eight line icons — clear, partly, cloudy,
+rain, storm, fog, wind, snow — chosen by keyword over the documented
+`shortForecast` vocabulary in priority order (a thunderstorm outranks the rain
+in its own description). Three constraints shaped the implementation. They are
+self-hosted data URIs rather than the `icon` URL the NWS payload does carry,
+because hotlinking would send every reader's browser to api.weather.gov on
+every brief. They render as a CSS mask filled with `currentColor` rather than
+a coloured image, which makes DESIGN.md's "no violet on an icon" rule
+structurally impossible to violate rather than merely observed. And the
+published markdown carries a class hook (`<span class="wx wx--clear">`) rather
+than inline SVG, because EDITORIAL.md forbids editing a post once published
+and baking the artwork into stored content would freeze it. An unrecognised
+condition renders no glyph at all, and the glyph is `aria-hidden` — the words
+always carry the actual forecast. Only `Sunny` and `Mostly Clear` exist in the
+database today, so six of the eight mappings are written from the documented
+vocabulary and remain unverified against live data until the weather turns.
+
+**Live verification (2026-08-18)** — the branch was fixture-tested but had
+never run against a live site until this point:
+
+- Both scrapers ingested real articles on first contact: 15 (Daily Bulletin)
+  and 13 (Champion) items.
+- The Champion run took two live HTTP 429s mid-run, logged and skipped those
+  articles, and completed successfully — the politeness path working under
+  real rate limiting.
+- Re-running after a refactor produced `itemsNew: 0`, confirming the
+  host-canonicalization fix (an article linked as both bare and `www` had been
+  storing two items).
+- Today's brief rendered two real Champion headlines with a
+  `114 sources · 2 attributions` count and no violet leakage onto attribution
+  links.
+- The cross-outlet dedup path remains unexercised against real data: every
+  Daily Bulletin article fell outside its 48h window, so only Champion's
+  weekly edition qualified and precedence never had to fire.
 
 ### Task 4.3 - Daily brief assembler — CODE COMPLETE & MERGED (PR #27, 2026-08-18)
 

@@ -90,7 +90,9 @@ test("run-one.ts refuses to execute a held scraper", () => {
 		["--import", blockNetworkPreload, "src/run-one.ts", HELD_KEY],
 		{
 			cwd: ROOT,
-			env: { ...process.env, CVT_DB: dbPath },
+			// No real backoff in the suite: this drives a civic source whose
+			// failure path goes through politeFetch's retry pause.
+			env: { ...process.env, CVT_DB: dbPath, CVT_FETCH_RETRY_MS: "0" },
 			encoding: "utf8",
 		},
 	);
@@ -153,7 +155,9 @@ test("run-one.ts does not gate an ungated civic source, even with a stray held r
 		["--import", blockNetworkPreload, "src/run-one.ts", UNGATED_KEY],
 		{
 			cwd: ROOT,
-			env: { ...process.env, CVT_DB: dbPath },
+			// No real backoff in the suite: this drives a civic source whose
+			// failure path goes through politeFetch's retry pause.
+			env: { ...process.env, CVT_DB: dbPath, CVT_FETCH_RETRY_MS: "0" },
 			encoding: "utf8",
 		},
 	);
