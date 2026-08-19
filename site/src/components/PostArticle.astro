@@ -17,6 +17,13 @@ interface Props {
 const { post } = Astro.props;
 const { Content } = await render(post);
 const topics = topicsFor(post);
+// Secondary press links cited for attribution. Counted separately from
+// sources, never merged into them: a reader scanning the summary has to be
+// able to tell how many PRIMARY records back the piece, and folding press
+// links into that number inflates the provenance claim.
+const attributions = post.data.attributions ?? [];
+const sourceCount = post.data.sources.length;
+const attributionCount = attributions.length;
 ---
 
 <article>
@@ -86,15 +93,17 @@ const topics = topicsFor(post);
 						Inspection record
 					</span>
 					<span class="inspection__count mark">
-						{post.data.sources.length}
-						{post.data.sources.length === 1 ? " source" : " sources"}
+						{sourceCount}
+						{sourceCount === 1 ? " source" : " sources"}
+						{attributionCount > 0 &&
+							` · ${attributionCount} ${attributionCount === 1 ? "attribution" : "attributions"}`}
 					</span>
 				</summary>
 
 				<div class="inspection__body">
 					<p class="inspection__note">
-						Every claim above is drawn from these records. Follow any one to
-						the primary document and check it.
+						Every civic claim above is drawn from these records. Follow any
+						one to the primary document and check it.
 					</p>
 					<ol class="inspection__list">
 						{
@@ -110,6 +119,36 @@ const topics = topicsFor(post);
 							))
 						}
 					</ol>
+					{
+						attributions.length > 0 && (
+							<div class="inspection__attributions">
+								<p class="inspection__note inspection__note--secondary">
+									Secondary press attribution &mdash; independent reporting from
+									community news outlets, not primary civic records.
+								</p>
+								<ol class="inspection__list">
+									{attributions.map((attr) => (
+										<li>
+											<a
+												class="stamp--attribution"
+												href={attr}
+												rel="noopener noreferrer"
+											>
+												{sourceHost(attr)}
+											</a>
+											<a
+												class="inspection__url"
+												href={attr}
+												rel="noopener noreferrer"
+											>
+												{attr}
+											</a>
+										</li>
+									))}
+								</ol>
+							</div>
+						)
+					}
 					<p class="inspection__tier mark">
 						{
 							post.data.tier === "A"

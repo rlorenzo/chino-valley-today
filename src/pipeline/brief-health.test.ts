@@ -4,6 +4,7 @@ import { openDb } from "../db/index.ts";
 import {
 	checkBriefDatabase,
 	checkBriefHttp,
+	checkDegradedSources,
 	expectedBriefSlug,
 	staleHealthText,
 	verifyBriefHealth,
@@ -148,6 +149,87 @@ describe("checkBriefHttp", () => {
 		});
 		assert.equal(res.ok, false);
 		assert.match(res.error ?? "", /missing brief content markers/);
+	});
+});
+
+describe("checkDegradedSources", () => {
+	function insertRun(
+		db: ReturnType<typeof openDb>,
+		sourceKey: string,
+		status: "success" | "failure",
+		itemsCount: number,
+		finishedAt = "2026-08-17T06:00:00.000Z",
+	) {
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+         VALUES (?, '2026-08-17T05:50:00.000Z', ?, ?, ?, ?)`,
+			)
+			.run(sourceKey, finishedAt, status, itemsCount, itemsCount);
+	}
+
+	test("3 consecutive failures is degraded", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "champion-news", "failure", 0);
+		insertRun(db, "champion-news", "failure", 0);
+		insertRun(db, "champion-news", "failure", 0);
+
+		const [res] = checkDegradedSources(db, ["champion-news"]);
+		assert.equal(res.degraded, true);
+		assert.match(res.reason, /all failed/);
+		assert.equal(res.runs.length, 3);
+	});
+
+	test("3 consecutive successes with 0 items is degraded", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "dailybulletin-news", "success", 0);
+		insertRun(db, "dailybulletin-news", "success", 0);
+		insertRun(db, "dailybulletin-news", "success", 0);
+
+		const [res] = checkDegradedSources(db, ["dailybulletin-news"]);
+		assert.equal(res.degraded, true);
+		assert.match(res.reason, /0 items/);
+	});
+
+	test("mixed statuses (2 failures + 1 success) is not degraded", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "champion-news", "failure", 0);
+		insertRun(db, "champion-news", "failure", 0);
+		insertRun(db, "champion-news", "success", 3);
+
+		const [res] = checkDegradedSources(db, ["champion-news"]);
+		assert.equal(res.degraded, false);
+	});
+
+	test("only 2 runs recorded is not degraded (insufficient evidence)", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "champion-news", "failure", 0);
+		insertRun(db, "champion-news", "failure", 0);
+
+		const [res] = checkDegradedSources(db, ["champion-news"]);
+		assert.equal(res.degraded, false);
+		assert.match(res.reason, /insufficient evidence/);
+		assert.equal(res.runs.length, 2);
+	});
+
+	test("3 successes with items is not degraded", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "champion-news", "success", 4);
+		insertRun(db, "champion-news", "success", 2);
+		insertRun(db, "champion-news", "success", 1);
+
+		const [res] = checkDegradedSources(db, ["champion-news"]);
+		assert.equal(res.degraded, false);
+	});
+
+	test("defaults to HEADLINES_SOURCES and reports each source key", () => {
+		const db = openDb(":memory:");
+		const results = checkDegradedSources(db);
+		assert.deepEqual(results.map((r) => r.sourceKey).sort(), [
+			"champion-news",
+			"dailybulletin-news",
+		]);
+		assert.ok(results.every((r) => r.degraded === false));
 	});
 });
 

@@ -1,0 +1,36 @@
+[Unit]
+Description=Chino Valley Today — weekly terms-of-service drift check
+Documentation=https://github.com/rlorenzo/chino-valley-today
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+EnvironmentFile=/srv/chino-valley-today/.env
+ExecStart=/usr/bin/env node scripts/check-tos-drift.ts
+
+# Same shared-droplet reasoning as the scrape units: this fetches two small
+# HTML pages, so it is capped tighter still. The interactive sites win.
+MemoryHigh=200M
+MemoryMax=300M
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+
+# Writes nothing but the ToS status rows in the database.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/srv/chino-valley-today/data
+
+TimeoutStartSec=10min
+
+[Install]
+WantedBy=multi-user.target

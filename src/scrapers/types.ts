@@ -65,11 +65,19 @@ export interface ScraperContext {
 	note: (msg: string) => void;
 }
 
+export interface ScraperFetchDefaults {
+	failClosedRobots?: boolean;
+	allowedHosts?: string[];
+	manualRedirect?: boolean;
+	maxRedirectHops?: number;
+}
+
 export interface ScraperDef {
 	key: string;
 	name: string;
 	baseUrl: string;
 	method: FetchMethod;
+	fetchDefaults?: ScraperFetchDefaults;
 	// args: extra CLI arguments forwarded by run-one.ts (`npm run one <key> -- <args>`),
 	// for scraper-specific modes like targeted backfills. Absent in poc runs.
 	run: (ctx: ScraperContext, args?: string[]) => Promise<void>;

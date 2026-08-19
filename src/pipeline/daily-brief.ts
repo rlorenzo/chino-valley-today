@@ -18,6 +18,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
+import { filterHeadlineEligibility } from "../gates/policy-filters.ts";
+import { esc } from "../html.ts";
 import { ROOT } from "../store.ts";
 import {
 	normalizeLocation,
@@ -63,6 +65,63 @@ const AGENDA_SOURCES = [
 	"chino-agendacenter",
 	"chinohills-agendas",
 ];
+
+// Everything that varies between the two secondary-press outlets lives here.
+// The Champion is a weekly print paper and the Daily Bulletin publishes daily,
+// so one set of windows cannot serve both — but spreading that difference
+// across `if (source_key === ...)` branches is how the third outlet gets half
+// wired up. `hosts` is the render-time allowlist: a link only reaches the page
+// if its host is one of these exactly.
+interface HeadlineSourcePolicy {
+	outlet: string;
+	hosts: readonly string[];
+	// How stale the scrape run itself may be before the outlet is dropped.
+	maxScrapeAgeHours: number;
+	// How old an individual article may be and still be worth linking.
+	maxItemAgeHours: number;
+	// Daily outlets must not re-link what the previous brief already carried.
+	sincePrevBrief: boolean;
+}
+
+const HEADLINE_SOURCE_POLICY: Record<string, HeadlineSourcePolicy> = {
+	"champion-news": {
+		outlet: "The Champion",
+		hosts: ["www.championnewspapers.com", "championnewspapers.com"],
+		maxScrapeAgeHours: 8 * 24,
+		maxItemAgeHours: 7 * 24,
+		sincePrevBrief: false,
+	},
+	"dailybulletin-news": {
+		outlet: "Daily Bulletin",
+		hosts: ["www.dailybulletin.com", "dailybulletin.com"],
+		maxScrapeAgeHours: 26,
+		maxItemAgeHours: 48,
+		sincePrevBrief: true,
+	},
+};
+
+export const HEADLINES_SOURCES = Object.keys(HEADLINE_SOURCE_POLICY);
+
+// A publisher's clock running ahead of ours must not silently drop a story.
+const MAX_ITEM_FUTURE_HOURS = 24;
+// Jaccard overlap on title tokens above which two stories are the same story.
+const HEADLINE_DEDUP_SIMILARITY = 0.6;
+const MAX_HEADLINES_TOTAL = 5;
+const MAX_HEADLINES_PER_OUTLET = 3;
+
+const MS_PER_HOUR = 60 * 60 * 1000;
+
+function hoursSince(nowMs: number, iso: string): number {
+	return (nowMs - new Date(iso).getTime()) / MS_PER_HOUR;
+}
+
+export interface SourceFreshness {
+	isFresh: boolean;
+	status: "running" | "success" | "failure" | "missing";
+	finishedAt: string | null;
+	tosStatus: "enabled" | "held";
+	heldReason?: string | null;
+}
 
 export const DAILY_BRIEF_PREREQUISITE_SOURCES = [
 	// 6 Frequent Sources (05:17 PT group)
@@ -136,7 +195,13 @@ function metaString(meta: Record<string, unknown>, key: string): string | null {
 export interface CityForecast {
 	city: string;
 	sourceUrl: string;
-	periods: Array<{ name: string; body: string }>;
+	periods: Array<{
+		name: string;
+		body: string;
+		isDaytime: boolean;
+		temperature: number | null;
+		shortForecast: string | null;
+	}>;
 }
 
 // Today's daytime + tonight's period per city. Rows arrive in id order;
@@ -178,15 +243,137 @@ export function selectWeather(
 		const periods: CityForecast["periods"] = [];
 		for (const row of [day, night]) {
 			if (!row?.body?.trim()) continue;
-			const name = metaString(parseMeta(row.meta), "periodName");
+			const meta = parseMeta(row.meta);
+			const name = metaString(meta, "periodName");
 			if (!name) continue;
-			periods.push({ name, body: row.body.replace(/\s+/g, " ").trim() });
+			periods.push({
+				name,
+				body: row.body.replace(/\s+/g, " ").trim(),
+				isDaytime: meta.isDaytime === true,
+				temperature:
+					typeof meta.temperature === "number" ? meta.temperature : null,
+				shortForecast: metaString(meta, "shortForecast"),
+			});
 		}
 		const sourceUrl = (day ?? night)?.source_url;
 		if (periods.length === 0 || !sourceUrl) continue;
 		out.push({ city, sourceUrl, periods });
 	}
 	return out;
+}
+
+// NWS shortForecast is a bounded, documented vocabulary ("Sunny", "Patchy Fog
+// then Sunny", "Chance Rain Showers"), so the glyph is chosen by keyword in
+// priority order — a thunderstorm outranks the rain in its own description.
+// Anything unrecognised returns null and simply renders no glyph: a wrong
+// picture of the weather is worse than none, and the words always carry the
+// actual forecast.
+export function weatherGlyph(shortForecast: string | null): string | null {
+	const f = (shortForecast ?? "").toLowerCase();
+	if (!f) return null;
+	if (f.includes("thunder")) return "storm";
+	if (f.includes("snow") || f.includes("sleet") || f.includes("wintry")) {
+		return "snow";
+	}
+	if (f.includes("rain") || f.includes("shower") || f.includes("drizzle")) {
+		return "rain";
+	}
+	if (f.includes("fog") || f.includes("haze") || f.includes("smoke")) {
+		return "fog";
+	}
+	if (f.includes("wind") || f.includes("breezy")) return "wind";
+	if (f.includes("partly") || f.includes("mostly sunny")) return "partly";
+	if (f.includes("cloud") || f.includes("overcast")) return "cloudy";
+	if (f.includes("sunny") || f.includes("clear") || f.includes("fair")) {
+		return "clear";
+	}
+	if (f.includes("hot")) return "clear";
+	return null;
+}
+
+// Decorative only: aria-hidden, because the condition is already stated in
+// words immediately after it. The published markdown carries a class hook
+// rather than inline SVG so the glyph can be restyled later — EDITORIAL.md
+// forbids editing a post once published.
+function glyphSpan(shortForecast: string | null): string {
+	const name = weatherGlyph(shortForecast);
+	return name ? `<span class="wx wx--${name}" aria-hidden="true"></span> ` : "";
+}
+
+// The forecast is the least urgent thing in the brief, so it earns one line
+// rather than two paragraphs. When every city shares a condition the condition
+// is said once and only the numbers split; when the conditions genuinely
+// differ, each city is named. Composed from the structured gridpoint fields
+// (temperature, shortForecast), never by parsing the prose sentence — and it
+// returns null rather than guess if a city is missing either period, so the
+// caller can fall back to the full forecast text.
+export function renderWeatherLine(
+	weather: CityForecast[],
+	link: (label: string, url: string) => string,
+): string | null {
+	if (weather.length === 0) return null;
+
+	const cities = weather.map((fc) => ({
+		city: fc.city,
+		sourceUrl: fc.sourceUrl,
+		day: fc.periods.find((p) => p.isDaytime),
+		night: fc.periods.find((p) => !p.isDaytime),
+	}));
+
+	// Every city needs both periods with a temperature and a condition, or the
+	// condensed form would quietly drop half a city's forecast.
+	const complete = cities.every(
+		(c) =>
+			c.day?.temperature != null &&
+			c.day.shortForecast &&
+			c.night?.temperature != null &&
+			c.night.shortForecast,
+	);
+	if (!complete) return null;
+
+	const attribution = `(NWS: ${cities
+		.map((c) => link(mdEscape(c.city), c.sourceUrl))
+		.join(" · ")})`;
+
+	const joinBits = (bits: string[]): string => {
+		if (bits.length === 1) return bits[0];
+		if (bits.length === 2) return `${bits[0]} and ${bits[1]}`;
+		return `${bits.slice(0, -1).join(", ")} and ${bits.at(-1)}`;
+	};
+	// Highs name their city ("95 in Chino and 90 in Chino Hills"); the lows then
+	// ride the order the highs just established ("lows 69 and 65") rather than
+	// repeating both city names in one sentence.
+	const joinNamed = (pick: (c: (typeof cities)[number]) => number): string =>
+		joinBits(cities.map((c) => `${pick(c)} in ${mdEscape(c.city)}`));
+	const joinBare = (pick: (c: (typeof cities)[number]) => number): string =>
+		joinBits(cities.map((c) => `${pick(c)}`));
+
+	const sameCondition = (pick: (c: (typeof cities)[number]) => string) =>
+		new Set(cities.map((c) => pick(c).toLowerCase())).size === 1;
+
+	const dayCond = (c: (typeof cities)[number]) => c.day?.shortForecast ?? "";
+	const nightCond = (c: (typeof cities)[number]) =>
+		c.night?.shortForecast ?? "";
+
+	if (sameCondition(dayCond) && sameCondition(nightCond)) {
+		const day = mdEscape(dayCond(cities[0]).toLowerCase());
+		const night = mdEscape(nightCond(cities[0]).toLowerCase());
+		const highs = joinNamed((c) => c.day?.temperature ?? 0);
+		const lows = joinBare((c) => c.night?.temperature ?? 0);
+		const lowLabel = cities.length === 1 ? "low" : "lows";
+		return `${glyphSpan(dayCond(cities[0]))}${day.charAt(0).toUpperCase()}${day.slice(1)} today, high ${highs}; ${night} overnight, ${lowLabel} ${lows}. ${attribution}`;
+	}
+
+	// Conditions differ, so each city has to be named with its own.
+	const perCity = cities
+		.map(
+			(c) =>
+				`${glyphSpan(dayCond(c))}**${mdEscape(c.city)}**: ${mdEscape(
+					dayCond(c).toLowerCase(),
+				)}, ${c.day?.temperature}/${c.night?.temperature}`,
+		)
+		.join(". ");
+	return `${perCity}. ${attribution}`;
 }
 
 // Same "active" rule as the alert post generator (src/tiera/alerts.ts):
@@ -410,6 +597,300 @@ export function selectFreshLicenseEvents(
 	return dedupeByKey(inWindow, (r) => r.external_id ?? `${r.id}`);
 }
 
+// --- Headlines Elsewhere -----------------------------------------------------
+
+function sourceFreshness(db: Db, key: string, nowMs: number): SourceFreshness {
+	const tos = db.getSourceTosStatus(key);
+	const latestRun = db.raw
+		.prepare(
+			`SELECT status, finished_at, error_message
+			 FROM scrape_runs
+			 WHERE source_key = ?
+			 ORDER BY id DESC
+			 LIMIT 1`,
+		)
+		.get(key) as
+		| {
+				status: "running" | "success" | "failure";
+				finished_at: string | null;
+				error_message: string | null;
+		  }
+		| undefined;
+
+	// A ToS hold outranks everything below it: the terms, not the scrape, are
+	// what decides whether we may link the outlet at all.
+	if (tos.status !== "enabled") {
+		return {
+			isFresh: false,
+			status: latestRun ? latestRun.status : "missing",
+			finishedAt: latestRun?.finished_at ?? null,
+			tosStatus: "held",
+			heldReason: tos.heldReason ?? "baseline_held",
+		};
+	}
+
+	if (!latestRun) {
+		return {
+			isFresh: false,
+			status: "missing",
+			finishedAt: null,
+			tosStatus: "enabled",
+			heldReason: "no scrape run recorded",
+		};
+	}
+
+	if (latestRun.status !== "success" || !latestRun.finished_at) {
+		return {
+			isFresh: false,
+			status: latestRun.status,
+			finishedAt: latestRun.finished_at,
+			tosStatus: "enabled",
+			heldReason:
+				latestRun.status === "running"
+					? "scrape run in progress"
+					: `scrape run failed (${latestRun.error_message ?? "unknown error"})`,
+		};
+	}
+
+	const maxAgeHours = HEADLINE_SOURCE_POLICY[key].maxScrapeAgeHours;
+	const ageHours = hoursSince(nowMs, latestRun.finished_at);
+	if (ageHours > maxAgeHours) {
+		return {
+			isFresh: false,
+			status: "success",
+			finishedAt: latestRun.finished_at,
+			tosStatus: "enabled",
+			heldReason: `stale scrape run (${ageHours.toFixed(1)}h old, max ${maxAgeHours}h)`,
+		};
+	}
+
+	return {
+		isFresh: true,
+		status: "success",
+		finishedAt: latestRun.finished_at,
+		tosStatus: "enabled",
+	};
+}
+
+export function checkHeadlinesFreshness(
+	db: Db,
+	now: Date,
+): Record<string, SourceFreshness> {
+	const nowMs = now.getTime();
+	return Object.fromEntries(
+		HEADLINES_SOURCES.map((key) => [key, sourceFreshness(db, key, nowMs)]),
+	);
+}
+
+const DEDUP_STOP_WORDS = new Set([
+	"the",
+	"a",
+	"an",
+	"in",
+	"on",
+	"at",
+	"for",
+	"to",
+	"with",
+	"from",
+	"by",
+	"about",
+	"and",
+	"but",
+	"or",
+	"nor",
+	"as",
+	"if",
+	"when",
+	"while",
+	"of",
+	"is",
+	"are",
+	"was",
+	"were",
+	"be",
+	"been",
+	"being",
+	"have",
+	"has",
+	"had",
+	"do",
+	"does",
+	"did",
+	"will",
+	"would",
+	"shall",
+	"should",
+]);
+
+export function titleTokens(title: string): Set<string> {
+	const words = title
+		.toLowerCase()
+		// \w is ASCII-only, so an accented headline tokenised badly and two
+		// outlets covering the same story stopped looking similar. Same bug
+		// class as the name-extraction fix in this branch. Diacritics are then
+		// folded, because the case this dedup exists for is two papers writing
+		// up one event — and one of them spelling it "Jose" where the other
+		// writes "José" must not read as two different stories.
+		.normalize("NFD")
+		.replace(/\p{M}+/gu, "")
+		.replace(/[^\p{L}\p{N}\s]/gu, " ")
+		.split(/\s+/)
+		.filter((w) => w.length > 2 && !DEDUP_STOP_WORDS.has(w));
+	return new Set(words);
+}
+
+export function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
+	if (a.size === 0 && b.size === 0) return 1;
+	if (a.size === 0 || b.size === 0) return 0;
+	let intersection = 0;
+	for (const token of a) {
+		if (b.has(token)) intersection++;
+	}
+	const union = a.size + b.size - intersection;
+	return union === 0 ? 0 : intersection / union;
+}
+
+export function selectHeadlinesElsewhere(
+	headlineItems: ItemRow[] | undefined,
+	freshness: Record<string, SourceFreshness> | undefined,
+	now: Date,
+	prevBriefPublishedAt?: string | null,
+): ItemRow[] {
+	if (!headlineItems || headlineItems.length === 0) return [];
+	const nowMs = now.getTime();
+
+	// 1. Freshness & ToS filter. An absent map means the caller has already
+	// vouched for the items (the unit tests do); an entry that is not fresh
+	// drops the whole outlet rather than shipping links we cannot vouch for.
+	const eligibleByFreshness = freshness
+		? headlineItems.filter((item) => freshness[item.source_key]?.isFresh)
+		: headlineItems;
+
+	// 2. Recency filter by occurred_at, per the outlet's publishing cadence.
+	const inWindow = eligibleByFreshness.filter((item) => {
+		const policy = HEADLINE_SOURCE_POLICY[item.source_key];
+		if (!policy || !item.occurred_at) return false;
+		const occurredMs = new Date(item.occurred_at).getTime();
+		if (Number.isNaN(occurredMs)) return false;
+
+		const ageHours = hoursSince(nowMs, item.occurred_at);
+		if (ageHours > policy.maxItemAgeHours) return false;
+		if (ageHours < -MAX_ITEM_FUTURE_HOURS) return false;
+
+		if (policy.sincePrevBrief && prevBriefPublishedAt) {
+			if (occurredMs < new Date(prevBriefPublishedAt).getTime()) return false;
+		}
+		return true;
+	});
+
+	// 3. Policy & relevance filter
+	const eligiblePolicy = inWindow.filter(
+		(item) => filterHeadlineEligibility(item).eligible,
+	);
+
+	// 4. Cross-outlet deduplication. Precedence: the local weekly's own reporting
+	// wins over the regional daily's version of the same story, then the earlier
+	// filing, then the lower id so runs are reproducible.
+	const sortedForDedup = [...eligiblePolicy].sort((a, b) => {
+		const localFirst =
+			Number(b.source_key === "champion-news") -
+			Number(a.source_key === "champion-news");
+		if (localFirst !== 0) return localFirst;
+		const dateDiff = (a.occurred_at ?? "").localeCompare(b.occurred_at ?? "");
+		if (dateDiff !== 0) return dateDiff;
+		return a.id - b.id;
+	});
+
+	const deduped: ItemRow[] = [];
+	const seen: Array<{ tokens: Set<string>; url: string; title: string }> = [];
+
+	for (const item of sortedForDedup) {
+		const title = item.title?.trim() ?? "";
+		const url = item.source_url.trim();
+		const tokens = titleTokens(title);
+
+		const isDupe = seen.some(
+			(prev) =>
+				prev.url === url ||
+				prev.title.toLowerCase() === title.toLowerCase() ||
+				jaccardSimilarity(tokens, prev.tokens) >= HEADLINE_DEDUP_SIMILARITY,
+		);
+
+		if (!isDupe) {
+			seen.push({ tokens, url, title });
+			deduped.push(item);
+		}
+	}
+
+	// 5. Final ordering & capping. Deterministic: occurred_at DESC, title ASC,
+	// id ASC — the same inputs must always produce the same brief.
+	const finalSorted = [...deduped].sort((a, b) => {
+		const dateDiff = (b.occurred_at ?? "").localeCompare(a.occurred_at ?? "");
+		if (dateDiff !== 0) return dateDiff;
+		const titleDiff = (a.title ?? "").localeCompare(b.title ?? "");
+		if (titleDiff !== 0) return titleDiff;
+		return a.id - b.id;
+	});
+
+	const result: ItemRow[] = [];
+	const countByOutlet: Record<string, number> = {};
+
+	for (const item of finalSorted) {
+		if (result.length >= MAX_HEADLINES_TOTAL) break;
+		const count = countByOutlet[item.source_key] ?? 0;
+		if (count >= MAX_HEADLINES_PER_OUTLET) continue;
+
+		countByOutlet[item.source_key] = count + 1;
+		result.push(item);
+	}
+
+	return result;
+}
+
+/**
+ * Renders the selected headlines as <li> markup and collects the URLs that go
+ * into frontmatter `attributions`. A link whose host is not the outlet's own is
+ * dropped rather than rendered: `selectHeadlinesElsewhere` trusts the scraper's
+ * stored source_url, and this is the last place to catch a redirect or a bad
+ * row before it reaches a reader.
+ */
+function renderHeadlineListItems(
+	headlines: ItemRow[],
+	notes: string[],
+): { listItems: string[]; attributions: string[] } {
+	const listItems: string[] = [];
+	const attributions: string[] = [];
+
+	for (const h of headlines) {
+		const policy = HEADLINE_SOURCE_POLICY[h.source_key];
+		let url: URL;
+		try {
+			url = new URL(h.source_url);
+		} catch {
+			notes.push(`headlines: unparseable URL skipped: ${h.source_url}`);
+			continue;
+		}
+		if (url.protocol !== "https:" || !policy?.hosts.includes(url.hostname)) {
+			notes.push(`headlines: off-allowlist URL skipped: ${h.source_url}`);
+			continue;
+		}
+
+		attributions.push(h.source_url);
+
+		const outlet = metaString(parseMeta(h.meta), "outlet") ?? policy.outlet;
+		const teaser = h.body?.trim() ? ` &mdash; ${esc(h.body.trim())}` : "";
+
+		// `headline-link` opts the anchor out of the violet source-stamp styling:
+		// these links are attribution, not provenance.
+		listItems.push(
+			`  <li><a class="headline-link" href="${esc(h.source_url.trim())}" rel="noopener noreferrer">${esc(h.title?.trim() ?? "")}</a> (${esc(outlet)})${teaser}</li>`,
+		);
+	}
+
+	return { listItems, attributions };
+}
+
 // --- Assembly ----------------------------------------------------------------
 
 export interface BriefInputs {
@@ -420,6 +901,8 @@ export interface BriefInputs {
 	agendaItems: ItemRow[];
 	cvusdEvents: ItemRow[];
 	licenseEvents: ItemRow[];
+	headlines?: ItemRow[];
+	headlinesFreshness?: Record<string, SourceFreshness>;
 	publishedPosts: PostRow[];
 	// published_at of the previous daily brief; null on the first ever run,
 	// which falls back to a 24h window for "new on the record".
@@ -443,41 +926,64 @@ export function assembleBrief(
 		return url;
 	};
 
+	// Each section builds its own lines; the single ORDER list below is what
+	// decides where they land. Reordering the brief is a one-line change there,
+	// not a rearrangement of this whole function.
 	const body: string[] = [];
+	const alertLines: string[] = [];
+	const fireLines: string[] = [];
+	const pressLines: string[] = [];
+	const recordLines: string[] = [];
+	const weatherLines: string[] = [];
+	const todayLines: string[] = [];
 
-	// Weather line (no heading — it opens the brief).
+	// Weather: one condensed line, with the full forecast text as the fallback
+	// when a city is missing a period and the line cannot be composed honestly.
 	const weather = selectWeather(inputs.forecast, now);
-	for (const cityFc of weather) {
-		const text = cityFc.periods
-			.map((p) => `${p.name}: ${mdEscape(p.body)}`)
-			.join(" ");
-		body.push(
-			`**${mdEscape(cityFc.city)}** — ${text} (${mdLink("NWS forecast", cite(cityFc.sourceUrl))})`,
-		);
-		body.push("");
+	const weatherLine = renderWeatherLine(weather, (label, url) =>
+		mdLink(label, cite(url)),
+	);
+	if (weather.length > 0) {
+		// It needed no heading when it opened the brief as the lede. Sitting
+		// mid-document above the calendar, an unheaded line reads as an orphan
+		// sentence trailing the section above it.
+		weatherLines.push("## Weather", "");
+	}
+	if (weatherLine) {
+		weatherLines.push(weatherLine, "");
+	} else {
+		for (const cityFc of weather) {
+			const text = cityFc.periods
+				.map((p) => `${p.name}: ${mdEscape(p.body)}`)
+				.join(" ");
+			weatherLines.push(
+				`**${mdEscape(cityFc.city)}** — ${text} (${mdLink("NWS forecast", cite(cityFc.sourceUrl))})`,
+				"",
+			);
+		}
 	}
 	const activeAlerts = selectActiveAlerts(inputs.nwsAlerts, now);
 	for (const alert of activeAlerts) {
-		body.push(
+		alertLines.push(
 			`**Active alert:** ${mdLink((alert.title ?? "").trim(), cite(alert.source_url))}`,
+			"",
 		);
-		body.push("");
 	}
 	notes.push(
-		`weather: ${weather.length} city forecast(s), ${activeAlerts.length} active alert(s)`,
+		`weather: ${weather.length} city forecast(s), ${activeAlerts.length} active alert(s)${weatherLine ? "" : " (condensed line unavailable; used full text)"}`,
 	);
 
 	// Fire & safety: verbatim title + source link only — never body text.
 	const fire = selectFireSafety(inputs.fire, now);
 	if (fire.length > 0) {
-		body.push("## Fire & safety", "");
+		fireLines.push("## Fire & safety", "");
 		for (const row of fire) {
 			const label = FIRE_LABEL[row.source_key] ?? row.source_key;
-			body.push(
+			fireLines.push(
 				`- ${mdLink((row.title ?? "").trim(), cite(row.source_url))} (${label})`,
 			);
 		}
-		body.push("");
+		fireLines.push("");
 	}
 	notes.push(`fire & safety: ${fire.length} item(s) in the last 24h`);
 
@@ -490,22 +996,22 @@ export function assembleBrief(
 	const events = selectTodayEvents(inputs.calendarEvents, now);
 	const marketDay = isLaWednesday(now);
 	if (meetings.length > 0 || events.length > 0 || marketDay) {
-		body.push("## Today", "");
+		todayLines.push("## Today", "");
 		for (const m of meetings) {
 			const time = m.timeLabel ? ` — ${m.timeLabel}` : "";
-			body.push(`- **Meeting:** ${mdLink(m.title, cite(m.url))}${time}`);
+			todayLines.push(`- **Meeting:** ${mdLink(m.title, cite(m.url))}${time}`);
 		}
 		for (const e of events) {
 			const time = e.timeLabel ? `${e.timeLabel} — ` : "";
 			const venue = e.venue ? ` at ${mdEscape(e.venue)}` : "";
-			body.push(`- ${time}${mdLink(e.title, cite(e.sourceUrl))}${venue}`);
+			todayLines.push(`- ${time}${mdLink(e.title, cite(e.sourceUrl))}${venue}`);
 		}
 		if (marketDay) {
-			body.push(
+			todayLines.push(
 				`- Heritage Farmers Market, every Wednesday 3:30–7:30pm at the Shoppes (${mdLink("heritagefarmersmarket.org", cite(FARMERS_MARKET_URL))})`,
 			);
 		}
-		body.push("");
+		todayLines.push("");
 	}
 	notes.push(`today: ${meetings.length} meeting(s), ${events.length} event(s)`);
 
@@ -532,23 +1038,69 @@ export function assembleBrief(
 	const newPosts = selectNewRecordPosts(inputs.publishedPosts, sinceIso);
 	const licenses = selectFreshLicenseEvents(inputs.licenseEvents, now);
 	if (newPosts.length > 0 || licenses.length > 0) {
-		body.push("## New on the record", "");
+		recordLines.push("## New on the record", "");
 		for (const p of newPosts) {
-			body.push(`- [${mdEscape(titleFor(p))}](/posts/${p.slug}/)`);
+			recordLines.push(`- [${mdEscape(titleFor(p))}](/posts/${p.slug}/)`);
 		}
 		for (const row of licenses) {
-			body.push(`- ${mdLink((row.title ?? "").trim(), cite(row.source_url))}`);
+			recordLines.push(
+				`- ${mdLink((row.title ?? "").trim(), cite(row.source_url))}`,
+			);
 		}
-		body.push("");
+		recordLines.push("");
 	}
 	notes.push(
 		`new on the record: ${newPosts.length} post(s) since ${sinceIso}, ${licenses.length} license event(s)`,
 	);
 
+	// In the local press: secondary community press reporting (The Champion,
+	// Daily Bulletin). URLs join frontmatter attributions[], NEVER sources[].
+	const headlines = selectHeadlinesElsewhere(
+		inputs.headlines,
+		inputs.headlinesFreshness,
+		now,
+		inputs.prevBriefPublishedAt,
+	);
+	const { listItems, attributions } = renderHeadlineListItems(headlines, notes);
+
+	if (listItems.length > 0) {
+		// The heading is markdown like every other section's, so it inherits the
+		// same .prose h2 treatment; only the list needs raw HTML, for the anchor
+		// attributes markdown links cannot carry.
+		pressLines.push(
+			"## In the local press",
+			"",
+			'<ul class="headlines-elsewhere">',
+			...listItems,
+			"</ul>",
+			"",
+		);
+	}
+	notes.push(`headlines elsewhere: ${listItems.length} headline(s) selected`);
+
+	// THE ORDER OF THE BRIEF. Anything time-critical first: an active weather
+	// alert or an overnight incident outranks everything. Then what a reader
+	// came to read — other outlets' reporting, then our own new record. The
+	// forecast is reference material, not news, so it sits just above today's
+	// calendar rather than opening the page.
+	body.push(
+		...alertLines,
+		...fireLines,
+		...pressLines,
+		...recordLines,
+		...weatherLines,
+		...todayLines,
+	);
+
 	// A quiet day ships honestly: weather + schedule, plainly labeled. The
 	// label states what the morning is, not a roll call of alarming things
 	// that didn't happen — the omitted sections already say the rest.
-	if (fire.length === 0 && newPosts.length === 0 && licenses.length === 0) {
+	if (
+		fire.length === 0 &&
+		newPosts.length === 0 &&
+		licenses.length === 0 &&
+		listItems.length === 0
+	) {
 		const hasSchedule = meetings.length > 0 || events.length > 0 || marketDay;
 		body.push(
 			hasSchedule
@@ -567,6 +1119,8 @@ export function assembleBrief(
 		briefDate: laToday,
 		eventsAhead,
 		sources: [...new Set(sources)],
+		attributions:
+			attributions.length > 0 ? [...new Set(attributions)] : undefined,
 	};
 	return { post, notes };
 }
@@ -611,6 +1165,8 @@ export function buildDailyBrief(
 		)
 		.get(`${laToday}-daily-brief`) as { published_at: string } | undefined;
 
+	const headlinesFreshness = checkHeadlinesFreshness(db, now);
+
 	const inputs: BriefInputs = {
 		forecast: queryItems(db, {
 			sourceKeys: ["nws-forecast"],
@@ -640,6 +1196,11 @@ export function buildDailyBrief(
 			sourceKeys: ["abc-licenses"],
 			itemTypes: ["license_event"],
 		}),
+		headlines: queryItems(db, {
+			sourceKeys: [...HEADLINES_SOURCES],
+			itemTypes: ["news_article"],
+		}),
+		headlinesFreshness,
 		publishedPosts: db.raw
 			.prepare("SELECT * FROM posts WHERE status = 'published'")
 			.all() as unknown as PostRow[],

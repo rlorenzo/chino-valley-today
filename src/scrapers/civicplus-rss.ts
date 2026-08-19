@@ -6,8 +6,8 @@
 // Only genuinely city-agnostic code belongs here. Anything that encodes one
 // city's feed layout, category ids, or relevance rules stays in that city's
 // scraper.
-import * as cheerio from "cheerio";
 import { XMLParser } from "fast-xml-parser";
+import { cleanPlainText } from "../utils/text-truncation.ts";
 
 // Re-exported so the CivicPlus scrapers keep a single import site.
 export { resolveDocumentId } from "./document-linkage.ts";
@@ -25,12 +25,7 @@ export function toArray<T>(v: T | T[] | undefined | null): T[] {
 
 // RSS <description> carries escaped HTML; this recovers the plain teaser text.
 export function stripHtml(input: string | undefined | null): string {
-	if (!input) return "";
-	return cheerio
-		.load(`<div>${input}</div>`)("div")
-		.text()
-		.replace(/\s+/g, " ")
-		.trim();
+	return input ? cleanPlainText(input) : "";
 }
 
 export function rfc2822ToIso(pubDate: string | undefined): string | null {

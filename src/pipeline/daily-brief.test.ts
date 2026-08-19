@@ -6,19 +6,27 @@ import {
 	assembleBrief,
 	assertPrerequisitesFresh,
 	type BriefInputs,
+	type CityForecast,
+	checkHeadlinesFreshness,
 	DAILY_BRIEF_PREREQUISITE_SOURCES,
 	decodeEntities,
+	HEADLINES_SOURCES,
 	isLaWednesday,
+	jaccardSimilarity,
 	laTimeOf,
 	postTitleFromFile,
+	renderWeatherLine,
 	selectActiveAlerts,
 	selectFireSafety,
 	selectFreshLicenseEvents,
+	selectHeadlinesElsewhere,
 	selectNewRecordPosts,
 	selectTodayEvents,
 	selectTodayMeetings,
 	selectUpcomingEvents,
 	selectWeather,
+	titleTokens,
+	weatherGlyph,
 } from "./daily-brief.ts";
 import { type PostRow, renderPostFile } from "./posts.ts";
 
@@ -59,6 +67,8 @@ function forecastItem(over: {
 	body: string;
 	external_id?: string;
 	source_url?: string;
+	temperature?: number;
+	shortForecast?: string;
 }): ItemRow {
 	return item({
 		item_type: "forecast_period",
@@ -72,6 +82,12 @@ function forecastItem(over: {
 			city: over.city,
 			periodName: over.periodName,
 			isDaytime: over.isDaytime,
+			...(over.temperature === undefined
+				? {}
+				: { temperature: over.temperature }),
+			...(over.shortForecast === undefined
+				? {}
+				: { shortForecast: over.shortForecast }),
 		}),
 	});
 }
@@ -921,5 +937,747 @@ describe("assertPrerequisitesFresh", () => {
 		assert.equal(res.staleSources.length, 1);
 		assert.equal(res.staleSources[0].sourceKey, "yanksair-events");
 		assert.match(res.staleSources[0].reason, /no scrape run recorded/);
+	});
+});
+
+describe("headlines elsewhere deduplication and selection", () => {
+	test("dedup tokenisation survives accents and differing spellings", () => {
+		// \w is ASCII-only: "José" tokenised as "jos", so an accented headline
+		// and its unaccented twin stopped looking like the same story. The case
+		// this dedup exists for is two papers writing up one event, and they do
+		// not agree on diacritics.
+		const accented = titleTokens("José Hernández to open bakery on Central");
+		const ascii = titleTokens("Jose Hernandez to open bakery on Central");
+		assert.ok(accented.has("hernandez"));
+		assert.ok(!accented.has("hern"));
+		assert.equal(jaccardSimilarity(accented, ascii), 1);
+	});
+
+	test("jaccardSimilarity computes overlap on title token sets", () => {
+		const t1 = titleTokens(
+			"7-Eleven, gas station, car wash to replace Corner Bar area",
+		);
+		const t2 = titleTokens(
+			"7-Eleven, gas station, car wash to replace Corner Bar area in Chino",
+		);
+		const t3 = titleTokens(
+			"Ontario airport reports record passenger travel numbers",
+		);
+
+		const sim12 = jaccardSimilarity(t1, t2);
+		const sim13 = jaccardSimilarity(t1, t3);
+
+		assert.ok(sim12 >= 0.6, `expected >= 0.6, got ${sim12}`);
+		assert.ok(sim13 < 0.2, `expected < 0.2, got ${sim13}`);
+	});
+
+	test("checkHeadlinesFreshness evaluates ToS status and scrape run age", () => {
+		const db = openDb(":memory:");
+		assert.equal(HEADLINES_SOURCES.length, 2);
+
+		// Without any scrape runs recorded
+		const freshMap1 = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshMap1["champion-news"].isFresh, false);
+		assert.equal(freshMap1["dailybulletin-news"].isFresh, false);
+
+		// Populate successful scrape runs
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+				 VALUES (?, ?, ?, 'success', 1, 1)`,
+			)
+			.run(
+				"champion-news",
+				"2026-08-15T07:50:00.000Z",
+				"2026-08-15T08:00:00.000Z",
+			);
+
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+				 VALUES (?, ?, ?, 'success', 1, 1)`,
+			)
+			.run(
+				"dailybulletin-news",
+				"2026-08-17T05:50:00.000Z",
+				"2026-08-17T06:00:00.000Z",
+			);
+
+		const freshMap2 = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshMap2["champion-news"].isFresh, true);
+		assert.equal(freshMap2["dailybulletin-news"].isFresh, true);
+	});
+
+	test("a ToS hold outranks a perfectly fresh scrape run", () => {
+		// The terms, not the scrape, decide whether the outlet may be linked at
+		// all. A hold that a successful scrape could override would let a brief
+		// keep citing a publisher whose terms drifted out from under us.
+		const db = openDb(":memory:");
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+				 VALUES (?, ?, ?, 'success', 1, 1)`,
+			)
+			.run(
+				"dailybulletin-news",
+				"2026-08-17T05:50:00.000Z",
+				"2026-08-17T06:00:00.000Z",
+			);
+		db.setSourceTosHold("dailybulletin-news", {
+			reason: "terms_hash_drift",
+			checkedAt: "2026-08-17T04:00:00.000Z",
+		});
+
+		const freshness = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshness["dailybulletin-news"].isFresh, false);
+		assert.equal(freshness["dailybulletin-news"].tosStatus, "held");
+		assert.equal(
+			freshness["dailybulletin-news"].heldReason,
+			"terms_hash_drift",
+		);
+		// The run itself is still reported, so an operator can see it succeeded.
+		assert.equal(freshness["dailybulletin-news"].status, "success");
+	});
+
+	test("a failed or in-flight scrape run is never fresh", () => {
+		const db = openDb(":memory:");
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, error_message, documents_count, items_count)
+				 VALUES (?, ?, ?, 'failure', 'HTTP 503', 0, 0)`,
+			)
+			.run(
+				"champion-news",
+				"2026-08-17T05:50:00.000Z",
+				"2026-08-17T06:00:00.000Z",
+			);
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+				 VALUES (?, ?, NULL, 'running', 0, 0)`,
+			)
+			.run("dailybulletin-news", "2026-08-17T05:50:00.000Z");
+
+		const freshness = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshness["champion-news"].isFresh, false);
+		assert.match(freshness["champion-news"].heldReason ?? "", /HTTP 503/);
+		assert.equal(freshness["dailybulletin-news"].isFresh, false);
+		assert.equal(
+			freshness["dailybulletin-news"].heldReason,
+			"scrape run in progress",
+		);
+	});
+
+	test("each outlet is judged stale on its own publishing cadence", () => {
+		// The Champion is a weekly and the Daily Bulletin publishes daily, so one
+		// staleness threshold cannot serve both. This run is ~31h old: fine for
+		// the weekly's 8-day window, well past the daily's 26h one.
+		const db = openDb(":memory:");
+		for (const key of HEADLINES_SOURCES) {
+			db.raw
+				.prepare(
+					`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+					 VALUES (?, ?, ?, 'success', 1, 1)`,
+				)
+				.run(key, "2026-08-16T05:50:00.000Z", "2026-08-16T06:00:00.000Z");
+		}
+
+		const freshness = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshness["champion-news"].isFresh, true);
+		assert.equal(freshness["dailybulletin-news"].isFresh, false);
+		assert.match(
+			freshness["dailybulletin-news"].heldReason ?? "",
+			/stale scrape run \(31\.1h old, max 26h\)/,
+		);
+	});
+
+	test("selectHeadlinesElsewhere enforces recency, deduplication precedence, and capping", () => {
+		const rows: ItemRow[] = [
+			// 1. Champion article (local commercial dev)
+			item({
+				source_key: "champion-news",
+				source_url:
+					"https://www.championnewspapers.com/community_news/article_c053f101-5e05-4709-9c2c-2cd72cda7c5e.html",
+				title: "7-Eleven, gas station, car wash to replace Corner Bar area",
+				body: "Evergreen Devco will propose a 7-Eleven on Central Avenue for Chino Planning Commission consideration.",
+				occurred_at: "2026-08-15T00:00:00.000Z",
+				meta: JSON.stringify({
+					outlet: "The Champion",
+					city: "Chino",
+					chinoRelevant: true,
+				}),
+			}),
+			// 2. Daily Bulletin duplicate of the same story
+			item({
+				source_key: "dailybulletin-news",
+				source_url:
+					"https://www.dailybulletin.com/2026/08/15/7-eleven-gas-station-car-wash-to-replace-corner-bar-area/",
+				title:
+					"7-Eleven, gas station, car wash to replace Corner Bar area in Chino",
+				body: "Evergreen Devco will propose a 7-Eleven on Central Avenue.",
+				occurred_at: "2026-08-15T12:00:00.000Z",
+				meta: JSON.stringify({
+					outlet: "Daily Bulletin",
+					city: "Chino",
+					chinoRelevant: true,
+				}),
+			}),
+			// 3. Daily Bulletin public figure story (Sonja Shaw)
+			item({
+				source_key: "dailybulletin-news",
+				source_url:
+					"https://www.dailybulletin.com/2026/08/16/chino-valleys-sonja-shaw-rides-anger-over-covid-rules-to-bid-for-state-superintendent/",
+				title:
+					"Chino Valley's Sonja Shaw rides anger over COVID rules to bid for state superintendent",
+				body: "Chino Valley school board president Sonja Shaw launched her campaign.",
+				occurred_at: "2026-08-16T15:00:00.000Z",
+				meta: JSON.stringify({
+					outlet: "Daily Bulletin",
+					city: "Chino",
+					chinoRelevant: true,
+				}),
+			}),
+			// 4. Ineligible crime story
+			item({
+				source_key: "dailybulletin-news",
+				source_url:
+					"https://www.dailybulletin.com/2026/08/16/suspect-arrested-after-burglary-in-chino/",
+				title: "Suspect arrested after commercial burglary in Chino",
+				body: "Police arrested a suspect.",
+				occurred_at: "2026-08-16T16:00:00.000Z",
+				meta: JSON.stringify({
+					outlet: "Daily Bulletin",
+					city: "Chino",
+					chinoRelevant: true,
+				}),
+			}),
+		];
+
+		const freshness = {
+			"champion-news": {
+				isFresh: true,
+				status: "success" as const,
+				finishedAt: "2026-08-15T08:00:00.000Z",
+				tosStatus: "enabled" as const,
+			},
+			"dailybulletin-news": {
+				isFresh: true,
+				status: "success" as const,
+				finishedAt: "2026-08-17T06:00:00.000Z",
+				tosStatus: "enabled" as const,
+			},
+		};
+
+		const selected = selectHeadlinesElsewhere(rows, freshness, NOW);
+
+		// Crime story must be dropped
+		// Duplicate story must keep Champion version over Daily Bulletin
+		assert.equal(selected.length, 2);
+		assert.equal(selected[0].source_key, "dailybulletin-news"); // newer occurred_at
+		assert.equal(selected[1].source_key, "champion-news"); // dedupe kept Champion
+	});
+
+	// Helper for the window/cap tests below: a policy-clean, locally relevant
+	// Champion story that differs enough from its siblings to survive dedup.
+	function headline(over: Partial<ItemRow>): ItemRow {
+		return item({
+			source_key: "champion-news",
+			source_url: `https://www.championnewspapers.com/news/article_${seq}.html`,
+			title: "Chino Planning Commission approves Central Avenue plan",
+			body: "The project heads to Chino City Council next month.",
+			occurred_at: "2026-08-16T00:00:00.000Z",
+			meta: JSON.stringify({ outlet: "The Champion", city: "Chino" }),
+			...over,
+		});
+	}
+
+	const FRESH = {
+		"champion-news": {
+			isFresh: true,
+			status: "success" as const,
+			finishedAt: "2026-08-17T00:00:00.000Z",
+			tosStatus: "enabled" as const,
+		},
+		"dailybulletin-news": {
+			isFresh: true,
+			status: "success" as const,
+			finishedAt: "2026-08-17T06:00:00.000Z",
+			tosStatus: "enabled" as const,
+		},
+	};
+
+	test("selectHeadlinesElsewhere drops outlets whose scrape is not fresh", () => {
+		const rows = [headline({}), headline({ source_key: "dailybulletin-news" })];
+
+		const selected = selectHeadlinesElsewhere(
+			rows,
+			{
+				...FRESH,
+				"champion-news": { ...FRESH["champion-news"], isFresh: false },
+			},
+			NOW,
+		);
+
+		assert.equal(selected.length, 1);
+		assert.equal(selected[0].source_key, "dailybulletin-news");
+	});
+
+	test("selectHeadlinesElsewhere enforces the per-outlet publishing window", () => {
+		// The Champion is weekly (7 days); the Daily Bulletin is daily (48h).
+		const rows = [
+			headline({ occurred_at: "2026-08-12T00:00:00.000Z" }), // 5 days: in
+			headline({ occurred_at: "2026-08-05T00:00:00.000Z" }), // 12 days: out
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: "https://www.dailybulletin.com/2026/08/16/recent/",
+				title: "Chino Hills council reviews Peyton Drive repaving",
+				occurred_at: "2026-08-16T00:00:00.000Z", // 37h: in
+			}),
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: "https://www.dailybulletin.com/2026/08/13/older/",
+				title: "Chino library expands weekend hours at Schaefer Avenue",
+				occurred_at: "2026-08-13T00:00:00.000Z", // 4 days: out
+			}),
+		];
+
+		const selected = selectHeadlinesElsewhere(rows, FRESH, NOW);
+		assert.deepEqual(
+			selected.map((r) => r.occurred_at),
+			["2026-08-16T00:00:00.000Z", "2026-08-12T00:00:00.000Z"],
+		);
+	});
+
+	test("selectHeadlinesElsewhere does not re-link what the previous brief carried", () => {
+		const rows = [
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: "https://www.dailybulletin.com/2026/08/16/after/",
+				title: "Chino Hills council reviews Peyton Drive repaving",
+				occurred_at: "2026-08-16T18:00:00.000Z",
+			}),
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: "https://www.dailybulletin.com/2026/08/16/before/",
+				title: "Chino library expands weekend hours at Schaefer Avenue",
+				occurred_at: "2026-08-16T06:00:00.000Z",
+			}),
+		];
+
+		const selected = selectHeadlinesElsewhere(
+			rows,
+			FRESH,
+			NOW,
+			"2026-08-16T12:00:00.000Z",
+		);
+
+		assert.equal(selected.length, 1);
+		assert.match(selected[0].source_url, /after/);
+	});
+
+	test("selectHeadlinesElsewhere caps at 5 total and 3 per outlet", () => {
+		const titles = [
+			"Chino Planning Commission approves Central Avenue plan",
+			"Chino Hills opens English Springs Park splash pad",
+			"Chino Valley Fire District adds Ramona Avenue engine",
+			"Chino Town Square lands grocery anchor tenant",
+			"Chino Airport runway resurfacing begins in September",
+			"Chino Hills library extends Peyton Drive branch hours",
+		];
+		const rows = titles.flatMap((title, i) => [
+			headline({ title, occurred_at: `2026-08-1${i % 6}T00:00:00.000Z` }),
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: `https://www.dailybulletin.com/2026/08/16/story-${i}/`,
+				title: `${title} downtown`,
+				occurred_at: "2026-08-16T00:00:00.000Z",
+			}),
+		]);
+
+		const selected = selectHeadlinesElsewhere(rows, FRESH, NOW);
+
+		assert.equal(selected.length, 5);
+		for (const key of HEADLINES_SOURCES) {
+			assert.ok(
+				selected.filter((r) => r.source_key === key).length <= 3,
+				`${key} exceeded its per-outlet cap`,
+			);
+		}
+	});
+
+	test("assembleBrief renders safe semantic HTML and attributions frontmatter", () => {
+		const emptyForecast: ItemRow[] = [
+			item({
+				source_key: "nws-forecast",
+				external_id: "SGX:2026-08-17T13:00:00Z",
+				occurred_at: "2026-08-17T13:00:00.000Z",
+				body: "Sunny, high 88.",
+				meta: JSON.stringify({
+					city: "Chino",
+					periodName: "Today",
+					isDaytime: true,
+				}),
+			}),
+		];
+
+		const headlinesRow = item({
+			source_key: "champion-news",
+			source_url:
+				"https://www.championnewspapers.com/community_news/article_c053f101-5e05-4709-9c2c-2cd72cda7c5e.html",
+			title: '7-Eleven & "Gas Station" to replace Corner Bar',
+			body: "Evergreen Devco will propose a 7-Eleven on Central Avenue.",
+			occurred_at: "2026-08-15T00:00:00.000Z",
+			meta: JSON.stringify({
+				outlet: "The Champion",
+				city: "Chino",
+				chinoRelevant: true,
+			}),
+		});
+
+		const inputs: BriefInputs = {
+			forecast: emptyForecast,
+			nwsAlerts: [],
+			fire: [],
+			calendarEvents: [],
+			agendaItems: [],
+			cvusdEvents: [],
+			licenseEvents: [],
+			headlines: [headlinesRow],
+			headlinesFreshness: {
+				"champion-news": {
+					isFresh: true,
+					status: "success",
+					finishedAt: "2026-08-15T08:00:00.000Z",
+					tosStatus: "enabled",
+				},
+			},
+			publishedPosts: [],
+			prevBriefPublishedAt: null,
+		};
+
+		const { post } = assembleBrief(inputs, NOW);
+
+		// Verified: Sources does NOT contain secondary press URL
+		assert.ok(!post.sources.includes(headlinesRow.source_url));
+		// Verified: Attributions DOES contain secondary press URL
+		assert.ok(post.attributions?.includes(headlinesRow.source_url));
+
+		// Verified: the heading is markdown like every other section's, and the
+		// list is raw HTML carrying the attribution link class
+		assert.ok(post.bodyMd.includes("## In the local press"));
+		assert.ok(post.bodyMd.includes('<ul class="headlines-elsewhere">'));
+		assert.ok(post.bodyMd.includes('<a class="headline-link"'));
+		assert.ok(
+			post.bodyMd.includes(
+				"7-Eleven &amp; &quot;Gas Station&quot; to replace Corner Bar",
+			),
+		);
+		assert.ok(post.bodyMd.includes("(The Champion)"));
+
+		// Post rendering verification
+		const rendered = renderPostFile(post, "2026-08-17T13:05:00.000Z");
+		assert.ok(rendered.includes("attributions:"));
+		assert.ok(rendered.includes(headlinesRow.source_url));
+	});
+
+	test("assembleBrief refuses a headline URL outside the outlet's own hosts", () => {
+		// A look-alike host: "championnewspapers.com" appears in it, but it is not
+		// the outlet. A substring check would have let this through to a reader.
+		const impostor = item({
+			source_key: "champion-news",
+			source_url:
+				"https://www.championnewspapers.com.evil.example/community_news/article_dead.html",
+			title: "Chino Planning Commission approves Central Avenue plan",
+			body: "The project heads to Chino City Council next month.",
+			occurred_at: "2026-08-16T00:00:00.000Z",
+			meta: JSON.stringify({ outlet: "The Champion", city: "Chino" }),
+		});
+
+		const inputs: BriefInputs = {
+			forecast: [],
+			nwsAlerts: [],
+			fire: [],
+			calendarEvents: [],
+			agendaItems: [],
+			cvusdEvents: [],
+			licenseEvents: [],
+			headlines: [impostor],
+			headlinesFreshness: FRESH,
+			publishedPosts: [],
+			prevBriefPublishedAt: null,
+		};
+
+		const { post, notes } = assembleBrief(inputs, NOW);
+
+		assert.ok(!post.bodyMd.includes("evil.example"));
+		assert.ok(!post.bodyMd.includes("In the local press"));
+		assert.equal(post.attributions, undefined);
+		assert.ok(notes.some((n) => n.includes("off-allowlist URL skipped")));
+		// With nothing else to report, the empty section must not suppress the
+		// quiet-morning line.
+		assert.ok(post.bodyMd.includes("A quiet morning"));
+	});
+});
+
+describe("renderWeatherLine", () => {
+	const link = (label: string, url: string) => `[${label}](${url})`;
+
+	function city(
+		name: string,
+		high: number,
+		low: number,
+		dayCond = "Sunny",
+		nightCond = "Mostly Clear",
+	): CityForecast {
+		return {
+			city: name,
+			sourceUrl: `https://forecast.weather.gov/${name}`,
+			periods: [
+				{
+					name: "Today",
+					body: "",
+					isDaytime: true,
+					temperature: high,
+					shortForecast: dayCond,
+				},
+				{
+					name: "Tonight",
+					body: "",
+					isDaytime: false,
+					temperature: low,
+					shortForecast: nightCond,
+				},
+			],
+		};
+	}
+
+	test("states a shared condition once and splits only the numbers", () => {
+		const line = renderWeatherLine(
+			[city("Chino", 95, 69), city("Chino Hills", 90, 65)],
+			link,
+		);
+		assert.equal(
+			line,
+			'<span class="wx wx--clear" aria-hidden="true"></span> ' +
+				"Sunny today, high 95 in Chino and 90 in Chino Hills; mostly clear overnight, lows 69 and 65. " +
+				"(NWS: [Chino](https://forecast.weather.gov/Chino) · [Chino Hills](https://forecast.weather.gov/Chino Hills))",
+		);
+	});
+
+	test("names each city when the conditions actually differ", () => {
+		const line = renderWeatherLine(
+			[
+				city("Chino", 95, 69),
+				city("Chino Hills", 90, 65, "Patchy Fog then Sunny"),
+			],
+			link,
+		);
+		assert.ok(line?.includes("**Chino**: sunny, 95/69"));
+		assert.ok(line?.includes("**Chino Hills**: patchy fog then sunny, 90/65"));
+	});
+
+	test("every city keeps its own NWS link, so provenance stays unambiguous", () => {
+		const line = renderWeatherLine(
+			[city("Chino", 95, 69), city("Chino Hills", 90, 65)],
+			link,
+		);
+		assert.ok(line?.includes("https://forecast.weather.gov/Chino)"));
+		assert.ok(line?.includes("https://forecast.weather.gov/Chino Hills)"));
+	});
+
+	test("a single city reads 'low', not 'lows'", () => {
+		const line = renderWeatherLine([city("Chino", 95, 69)], link);
+		assert.ok(line?.includes("low 69"));
+		assert.ok(!line?.includes("lows"));
+	});
+
+	test("returns null rather than guess when a period is missing", () => {
+		// Half a forecast condensed into one line would silently drop the
+		// overnight low; the caller falls back to the full forecast text.
+		const partial = city("Chino", 95, 69);
+		partial.periods = [partial.periods[0]];
+		assert.equal(renderWeatherLine([partial], link), null);
+		assert.equal(renderWeatherLine([], link), null);
+	});
+
+	test("returns null when the structured temperature is absent", () => {
+		const noTemp = city("Chino", 95, 69);
+		noTemp.periods[1].temperature = null;
+		assert.equal(renderWeatherLine([noTemp], link), null);
+	});
+});
+
+describe("brief section order", () => {
+	test("press leads the reading, weather sits just above the calendar", () => {
+		// The order is an editorial decision, not an accident of how
+		// assembleBrief happens to be written, so it gets pinned here:
+		// alerts -> fire -> press -> record -> weather -> today.
+		const forecast = [
+			forecastItem({
+				city: "Chino",
+				periodName: "Today",
+				isDaytime: true,
+				occurred_at: "2026-08-17T13:00:00.000Z",
+				external_id: "grid:chino:day",
+				body: "Sunny, high near 95.",
+				temperature: 95,
+				shortForecast: "Sunny",
+			}),
+			forecastItem({
+				city: "Chino",
+				periodName: "Tonight",
+				isDaytime: false,
+				occurred_at: "2026-08-17T13:00:00.000Z",
+				external_id: "grid:chino:night",
+				body: "Mostly clear, low around 69.",
+				temperature: 69,
+				shortForecast: "Mostly Clear",
+			}),
+		];
+
+		const press = item({
+			source_key: "champion-news",
+			source_url:
+				"https://www.championnewspapers.com/community_news/article_aaaaaaaa-0000-0000-0000-000000000000.html",
+			title: "Chino divided on permitting wall murals",
+			body: "In a rare split decision, the council voted 3-2.",
+			occurred_at: "2026-08-15T00:00:00.000Z",
+			meta: JSON.stringify({
+				outlet: "The Champion",
+				city: "Chino",
+				chinoRelevant: true,
+			}),
+		});
+
+		const fire = item({
+			source_key: "sbcfire-news",
+			source_url: "https://sbcfire.org/news/structure-fire",
+			title: "Crews knock down structure fire on Riverside Drive",
+			occurred_at: "2026-08-17T09:00:00.000Z",
+			// sbcfire-news is a county-wide feed; only Chino-relevant items run.
+			meta: JSON.stringify({ chinoRelevant: true }),
+		});
+
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			forecast,
+			fire: [fire],
+			headlines: [press],
+			headlinesFreshness: {
+				"champion-news": {
+					isFresh: true,
+					status: "success",
+					finishedAt: "2026-08-15T08:00:00.000Z",
+					tosStatus: "enabled",
+				},
+			},
+		};
+
+		const { post } = assembleBrief(inputs, NOW);
+		const md = post.bodyMd;
+
+		const fireAt = md.indexOf("## Fire & safety");
+		const pressAt = md.indexOf("## In the local press");
+		const weatherAt = md.indexOf("Sunny today, high 95");
+
+		assert.ok(fireAt >= 0 && pressAt >= 0 && weatherAt >= 0);
+		// Anything time-critical still outranks a newspaper story.
+		assert.ok(fireAt < pressAt, "fire & safety must precede the press section");
+		// The forecast is reference material, not the lede.
+		assert.ok(pressAt < weatherAt, "press must precede the weather line");
+	});
+
+	test("the condensed weather line replaces the two-paragraph forecast", () => {
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			forecast: [
+				forecastItem({
+					city: "Chino",
+					periodName: "Today",
+					isDaytime: true,
+					occurred_at: "2026-08-17T13:00:00.000Z",
+					external_id: "grid:chino:day",
+					body: "Sunny, with a high near 95. West wind 0 to 10 mph.",
+					temperature: 95,
+					shortForecast: "Sunny",
+				}),
+				forecastItem({
+					city: "Chino",
+					periodName: "Tonight",
+					isDaytime: false,
+					occurred_at: "2026-08-17T13:00:00.000Z",
+					external_id: "grid:chino:night",
+					body: "Mostly clear, with a low around 69. West wind 0 to 10 mph.",
+					temperature: 69,
+					shortForecast: "Mostly Clear",
+				}),
+			],
+		};
+		const { post } = assembleBrief(inputs, NOW);
+		assert.ok(post.bodyMd.includes("Sunny today, high 95 in Chino"));
+		// Mid-document it needs a heading; unheaded, it trails the section above.
+		assert.ok(post.bodyMd.includes("## Weather"));
+		// The verbose NWS sentence must not also be rendered.
+		assert.ok(!post.bodyMd.includes("West wind 0 to 10 mph"));
+	});
+});
+
+describe("weatherGlyph", () => {
+	test("maps the NWS vocabulary in priority order", () => {
+		assert.equal(weatherGlyph("Sunny"), "clear");
+		assert.equal(weatherGlyph("Mostly Clear"), "clear");
+		assert.equal(weatherGlyph("Partly Cloudy"), "partly");
+		assert.equal(weatherGlyph("Mostly Sunny"), "partly");
+		assert.equal(weatherGlyph("Mostly Cloudy"), "cloudy");
+		assert.equal(weatherGlyph("Overcast"), "cloudy");
+		assert.equal(weatherGlyph("Chance Rain Showers"), "rain");
+		assert.equal(weatherGlyph("Patchy Fog"), "fog");
+		assert.equal(weatherGlyph("Breezy"), "wind");
+		assert.equal(weatherGlyph("Slight Chance Snow Showers"), "snow");
+	});
+
+	test("a thunderstorm outranks the rain in its own description", () => {
+		// "Chance Showers And Thunderstorms" contains both; the storm is the
+		// thing a reader needs to see.
+		assert.equal(weatherGlyph("Chance Showers And Thunderstorms"), "storm");
+	});
+
+	test("renders no glyph rather than a wrong one", () => {
+		// A wrong picture of the weather is worse than none; the words always
+		// carry the real forecast.
+		assert.equal(weatherGlyph("Areas Of Blowing Dust"), null);
+		assert.equal(weatherGlyph(""), null);
+		assert.equal(weatherGlyph(null), null);
+	});
+
+	test("the glyph is decorative and hidden from assistive tech", () => {
+		const line = renderWeatherLine(
+			[
+				{
+					city: "Chino",
+					sourceUrl: "https://forecast.weather.gov/Chino",
+					periods: [
+						{
+							name: "Today",
+							body: "",
+							isDaytime: true,
+							temperature: 95,
+							shortForecast: "Sunny",
+						},
+						{
+							name: "Tonight",
+							body: "",
+							isDaytime: false,
+							temperature: 69,
+							shortForecast: "Mostly Clear",
+						},
+					],
+				},
+			],
+			(label, url) => `[${label}](${url})`,
+		);
+		assert.ok(line?.includes('<span class="wx wx--clear" aria-hidden="true">'));
+		// The condition still reads in words immediately after the glyph.
+		assert.ok(line?.includes("Sunny today, high 95 in Chino"));
 	});
 });

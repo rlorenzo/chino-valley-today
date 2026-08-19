@@ -43,6 +43,7 @@ export interface NewPost {
 	// site (the index's "coming up" rail) rather than by the markdown body.
 	eventsAhead?: BriefEventAhead[];
 	sources: string[]; // source_urls backing every claim in the post
+	attributions?: string[]; // secondary press article URLs (never primary provenance)
 	// Set by a generator that has decided this post must NOT auto-publish, and
 	// why. The Tier A runner routes such a post to the held queue instead of
 	// publishing it, so it reaches the dashboard's existing approve/reject flow
@@ -182,6 +183,9 @@ export function renderPostFile(p: NewPost, createdAt: string): string {
 			: []),
 		"sources:",
 		...p.sources.map((s) => `  - ${y(s)}`),
+		...(p.attributions?.length
+			? ["attributions:", ...p.attributions.map((a) => `  - ${y(a)}`)]
+			: []),
 		"---",
 	].join("\n");
 	// The glossary shares the footer's exempt region: it must sit after the last

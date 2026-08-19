@@ -69,6 +69,9 @@ const posts = defineCollection({
 			// "no source, no claim". A post with an empty sources list is a build
 			// failure, not a page with a missing footer.
 			sources: z.array(z.string().url()).nonempty(),
+
+			// Secondary press links cited for attribution rather than primary civic provenance.
+			attributions: z.array(z.string().url()).optional(),
 		})
 		.refine(
 			(d) => d.post_type !== "daily-brief" || d.brief_date !== undefined,

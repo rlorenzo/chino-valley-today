@@ -23,8 +23,10 @@
 		// One-time data migration, run by hand:
 		// `node scripts/rekey-external-ids.mjs --apply`.
 		"scripts/*.mjs",
+		"scripts/*.ts",
 		"src/scrapers/*.ts",
-		"src/**/*.test.ts"
+		"src/**/*.test.ts",
+		"scripts/**/*.test.ts"
 	],
 
 	"duplicates": {

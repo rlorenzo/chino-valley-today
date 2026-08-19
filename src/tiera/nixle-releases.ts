@@ -14,6 +14,7 @@
 // judgment is a guard that needs a human, which is what was traded away.
 import { createHash } from "node:crypto";
 import type { Db } from "../db/index.ts";
+import { mentionsMinor } from "../gates/policy-filters.ts";
 import type { NewPost } from "../pipeline/posts.ts";
 import { parseMeta, queryItems } from "./queries.ts";
 import {
@@ -32,40 +33,6 @@ const SOURCE_KEY = "sbsheriff-nixle-mail";
 // backfill would publish months of releases at once, all dated today from a
 // reader's point of view.
 const MAX_AGE_DAYS = 30;
-
-// Minors guard (EDITORIAL.md "Private persons": never named, never identifiably
-// described, even when the source document names them — the rule names Sheriff
-// releases explicitly, because those DO name them).
-//
-// Two signals, kept narrow on purpose. An earlier draft matched any
-// "<n>-year-old" and so held 40-year-old suspects too, which would have held
-// nearly every adult release and quietly undone the auto-publish decision. A
-// guard that fires on everything is not a safe guard, it is a broken one:
-// people stop reading its output.
-const EXPLICIT_MINOR_RE =
-	/\b(?:juveniles?|minors?|child(?:ren)?|teen(?:ager)?s?|youths?|infants?|toddlers?|newborns?|bab(?:y|ies)|boys?|girls?|high\s+school|middle\s+school|elementary)\b/i;
-const AGE_RE = /\b(\d{1,2})[-\s]years?[-\s]old\b/gi;
-
-// Local place names that collide with the minors vocabulary, removed before the
-// guard runs. **Boys Republic** is a real institution in Chino Hills with a
-// street named after it — a routine adult collision report on Boys Republic
-// Drive is exactly the kind of local release this source exists to publish, and
-// holding it as a minors item would be the over-firing failure described above,
-// concentrated on our own coverage area. Boys & Girls Club is the same problem.
-// Scrubbing the place name is safer than weakening `boys?|girls?`, which
-// carries real signal ("the boy was found safe").
-const PLACE_NAME_RE =
-	/\bboys\s+republic\b|\bboys\s*(?:&|and)\s*girls\s+club\b/gi;
-
-/** True when the text indicates a minor is involved. Exported for testing. */
-export function mentionsMinor(text: string): boolean {
-	const scrubbed = text.replace(PLACE_NAME_RE, " ");
-	if (EXPLICIT_MINOR_RE.test(scrubbed)) return true;
-	for (const m of scrubbed.matchAll(AGE_RE)) {
-		if (Number(m[1]) < 18) return true;
-	}
-	return false;
-}
 
 // A release is publishable only if the ingester flagged it as mentioning Chino
 // or Chino Hills. County-wide channels (SBSD - Headquarters, SBSD - Central)

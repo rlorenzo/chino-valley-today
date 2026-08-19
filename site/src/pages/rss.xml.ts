@@ -9,7 +9,7 @@ export async function GET(context: APIContext) {
 	return rss({
 		title: "Chino Valley Today",
 		description:
-			"What the Chino and Chino Hills city councils, the CVUSD board, and the commissions actually did — every claim linked to the primary record.",
+			"What the Chino and Chino Hills city councils, the CVUSD board, and the commissions actually did — every civic claim linked to the primary record.",
 		// context.site comes from astro.config's CVT_SITE_ORIGIN, so the feed follows
 		// the deploy target rather than hardcoding a second copy of the origin.
 		site: context.site ?? "https://chinovalley.today",

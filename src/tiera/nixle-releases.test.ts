@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { type Db, openDb } from "../db/index.ts";
+import { mentionsMinor } from "../gates/policy-filters.ts";
 import {
 	agencyDisplayName,
 	generateNixleReleases,
-	mentionsMinor,
 	stripMailPreamble,
 	stripPriorityPrefix,
 } from "./nixle-releases.ts";

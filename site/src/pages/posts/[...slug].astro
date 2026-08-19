@@ -16,7 +16,7 @@ const { post } = Astro.props;
 
 <Base
 	title={`${post.data.title} — Chino Valley Today`}
-	description={`${typeLabel(post.data.post_type)} — ${post.data.title}. Every claim linked to the primary record.`}
+	description={`${typeLabel(post.data.post_type)} — ${post.data.title}. Every civic claim linked to the primary record.`}
 	current="record"
 >
 	<PostArticle post={post} />
