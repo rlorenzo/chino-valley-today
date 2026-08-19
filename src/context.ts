@@ -1,7 +1,49 @@
 import type { Db } from "./db/index.ts";
-import { politeFetch } from "./fetch.ts";
+import { type FetchOpts, politeFetch } from "./fetch.ts";
 import type { ScraperContext, ScraperDef } from "./scrapers/types.ts";
 import { extFor, readRaw, saveRaw } from "./store.ts";
+
+/**
+ * A scraper's `fetchDefaults` record the terms its source was onboarded under —
+ * fail-closed robots, manual redirect inspection, the hosts it may touch. They
+ * are one-way: this merges them over a caller's options and refuses any call
+ * that tries to relax one, rather than quietly letting the caller win. Shared by
+ * fetchRaw and fetchDocument so the two can never enforce different rules.
+ */
+function applyFetchDefaults(
+	def: ScraperDef,
+	url: string,
+	opts: FetchOpts,
+): FetchOpts {
+	const defaults = def.fetchDefaults;
+	if (!defaults) return opts;
+
+	const violation = (msg: string) =>
+		new Error(`[${def.key}] Invariant violation: ${msg}`);
+
+	if (
+		defaults.failClosedRobots &&
+		(opts.skipRobots || opts.failClosedRobots === false)
+	) {
+		throw violation("cannot bypass failClosedRobots");
+	}
+	if (defaults.manualRedirect && opts.manualRedirect === false) {
+		throw violation("cannot disable manualRedirect");
+	}
+	const { hostname } = new URL(url);
+	if (defaults.allowedHosts && !defaults.allowedHosts.includes(hostname)) {
+		throw violation(`host not in allowedHosts: ${hostname}`);
+	}
+
+	return {
+		...opts,
+		failClosedRobots: defaults.failClosedRobots || opts.failClosedRobots,
+		skipRobots: defaults.failClosedRobots ? false : opts.skipRobots,
+		manualRedirect: defaults.manualRedirect || opts.manualRedirect,
+		allowedHosts: defaults.allowedHosts ?? opts.allowedHosts,
+		maxRedirectHops: defaults.maxRedirectHops ?? opts.maxRedirectHops,
+	};
+}
 
 export function buildContext(
 	db: Db,
@@ -29,14 +71,18 @@ export function buildContext(
 			notes.push(msg);
 			console.log(`  [${def.key}] ${msg}`);
 		},
-		fetchRaw: (url, opts) => politeFetch(url, opts),
+		fetchRaw: (url, opts) =>
+			politeFetch(url, applyFetchDefaults(def, url, opts ?? {})),
 		async fetchDocument(url, meta) {
 			const prev = db.latestDocument(url);
-			const res = await politeFetch(url, {
-				etag: prev?.etag ?? undefined,
-				lastModified: prev?.last_modified ?? undefined,
-				skipRobots: meta.skipRobots,
-			});
+			const res = await politeFetch(
+				url,
+				applyFetchDefaults(def, url, {
+					etag: prev?.etag ?? undefined,
+					lastModified: prev?.last_modified ?? undefined,
+					skipRobots: meta.skipRobots,
+				}),
+			);
 			counts.documentsFetched++;
 			if (res.notModified && prev) {
 				db.touchDocument(prev.id);
@@ -45,7 +91,7 @@ export function buildContext(
 					body: readRaw(prev.raw_path),
 					fromCache: true,
 					contentType: null,
-					finalUrl: url,
+					finalUrl: res.finalUrl || url,
 				};
 			}
 			if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);

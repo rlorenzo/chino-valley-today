@@ -2,8 +2,10 @@
 
 import { buildContext } from "./context.ts";
 import { openDb } from "./db/index.ts";
+import { SOURCE_TOS_REGISTRY } from "./gates/tos-config.ts";
 import { SCRAPERS } from "./scrapers/registry.ts";
 import type { ScraperDef } from "./scrapers/types.ts";
+import { errorMessage } from "./utils/errors.ts";
 
 const key = process.argv[2];
 if (!key || !(key in SCRAPERS)) {
@@ -16,6 +18,29 @@ if (!key || !(key in SCRAPERS)) {
 const mod = await import(SCRAPERS[key]);
 const def = mod.default as ScraperDef;
 const db = openDb();
+
+// Only the secondary-press sources are gated on publisher terms; the civic and
+// agency sources publish their own records and carry no such contract. Asking
+// the gate about an ungated source is not a neutral question — the gate fails
+// closed by design, so consulting it for all 22 scrapers would hold the 20
+// civic ones for terms that were never meant to apply to them.
+const tos = Object.hasOwn(SOURCE_TOS_REGISTRY, def.key)
+	? db.getSourceTosStatus(def.key)
+	: null;
+if (tos?.status === "held") {
+	console.error(
+		`Scraper ${def.key} is HELD due to ToS status (${tos.heldReason ?? "unknown"}). Skipping execution.`,
+	);
+	const runId = db.startScrapeRun(def.key);
+	db.finishScrapeRun(runId, {
+		status: "failure",
+		errorMessage: `Scraper held: ToS hold active (${tos.heldReason ?? "unknown"})`,
+		documentsCount: 0,
+		itemsCount: 0,
+	});
+	process.exit(1);
+}
+
 const { ctx, notes } = buildContext(db, def);
 
 const runId = db.startScrapeRun(def.key);
@@ -26,7 +51,7 @@ try {
 	await def.run(ctx, process.argv.slice(3));
 } catch (err) {
 	ok = false;
-	errorMsg = err instanceof Error ? err.message : String(err);
+	errorMsg = errorMessage(err);
 	console.error(`FAILED after ${Date.now() - t0}ms:`, err);
 }
 

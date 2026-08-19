@@ -6,19 +6,24 @@ import {
 	assembleBrief,
 	assertPrerequisitesFresh,
 	type BriefInputs,
+	checkHeadlinesFreshness,
 	DAILY_BRIEF_PREREQUISITE_SOURCES,
 	decodeEntities,
+	HEADLINES_SOURCES,
 	isLaWednesday,
+	jaccardSimilarity,
 	laTimeOf,
 	postTitleFromFile,
 	selectActiveAlerts,
 	selectFireSafety,
 	selectFreshLicenseEvents,
+	selectHeadlinesElsewhere,
 	selectNewRecordPosts,
 	selectTodayEvents,
 	selectTodayMeetings,
 	selectUpcomingEvents,
 	selectWeather,
+	titleTokens,
 } from "./daily-brief.ts";
 import { type PostRow, renderPostFile } from "./posts.ts";
 
@@ -921,5 +926,472 @@ describe("assertPrerequisitesFresh", () => {
 		assert.equal(res.staleSources.length, 1);
 		assert.equal(res.staleSources[0].sourceKey, "yanksair-events");
 		assert.match(res.staleSources[0].reason, /no scrape run recorded/);
+	});
+});
+
+describe("headlines elsewhere deduplication and selection", () => {
+	test("jaccardSimilarity computes overlap on title token sets", () => {
+		const t1 = titleTokens(
+			"7-Eleven, gas station, car wash to replace Corner Bar area",
+		);
+		const t2 = titleTokens(
+			"7-Eleven, gas station, car wash to replace Corner Bar area in Chino",
+		);
+		const t3 = titleTokens(
+			"Ontario airport reports record passenger travel numbers",
+		);
+
+		const sim12 = jaccardSimilarity(t1, t2);
+		const sim13 = jaccardSimilarity(t1, t3);
+
+		assert.ok(sim12 >= 0.6, `expected >= 0.6, got ${sim12}`);
+		assert.ok(sim13 < 0.2, `expected < 0.2, got ${sim13}`);
+	});
+
+	test("checkHeadlinesFreshness evaluates ToS status and scrape run age", () => {
+		const db = openDb(":memory:");
+		assert.equal(HEADLINES_SOURCES.length, 2);
+
+		// Without any scrape runs recorded
+		const freshMap1 = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshMap1["champion-news"].isFresh, false);
+		assert.equal(freshMap1["dailybulletin-news"].isFresh, false);
+
+		// Populate successful scrape runs
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+				 VALUES (?, ?, ?, 'success', 1, 1)`,
+			)
+			.run(
+				"champion-news",
+				"2026-08-15T07:50:00.000Z",
+				"2026-08-15T08:00:00.000Z",
+			);
+
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+				 VALUES (?, ?, ?, 'success', 1, 1)`,
+			)
+			.run(
+				"dailybulletin-news",
+				"2026-08-17T05:50:00.000Z",
+				"2026-08-17T06:00:00.000Z",
+			);
+
+		const freshMap2 = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshMap2["champion-news"].isFresh, true);
+		assert.equal(freshMap2["dailybulletin-news"].isFresh, true);
+	});
+
+	test("a ToS hold outranks a perfectly fresh scrape run", () => {
+		// The terms, not the scrape, decide whether the outlet may be linked at
+		// all. A hold that a successful scrape could override would let a brief
+		// keep citing a publisher whose terms drifted out from under us.
+		const db = openDb(":memory:");
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+				 VALUES (?, ?, ?, 'success', 1, 1)`,
+			)
+			.run(
+				"dailybulletin-news",
+				"2026-08-17T05:50:00.000Z",
+				"2026-08-17T06:00:00.000Z",
+			);
+		db.setSourceTosHold("dailybulletin-news", {
+			reason: "terms_hash_drift",
+			checkedAt: "2026-08-17T04:00:00.000Z",
+		});
+
+		const freshness = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshness["dailybulletin-news"].isFresh, false);
+		assert.equal(freshness["dailybulletin-news"].tosStatus, "held");
+		assert.equal(
+			freshness["dailybulletin-news"].heldReason,
+			"terms_hash_drift",
+		);
+		// The run itself is still reported, so an operator can see it succeeded.
+		assert.equal(freshness["dailybulletin-news"].status, "success");
+	});
+
+	test("a failed or in-flight scrape run is never fresh", () => {
+		const db = openDb(":memory:");
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, error_message, documents_count, items_count)
+				 VALUES (?, ?, ?, 'failure', 'HTTP 503', 0, 0)`,
+			)
+			.run(
+				"champion-news",
+				"2026-08-17T05:50:00.000Z",
+				"2026-08-17T06:00:00.000Z",
+			);
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+				 VALUES (?, ?, NULL, 'running', 0, 0)`,
+			)
+			.run("dailybulletin-news", "2026-08-17T05:50:00.000Z");
+
+		const freshness = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshness["champion-news"].isFresh, false);
+		assert.match(freshness["champion-news"].heldReason ?? "", /HTTP 503/);
+		assert.equal(freshness["dailybulletin-news"].isFresh, false);
+		assert.equal(
+			freshness["dailybulletin-news"].heldReason,
+			"scrape run in progress",
+		);
+	});
+
+	test("each outlet is judged stale on its own publishing cadence", () => {
+		// The Champion is a weekly and the Daily Bulletin publishes daily, so one
+		// staleness threshold cannot serve both. This run is ~31h old: fine for
+		// the weekly's 8-day window, well past the daily's 26h one.
+		const db = openDb(":memory:");
+		for (const key of HEADLINES_SOURCES) {
+			db.raw
+				.prepare(
+					`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
+					 VALUES (?, ?, ?, 'success', 1, 1)`,
+				)
+				.run(key, "2026-08-16T05:50:00.000Z", "2026-08-16T06:00:00.000Z");
+		}
+
+		const freshness = checkHeadlinesFreshness(db, NOW);
+		assert.equal(freshness["champion-news"].isFresh, true);
+		assert.equal(freshness["dailybulletin-news"].isFresh, false);
+		assert.match(
+			freshness["dailybulletin-news"].heldReason ?? "",
+			/stale scrape run \(31\.1h old, max 26h\)/,
+		);
+	});
+
+	test("selectHeadlinesElsewhere enforces recency, deduplication precedence, and capping", () => {
+		const rows: ItemRow[] = [
+			// 1. Champion article (local commercial dev)
+			item({
+				source_key: "champion-news",
+				source_url:
+					"https://www.championnewspapers.com/community_news/article_c053f101-5e05-4709-9c2c-2cd72cda7c5e.html",
+				title: "7-Eleven, gas station, car wash to replace Corner Bar area",
+				body: "Evergreen Devco will propose a 7-Eleven on Central Avenue for Chino Planning Commission consideration.",
+				occurred_at: "2026-08-15T00:00:00.000Z",
+				meta: JSON.stringify({
+					outlet: "The Champion",
+					city: "Chino",
+					chinoRelevant: true,
+				}),
+			}),
+			// 2. Daily Bulletin duplicate of the same story
+			item({
+				source_key: "dailybulletin-news",
+				source_url:
+					"https://www.dailybulletin.com/2026/08/15/7-eleven-gas-station-car-wash-to-replace-corner-bar-area/",
+				title:
+					"7-Eleven, gas station, car wash to replace Corner Bar area in Chino",
+				body: "Evergreen Devco will propose a 7-Eleven on Central Avenue.",
+				occurred_at: "2026-08-15T12:00:00.000Z",
+				meta: JSON.stringify({
+					outlet: "Daily Bulletin",
+					city: "Chino",
+					chinoRelevant: true,
+				}),
+			}),
+			// 3. Daily Bulletin public figure story (Sonja Shaw)
+			item({
+				source_key: "dailybulletin-news",
+				source_url:
+					"https://www.dailybulletin.com/2026/08/16/chino-valleys-sonja-shaw-rides-anger-over-covid-rules-to-bid-for-state-superintendent/",
+				title:
+					"Chino Valley's Sonja Shaw rides anger over COVID rules to bid for state superintendent",
+				body: "Chino Valley school board president Sonja Shaw launched her campaign.",
+				occurred_at: "2026-08-16T15:00:00.000Z",
+				meta: JSON.stringify({
+					outlet: "Daily Bulletin",
+					city: "Chino",
+					chinoRelevant: true,
+				}),
+			}),
+			// 4. Ineligible crime story
+			item({
+				source_key: "dailybulletin-news",
+				source_url:
+					"https://www.dailybulletin.com/2026/08/16/suspect-arrested-after-burglary-in-chino/",
+				title: "Suspect arrested after commercial burglary in Chino",
+				body: "Police arrested a suspect.",
+				occurred_at: "2026-08-16T16:00:00.000Z",
+				meta: JSON.stringify({
+					outlet: "Daily Bulletin",
+					city: "Chino",
+					chinoRelevant: true,
+				}),
+			}),
+		];
+
+		const freshness = {
+			"champion-news": {
+				isFresh: true,
+				status: "success" as const,
+				finishedAt: "2026-08-15T08:00:00.000Z",
+				tosStatus: "enabled" as const,
+			},
+			"dailybulletin-news": {
+				isFresh: true,
+				status: "success" as const,
+				finishedAt: "2026-08-17T06:00:00.000Z",
+				tosStatus: "enabled" as const,
+			},
+		};
+
+		const selected = selectHeadlinesElsewhere(rows, freshness, NOW);
+
+		// Crime story must be dropped
+		// Duplicate story must keep Champion version over Daily Bulletin
+		assert.equal(selected.length, 2);
+		assert.equal(selected[0].source_key, "dailybulletin-news"); // newer occurred_at
+		assert.equal(selected[1].source_key, "champion-news"); // dedupe kept Champion
+	});
+
+	// Helper for the window/cap tests below: a policy-clean, locally relevant
+	// Champion story that differs enough from its siblings to survive dedup.
+	function headline(over: Partial<ItemRow>): ItemRow {
+		return item({
+			source_key: "champion-news",
+			source_url: `https://www.championnewspapers.com/news/article_${seq}.html`,
+			title: "Chino Planning Commission approves Central Avenue plan",
+			body: "The project heads to Chino City Council next month.",
+			occurred_at: "2026-08-16T00:00:00.000Z",
+			meta: JSON.stringify({ outlet: "The Champion", city: "Chino" }),
+			...over,
+		});
+	}
+
+	const FRESH = {
+		"champion-news": {
+			isFresh: true,
+			status: "success" as const,
+			finishedAt: "2026-08-17T00:00:00.000Z",
+			tosStatus: "enabled" as const,
+		},
+		"dailybulletin-news": {
+			isFresh: true,
+			status: "success" as const,
+			finishedAt: "2026-08-17T06:00:00.000Z",
+			tosStatus: "enabled" as const,
+		},
+	};
+
+	test("selectHeadlinesElsewhere drops outlets whose scrape is not fresh", () => {
+		const rows = [headline({}), headline({ source_key: "dailybulletin-news" })];
+
+		const selected = selectHeadlinesElsewhere(
+			rows,
+			{
+				...FRESH,
+				"champion-news": { ...FRESH["champion-news"], isFresh: false },
+			},
+			NOW,
+		);
+
+		assert.equal(selected.length, 1);
+		assert.equal(selected[0].source_key, "dailybulletin-news");
+	});
+
+	test("selectHeadlinesElsewhere enforces the per-outlet publishing window", () => {
+		// The Champion is weekly (7 days); the Daily Bulletin is daily (48h).
+		const rows = [
+			headline({ occurred_at: "2026-08-12T00:00:00.000Z" }), // 5 days: in
+			headline({ occurred_at: "2026-08-05T00:00:00.000Z" }), // 12 days: out
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: "https://www.dailybulletin.com/2026/08/16/recent/",
+				title: "Chino Hills council reviews Peyton Drive repaving",
+				occurred_at: "2026-08-16T00:00:00.000Z", // 37h: in
+			}),
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: "https://www.dailybulletin.com/2026/08/13/older/",
+				title: "Chino library expands weekend hours at Schaefer Avenue",
+				occurred_at: "2026-08-13T00:00:00.000Z", // 4 days: out
+			}),
+		];
+
+		const selected = selectHeadlinesElsewhere(rows, FRESH, NOW);
+		assert.deepEqual(
+			selected.map((r) => r.occurred_at),
+			["2026-08-16T00:00:00.000Z", "2026-08-12T00:00:00.000Z"],
+		);
+	});
+
+	test("selectHeadlinesElsewhere does not re-link what the previous brief carried", () => {
+		const rows = [
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: "https://www.dailybulletin.com/2026/08/16/after/",
+				title: "Chino Hills council reviews Peyton Drive repaving",
+				occurred_at: "2026-08-16T18:00:00.000Z",
+			}),
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: "https://www.dailybulletin.com/2026/08/16/before/",
+				title: "Chino library expands weekend hours at Schaefer Avenue",
+				occurred_at: "2026-08-16T06:00:00.000Z",
+			}),
+		];
+
+		const selected = selectHeadlinesElsewhere(
+			rows,
+			FRESH,
+			NOW,
+			"2026-08-16T12:00:00.000Z",
+		);
+
+		assert.equal(selected.length, 1);
+		assert.match(selected[0].source_url, /after/);
+	});
+
+	test("selectHeadlinesElsewhere caps at 5 total and 3 per outlet", () => {
+		const titles = [
+			"Chino Planning Commission approves Central Avenue plan",
+			"Chino Hills opens English Springs Park splash pad",
+			"Chino Valley Fire District adds Ramona Avenue engine",
+			"Chino Town Square lands grocery anchor tenant",
+			"Chino Airport runway resurfacing begins in September",
+			"Chino Hills library extends Peyton Drive branch hours",
+		];
+		const rows = titles.flatMap((title, i) => [
+			headline({ title, occurred_at: `2026-08-1${i % 6}T00:00:00.000Z` }),
+			headline({
+				source_key: "dailybulletin-news",
+				source_url: `https://www.dailybulletin.com/2026/08/16/story-${i}/`,
+				title: `${title} downtown`,
+				occurred_at: "2026-08-16T00:00:00.000Z",
+			}),
+		]);
+
+		const selected = selectHeadlinesElsewhere(rows, FRESH, NOW);
+
+		assert.equal(selected.length, 5);
+		for (const key of HEADLINES_SOURCES) {
+			assert.ok(
+				selected.filter((r) => r.source_key === key).length <= 3,
+				`${key} exceeded its per-outlet cap`,
+			);
+		}
+	});
+
+	test("assembleBrief renders safe semantic HTML and attributions frontmatter", () => {
+		const emptyForecast: ItemRow[] = [
+			item({
+				source_key: "nws-forecast",
+				external_id: "SGX:2026-08-17T13:00:00Z",
+				occurred_at: "2026-08-17T13:00:00.000Z",
+				body: "Sunny, high 88.",
+				meta: JSON.stringify({
+					city: "Chino",
+					periodName: "Today",
+					isDaytime: true,
+				}),
+			}),
+		];
+
+		const headlinesRow = item({
+			source_key: "champion-news",
+			source_url:
+				"https://www.championnewspapers.com/community_news/article_c053f101-5e05-4709-9c2c-2cd72cda7c5e.html",
+			title: '7-Eleven & "Gas Station" to replace Corner Bar',
+			body: "Evergreen Devco will propose a 7-Eleven on Central Avenue.",
+			occurred_at: "2026-08-15T00:00:00.000Z",
+			meta: JSON.stringify({
+				outlet: "The Champion",
+				city: "Chino",
+				chinoRelevant: true,
+			}),
+		});
+
+		const inputs: BriefInputs = {
+			forecast: emptyForecast,
+			nwsAlerts: [],
+			fire: [],
+			calendarEvents: [],
+			agendaItems: [],
+			cvusdEvents: [],
+			licenseEvents: [],
+			headlines: [headlinesRow],
+			headlinesFreshness: {
+				"champion-news": {
+					isFresh: true,
+					status: "success",
+					finishedAt: "2026-08-15T08:00:00.000Z",
+					tosStatus: "enabled",
+				},
+			},
+			publishedPosts: [],
+			prevBriefPublishedAt: null,
+		};
+
+		const { post } = assembleBrief(inputs, NOW);
+
+		// Verified: Sources does NOT contain secondary press URL
+		assert.ok(!post.sources.includes(headlinesRow.source_url));
+		// Verified: Attributions DOES contain secondary press URL
+		assert.ok(post.attributions?.includes(headlinesRow.source_url));
+
+		// Verified: the heading is markdown like every other section's, and the
+		// list is raw HTML carrying the attribution link class
+		assert.ok(post.bodyMd.includes("## Headlines elsewhere"));
+		assert.ok(post.bodyMd.includes('<ul class="headlines-elsewhere">'));
+		assert.ok(post.bodyMd.includes('<a class="headline-link"'));
+		assert.ok(
+			post.bodyMd.includes(
+				"7-Eleven &amp; &quot;Gas Station&quot; to replace Corner Bar",
+			),
+		);
+		assert.ok(post.bodyMd.includes("(The Champion)"));
+
+		// Post rendering verification
+		const rendered = renderPostFile(post, "2026-08-17T13:05:00.000Z");
+		assert.ok(rendered.includes("attributions:"));
+		assert.ok(rendered.includes(headlinesRow.source_url));
+	});
+
+	test("assembleBrief refuses a headline URL outside the outlet's own hosts", () => {
+		// A look-alike host: "championnewspapers.com" appears in it, but it is not
+		// the outlet. A substring check would have let this through to a reader.
+		const impostor = item({
+			source_key: "champion-news",
+			source_url:
+				"https://www.championnewspapers.com.evil.example/community_news/article_dead.html",
+			title: "Chino Planning Commission approves Central Avenue plan",
+			body: "The project heads to Chino City Council next month.",
+			occurred_at: "2026-08-16T00:00:00.000Z",
+			meta: JSON.stringify({ outlet: "The Champion", city: "Chino" }),
+		});
+
+		const inputs: BriefInputs = {
+			forecast: [],
+			nwsAlerts: [],
+			fire: [],
+			calendarEvents: [],
+			agendaItems: [],
+			cvusdEvents: [],
+			licenseEvents: [],
+			headlines: [impostor],
+			headlinesFreshness: FRESH,
+			publishedPosts: [],
+			prevBriefPublishedAt: null,
+		};
+
+		const { post, notes } = assembleBrief(inputs, NOW);
+
+		assert.ok(!post.bodyMd.includes("evil.example"));
+		assert.ok(!post.bodyMd.includes("Headlines elsewhere"));
+		assert.equal(post.attributions, undefined);
+		assert.ok(notes.some((n) => n.includes("off-allowlist URL skipped")));
+		// With nothing else to report, the empty section must not suppress the
+		// quiet-morning line.
+		assert.ok(post.bodyMd.includes("A quiet morning"));
 	});
 });

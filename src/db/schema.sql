@@ -87,3 +87,12 @@ CREATE TABLE IF NOT EXISTS scrape_runs (
 
 CREATE INDEX IF NOT EXISTS idx_scrape_runs_source_id ON scrape_runs(source_key, id DESC);
 
+CREATE TABLE IF NOT EXISTS source_tos_status (
+  source_key TEXT PRIMARY KEY REFERENCES sources(key),
+  status TEXT NOT NULL CHECK (status IN ('enabled', 'held')),
+  reviewed_hash TEXT NOT NULL,
+  last_observed_hash TEXT,
+  last_checked_at TEXT,
+  held_reason TEXT
+);
+

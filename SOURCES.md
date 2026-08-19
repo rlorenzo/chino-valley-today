@@ -189,6 +189,35 @@ whenever a source changes behavior.
 - **Reliability guess:** high (county sites match the proven sheriff/library
   infra); medium for yanksair (small-org WordPress).
 
+### champion-news — The Champion Newspapers (TownNews Blox CMS)
+
+- **Added 2026-08-18 (Phase 4 Task 4.2).** Weekly community newspaper covering
+  Chino and Chino Hills. Ingests Saturday edition sitemaps from
+  `championnewspapers.com/tncms/sitemap/editorial.xml` (capped at 15 candidate
+  articles/run).
+- **Quirks & Policy (see reports/notes/champion-news.md):**
+  - Fail-closed robots compliance (`failClosedRobots: true`) and redirect protection.
+  - Terms of service tracked in `source_tos_status` with weekly drift checks (`scripts/check-tos-drift.ts`).
+  - Summaries are sentence-bounded teasers ($\le 280$ chars, $\le 40$ words) for attribution. Secondary press links wear crate styling (`.stamp--attribution`), never violet.
+  - Silent-drift alarm: three consecutive failed runs, or three consecutive runs that succeed while extracting 0 items, fail the brief watchdog unit (`checkDegradedSources`).
+- **Link-back depth:** item-level (`/community_news/article_<uuid>.html`).
+- **Reliability guess:** high (stable TownNews sitemaps).
+
+### dailybulletin-news — Inland Valley Daily Bulletin (MediaNews Group WordPress)
+
+- **Added 2026-08-18 (Phase 4 Task 4.2).** Regional daily newspaper covering
+  Chino and Chino Hills municipal news. Ingests articles from dedicated Chino
+  and Chino Hills location hubs (`/location/california/san-bernardino-county/...`,
+  capped at 15 candidate articles total/run).
+- **Quirks & Policy (see reports/notes/dailybulletin-news.md):**
+  - Fail-closed robots compliance (`failClosedRobots: true`) and redirect protection.
+  - Terms of service tracked in `source_tos_status` with weekly drift checks (`scripts/check-tos-drift.ts`).
+  - Summaries are sentence-bounded teasers ($\le 280$ chars, $\le 40$ words) for attribution.
+  - Cross-outlet deduplication gives Champion precedence when covering the same story.
+  - Silent-drift alarm: three consecutive failed runs, or three consecutive runs that succeed while extracting 0 items, fail the brief watchdog unit (`checkDegradedSources`).
+- **Link-back depth:** item-level (`/YYYY/MM/DD/article-slug/`).
+- **Reliability guess:** high.
+
 ## Open questions from PLAN — answers so far
 
 1. **Legistar API enabled for Chino?** YES — confirmed live, built on it.

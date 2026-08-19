@@ -4,11 +4,20 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 // ROOT is defined once, in store.ts. Re-deriving it here produced two exports
 // with the same name and different relative depths.
+import { SOURCE_TOS_REGISTRY } from "../gates/tos-config.ts";
 import { ROOT } from "../store.ts";
 
 // Still needed for schema.sql, which sits beside this file rather than at ROOT.
 const here = dirname(fileURLToPath(import.meta.url));
 const DB_PATH = process.env.CVT_DB ?? join(ROOT, "data", "cvtoday.db");
+
+export interface SourceTosStatus {
+	status: "enabled" | "held";
+	heldReason?: string | null;
+	reviewedHash: string;
+	lastObservedHash?: string | null;
+	lastCheckedAt?: string | null;
+}
 
 interface DocumentRow {
 	id: number;
@@ -76,6 +85,29 @@ export function openDb(path: string = DB_PATH) {
 	).map((c) => c.name);
 	if (!postCols.includes("published_via"))
 		db.exec("ALTER TABLE posts ADD COLUMN published_via TEXT");
+
+	// Seed the ToS baseline for every registered secondary source, so the gate
+	// has a row to read on the very first run — before the scraper itself has
+	// ever run. OR IGNORE keeps an operator's later hold/reset in place: the
+	// registry is the baseline, not the truth.
+	for (const [key, cfg] of Object.entries(SOURCE_TOS_REGISTRY)) {
+		// source_tos_status.source_key REFERENCES sources(key), and node:sqlite
+		// enforces foreign keys, so the parent row has to exist first. These are
+		// placeholders; the scraper's own upsertSource replaces them with the real
+		// display name and site root the first time it runs.
+		db.prepare(
+			`INSERT OR IGNORE INTO sources (key, name, base_url, method) VALUES (?, ?, ?, ?)`,
+		).run(key, key, new URL(cfg.terms_url).origin, "html");
+		db.prepare(
+			`INSERT OR IGNORE INTO source_tos_status (source_key, status, reviewed_hash, held_reason)
+			 VALUES (?, ?, ?, ?)`,
+		).run(
+			key,
+			cfg.status,
+			cfg.reviewed_hash,
+			cfg.status === "held" ? "baseline_held" : null,
+		);
+	}
 
 	function upsertSource(s: {
 		key: string;
@@ -289,6 +321,145 @@ export function openDb(path: string = DB_PATH) {
 		);
 	}
 
+	// Fails closed: anything unreviewed reads back as held, never as enabled.
+	// That covers both a source_key absent from the baseline registry and one
+	// that's registered but has no row yet (shouldn't happen post-openDb, since
+	// openDb seeds a row for every SOURCE_TOS_REGISTRY entry, but a missing row
+	// must never be misread as "safe to scrape").
+	//
+	// Civic/agency sources were never meant to go through this gate at all —
+	// they carry no publisher ToS to track. Callers must only ask about sources
+	// with tracked terms (run-one.ts checks `sourceKey in SOURCE_TOS_REGISTRY`
+	// before calling this at all); asking about anything else now returns held,
+	// not a silent "enabled" pass-through.
+	function getSourceTosStatus(sourceKey: string): SourceTosStatus {
+		const unreviewed: SourceTosStatus = {
+			status: "held",
+			heldReason: "unreviewed_source",
+			reviewedHash: "",
+		};
+		// Object.hasOwn, not `in`: `in` walks the prototype chain, so a key
+		// like "constructor" would read as registered.
+		if (!Object.hasOwn(SOURCE_TOS_REGISTRY, sourceKey)) return unreviewed;
+
+		const row = db
+			.prepare(
+				"SELECT status, reviewed_hash, last_observed_hash, last_checked_at, held_reason FROM source_tos_status WHERE source_key = ?",
+			)
+			.get(sourceKey) as
+			| {
+					status: SourceTosStatus["status"];
+					reviewed_hash: string;
+					last_observed_hash: string | null;
+					last_checked_at: string | null;
+					held_reason: string | null;
+			  }
+			| undefined;
+
+		if (!row) return unreviewed;
+
+		return {
+			status: row.status,
+			heldReason: row.held_reason,
+			reviewedHash: row.reviewed_hash,
+			lastObservedHash: row.last_observed_hash,
+			lastCheckedAt: row.last_checked_at,
+		};
+	}
+
+	function setSourceTosHold(
+		sourceKey: string,
+		opts: {
+			reason: string;
+			observedHash?: string | null;
+			checkedAt?: string;
+		},
+	): void {
+		const registryConfig = SOURCE_TOS_REGISTRY[sourceKey];
+		const reviewedHash = registryConfig?.reviewed_hash ?? "";
+		const checkedAt = opts.checkedAt ?? nowIso();
+		db.prepare(
+			`INSERT INTO source_tos_status (source_key, status, reviewed_hash, last_observed_hash, last_checked_at, held_reason)
+			 VALUES (?, 'held', ?, ?, ?, ?)
+			 ON CONFLICT(source_key) DO UPDATE SET
+			   status = 'held',
+			   held_reason = excluded.held_reason,
+			   last_observed_hash = COALESCE(excluded.last_observed_hash, source_tos_status.last_observed_hash),
+			   last_checked_at = excluded.last_checked_at`,
+		).run(
+			sourceKey,
+			reviewedHash,
+			opts.observedHash ?? null,
+			checkedAt,
+			opts.reason,
+		);
+	}
+
+	function recordSourceTosCheck(
+		sourceKey: string,
+		opts: {
+			observedHash: string;
+			checkedAt: string;
+		},
+	): void {
+		const current = getSourceTosStatus(sourceKey);
+		if (opts.observedHash !== current.reviewedHash) {
+			setSourceTosHold(sourceKey, {
+				reason: "terms_hash_drift",
+				observedHash: opts.observedHash,
+				checkedAt: opts.checkedAt,
+			});
+			return;
+		}
+		// A matching hash records the observation but never clears an existing
+		// hold. Coming back online is an operator decision (resetSourceTosHold),
+		// because the hold may rest on something this check cannot see.
+		db.prepare(
+			`UPDATE source_tos_status
+			 SET last_observed_hash = ?, last_checked_at = ?
+			 WHERE source_key = ?`,
+		).run(opts.observedHash, opts.checkedAt, sourceKey);
+	}
+
+	function resetSourceTosHold(
+		sourceKey: string,
+		opts: {
+			observedHash: string;
+			checkedAt: string;
+		},
+	): void {
+		const registryConfig = SOURCE_TOS_REGISTRY[sourceKey];
+		if (registryConfig?.status !== "enabled") {
+			throw new Error(
+				`Cannot reset ToS hold: source ${sourceKey} is configured as 'held' in baseline registry. Update baseline contract first.`,
+			);
+		}
+		if (opts.observedHash !== registryConfig.reviewed_hash) {
+			throw new Error(
+				`Cannot reset ToS hold: observed hash (${opts.observedHash}) does not match baseline reviewed hash (${registryConfig.reviewed_hash})`,
+			);
+		}
+		db.prepare(
+			`INSERT INTO source_tos_status (source_key, status, reviewed_hash, last_observed_hash, last_checked_at, held_reason)
+			 VALUES (?, 'enabled', ?, ?, ?, NULL)
+			 ON CONFLICT(source_key) DO UPDATE SET
+			   status = 'enabled',
+			   -- The reset is what re-baselines the row against the registry: the
+			   -- operator reviewed the new terms and updated tos-config. Leaving
+			   -- the stale hash here would make the next weekly check read its own
+			   -- approved hash as drift and re-hold the source immediately.
+			   reviewed_hash = excluded.reviewed_hash,
+			   held_reason = NULL,
+			   last_observed_hash = excluded.last_observed_hash,
+			   last_checked_at = excluded.last_checked_at`,
+		).run(
+			sourceKey,
+			registryConfig.reviewed_hash,
+			opts.observedHash,
+			opts.checkedAt,
+		);
+	}
+
 	return {
 		raw: db,
 		path,
@@ -299,6 +470,10 @@ export function openDb(path: string = DB_PATH) {
 		insertItem,
 		startScrapeRun,
 		finishScrapeRun,
+		getSourceTosStatus,
+		setSourceTosHold,
+		recordSourceTosCheck,
+		resetSourceTosHold,
 	};
 }
 

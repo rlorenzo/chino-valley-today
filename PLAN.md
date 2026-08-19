@@ -706,14 +706,44 @@ tribe-events scraper parameterized by host/venue. Each: source row, scraper,
 dossier in reports/notes/, items with stable source_urls. All Tier A-able
 content.
 
-### Task 4.2 - Headlines-elsewhere ingestion
+### Task 4.2 - Headlines-elsewhere ingestion — DONE 2026-08-18
 
-Champion first (pending 4.0 feed discovery), SCNG if unblocked. Prefer feeds;
-article fetches where robots.txt permits our UA, extra-polite. Published form
-is always a 1-2 sentence attributed summary + link (EDITORIAL.md amendment
-2026-08-17; the no-substantial-excerpting limit is copyright and holds
-regardless of robots). Verbatim feed title/description renders Tier A; any
-LLM-written summary is Tier B behind the full gate path.
+Implemented fail-closed secondary community press ingestion for The Champion
+(`champion-news`) and Inland Valley Daily Bulletin (`dailybulletin-news`):
+
+- Fail-closed robots.txt (`failClosedRobots: true`) and host-restricted manual redirect protection.
+- Terms of service tracking via `source_tos_status` table with weekly automated drift detection (`scripts/check-tos-drift.ts`, `cvt-check-tos.timer`).
+- Deterministic policy & eligibility filter (`src/gates/policy-filters.ts`) enforcing local relevance, minors protection, crime/law enforcement exclusion, and unvetted private person guards.
+- Deterministic sentence-boundary truncation helper (`truncateToSentenceBoundary`) enforcing 1–2 sentence teasers ($\le 280$ chars, $\le 40$ words).
+- Daily brief integration (`selectHeadlinesElsewhere`) with cross-outlet Jaccard token deduplication, Champion precedence, and capping (max 5 total, max 3/outlet).
+- Attribution styling: secondary press links wear crate styling (`.stamp--attribution`), never violet ink (`.stamp`), with wrapping headline links in `.headlines-elsewhere`. Frontmatter populates `attributions: []` rather than `sources: []`.
+- Dedicated systemd units (`cvt-scrape-press.service`/`.timer`, `cvt-check-tos.service`/`.timer`) and `press` group in `scripts/run-group.sh`.
+
+**Review hardening, same day (found by code review and a plan-conformance audit
+after the feature was code-complete):**
+
+- **Accented names were invisible to the private-person guard.** The candidate
+  regexes were ASCII-only, so extraction broke at the first accented letter and
+  "José Hernández" was never offered to the allowlist check while its ASCII twin
+  was correctly held. In a city that is roughly two-thirds Hispanic/Latino this
+  was a hole in the guard for exactly the residents it protects. Extraction is
+  now Unicode-aware and `normalizeEntity` folds diacritics, so ASCII allowlists
+  still match accented spellings of vetted officials.
+- **The ToS gate is now scoped to sources that have tracked terms.**
+  `getSourceTosStatus` fails closed (`held` / `unreviewed_source`) for an
+  unregistered key or a missing row, and `run-one.ts` only consults it for
+  `SOURCE_TOS_REGISTRY` members — without that scoping, failing closed would
+  have held all 20 civic/agency scrapers, which carry no publisher terms.
+- **Silent-drift alarm** (`checkDegradedSources`): three consecutive failed
+  runs, or three consecutive runs that succeed while extracting 0 items, fail
+  the brief watchdog unit. Never blocks the brief — headlines elsewhere is
+  supplementary and the brief still publishes.
+- **Violet stays provenance-only, now enforced by test.** `.stamp--attribution`
+  is standalone rather than a modifier on `.stamp`, drops the provenance dot,
+  and site copy distinguishes civic claims from attributed press throughout.
+- Test coverage for the ToS hold guard, the fetch invariants, and the styling
+  invariants; `npm test` glob widened to `scripts/**` so the ToS-drift watchdog
+  tests actually run in CI (they were silently skipped).
 
 ### Task 4.3 - Daily brief assembler — CODE COMPLETE & MERGED (PR #27, 2026-08-18)
 

@@ -147,6 +147,38 @@ img {
 	color: #fff;
 }
 
+/* Secondary press links cited for attribution rather than primary civic
+   provenance. Deliberately standalone rather than a modifier on .stamp: if it
+   rode on .stamp, every future violet property added there would reach
+   secondary press links by default, and "violet means primary record" is the
+   one rule this site actually enforces. The circular dot is dropped for the
+   same reason — the dot is the provenance mark, not decoration. */
+.stamp--attribution {
+	display: inline-flex;
+	align-items: center;
+	gap: 0.34em;
+	font-family: "Archivo Narrow", "Arial Narrow", sans-serif;
+	font-weight: 700;
+	font-size: 0.7em;
+	text-transform: uppercase;
+	letter-spacing: 0.07em;
+	padding: 0.1em 0.42em 0.06em;
+	text-decoration: none;
+	white-space: nowrap;
+	vertical-align: baseline;
+	background: transparent;
+	color: var(--crate);
+	border: 1.5px solid var(--crate-line);
+}
+.stamp--attribution::before {
+	content: none;
+}
+.stamp--attribution:hover,
+.stamp--attribution:focus-visible {
+	background: var(--crate);
+	color: #fff;
+}
+
 /* Inside running prose the stamp sits at the end of a sourced sentence. */
 .prose a.stamp {
 	margin-left: 0.25em;
@@ -159,7 +191,7 @@ img {
    post IS a citation — the editorial rules permit no other kind — so it takes
    the stamp automatically. This is what makes the mechanism visible while
    reading, not just while scanning. */
-.prose a[href^="http"] {
+.prose a[href^="http"]:not(.headline-link) {
 	display: inline-flex;
 	align-items: center;
 	gap: 0.3em;
@@ -177,7 +209,7 @@ img {
 	translate: 0 -0.06em;
 }
 
-.prose a[href^="http"]::before {
+.prose a[href^="http"]:not(.headline-link)::before {
 	content: "";
 	width: 0.4em;
 	height: 0.4em;
@@ -186,8 +218,8 @@ img {
 	flex: none;
 }
 
-.prose a[href^="http"]:hover,
-.prose a[href^="http"]:focus-visible {
+.prose a[href^="http"]:not(.headline-link):hover,
+.prose a[href^="http"]:not(.headline-link):focus-visible {
 	background: var(--stamp);
 	color: #fff;
 }
@@ -488,6 +520,34 @@ img {
 	font-style: normal;
 	color: var(--muted);
 	font-size: 0.92em;
+}
+
+/* Headlines elsewhere: secondary community press reporting. The heading, list
+   indent and item spacing all come from .prose, so the section reads like every
+   other one in a brief; only the links differ. They are attribution rather than
+   provenance, so they wear crate and wrap as ordinary prose instead of taking
+   the violet stamp badge — the .prose a[href^="http"] rules above exclude
+   .headline-link for exactly this reason. */
+/* Full article headlines routinely run past 60-80 characters, so these must
+   stay ordinary wrapping inline text. Giving them the badge treatment
+   (inline-flex + nowrap) blows out narrow viewports horizontally. */
+.prose .headlines-elsewhere a {
+	display: inline;
+	white-space: normal;
+	font-family: inherit;
+	color: var(--crate);
+	font-weight: 600;
+	text-decoration: underline;
+}
+.prose .headlines-elsewhere a::before {
+	content: none;
+}
+
+.prose .headlines-elsewhere a:hover,
+.prose .headlines-elsewhere a:focus-visible {
+	background: var(--crate);
+	color: #fff;
+	text-decoration: none;
 }
 
 /* =========================================================================

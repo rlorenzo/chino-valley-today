@@ -45,8 +45,14 @@ case "$group" in
 	media)
 		keys=(chinohills-swagit youtube-captions chino-youtube-captions)
 		;;
+	# Secondary press reporting (The Champion, Daily Bulletin). Politeness
+	# budget: runs 4 times daily (05:00, 11:00, 17:00, 23:00 PT), fail-closed
+	# robots.txt, ToS tracking, and redirect validation.
+	press)
+		keys=(champion-news dailybulletin-news)
+		;;
 	*)
-		echo "usage: $0 <frequent|daily|media>" >&2
+		echo "usage: $0 <frequent|daily|media|press>" >&2
 		exit 64
 		;;
 esac

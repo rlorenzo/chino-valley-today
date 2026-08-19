@@ -17,7 +17,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
-import { laDateOf } from "./daily-brief.ts";
+import { errorMessage } from "../utils/errors.ts";
+import { HEADLINES_SOURCES, laDateOf } from "./daily-brief.ts";
 
 const FRESH = "pipeline=fresh";
 const STALE = "pipeline=stale";
@@ -84,7 +85,7 @@ export async function checkBriefHttp(
 	} catch (err) {
 		return {
 			ok: false,
-			error: `failed to fetch ${url}: ${err instanceof Error ? err.message : String(err)}`,
+			error: `failed to fetch ${url}: ${errorMessage(err)}`,
 		};
 	}
 }
@@ -130,6 +131,76 @@ export async function verifyBriefHealth(
 	};
 }
 
+type ScrapeRunSummary = {
+	status: "running" | "success" | "failure";
+	items_count: number;
+	finished_at: string | null;
+};
+
+export interface SourceDegradedResult {
+	sourceKey: string;
+	degraded: boolean;
+	reason: string;
+	runs: ScrapeRunSummary[];
+}
+
+// A secondary-press source can keep "succeeding" while a publisher's HTML
+// silently drifts out from under the scraper, extracting 0 items run after
+// run — invisible to a check that only looks at the latest run's status.
+// This looks at the last 3 recorded runs per source and flags degraded only
+// on two unambiguous patterns: 3 straight failures, or 3 straight successes
+// with 0 items. Anything mixed is left alone — a single bad run, or a
+// success/failure mix, isn't proof of drift. Fewer than 3 recorded runs is
+// insufficient evidence either way, so it is never reported as degraded.
+export function checkDegradedSources(
+	db: Db,
+	sourceKeys: readonly string[] = HEADLINES_SOURCES,
+): SourceDegradedResult[] {
+	return sourceKeys.map((sourceKey) => {
+		const runs = db.raw
+			.prepare(
+				`SELECT status, items_count, finished_at
+				 FROM scrape_runs
+				 WHERE source_key = ?
+				 ORDER BY id DESC
+				 LIMIT 3`,
+			)
+			.all(sourceKey) as ScrapeRunSummary[];
+
+		if (runs.length < 3) {
+			return {
+				sourceKey,
+				degraded: false,
+				reason: `only ${runs.length} run(s) recorded; insufficient evidence`,
+				runs,
+			};
+		}
+
+		if (runs.every((r) => r.status === "failure")) {
+			return {
+				sourceKey,
+				degraded: true,
+				reason: "last 3 runs all failed",
+				runs,
+			};
+		}
+		if (runs.every((r) => r.status === "success" && r.items_count === 0)) {
+			return {
+				sourceKey,
+				degraded: true,
+				reason: "last 3 runs all succeeded but extracted 0 items",
+				runs,
+			};
+		}
+		return {
+			sourceKey,
+			degraded: false,
+			reason: "runs are healthy or mixed",
+			runs,
+		};
+	});
+}
+
 async function main(): Promise<void> {
 	const now = new Date();
 	const slug = expectedBriefSlug(now);
@@ -140,6 +211,20 @@ async function main(): Promise<void> {
 	const result = await verifyBriefHealth(db, now, {
 		baseUrl: process.env.CVT_BASE_URL ?? "https://chinovalley.today",
 	});
+
+	// Headlines-elsewhere is non-blocking supplementary content — a degraded
+	// secondary-press source never touches the health file or the brief
+	// itself, which has already published by the time this watchdog runs.
+	// It only needs to reach an operator, so it uses the same exit-code
+	// idiom as the rest of this watchdog: fail the unit so
+	// `systemctl --failed` surfaces it alongside any other alert.
+	const degradedSources = checkDegradedSources(db).filter((s) => s.degraded);
+	for (const source of degradedSources) {
+		console.error(`DEGRADED SOURCE: ${source.sourceKey} — ${source.reason}`);
+	}
+	if (degradedSources.length > 0) {
+		process.exitCode = 1;
+	}
 
 	if (result.healthy) {
 		console.log(

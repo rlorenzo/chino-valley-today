@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly Terms of Service drift check timer for Chino Valley Today
+
+[Timer]
+OnCalendar=Sun *-*-* 04:00:00 America/Los_Angeles
+Persistent=true
+RandomizedDelaySec=15min
+
+[Install]
+WantedBy=timers.target
