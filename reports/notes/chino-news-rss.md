@@ -252,3 +252,20 @@ nothing else from that research was ported here.
   - `https://www.cityofchino.org/Calendar.aspx?EID=1882` → **200** directly.
   - `https://www.cityofchino.org/CivicAlerts.aspx?aid=409` → 302 →
     `/m/newsflash/home/detail/409` → final **200**.
+
+## Alert Center ingestion (2026-08-19, Task 4.6)
+
+Probe (pipeline UA, robots read mechanically first):
+`https://www.cityofchino.org/RSSFeed.aspx?ModID=63&CID=All-0` → HTTP 200,
+valid RSS 2.0, 0 items, channel title "Chino, CA - Alert Center". robots.txt
+confirms `Disallow: /RSS.aspx` (catalog page) for all agents; `RSSFeed.aspx`
+endpoints remain unlisted and allowed — same posture the scraper has
+documented since Phase 0.
+
+Phase 0 skipped this module as "empty at survey time". Reversed: an Alert
+Center's value is being subscribed *before* the non-empty day (CVFD
+precedent — empty is the healthy steady state, a non-empty run is an active
+emergency). Ingested as `alert` items. Caveat: `All-0` is the CVFD-pattern
+CID confirmed live against the endpoint; the robots-blocked catalog means
+per-category alert feeds, if any, are unverified — a one-time manual browser
+check of /RSS.aspx would close that.

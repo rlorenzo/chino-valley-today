@@ -16,7 +16,9 @@
 //   ModID=53 Photo Gallery — not ingested (out of scope)
 //   ModID=58 Calendar — ingested here as item_type 'event' (the "All" feed).
 //            Categories: Community Services, Events, Meetings, Police Department
-//   ModID=63 Alert Center — not ingested (empty at survey time; see notes)
+//   ModID=63 Alert Center — ingested as item_type 'alert' (All-0 feed).
+//            Empty feeds are the normal state; a non-empty run is an active
+//            emergency notice, same treatment as cvfd-news.ts's Alert Center.
 //   ModID=65 Agenda Center — belongs to chino-agendacenter.ts (Task 0.2), not us
 //   ModID=76 Pages — not ingested (out of scope)
 //
@@ -32,6 +34,7 @@
 import * as cheerio from "cheerio";
 import {
 	type FeedItem,
+	ingestAlertCenter,
 	localDateTimeToIso,
 	parseRssItems,
 	resolveDocumentId,
@@ -358,6 +361,10 @@ async function run(ctx: ScraperContext): Promise<void> {
 			},
 		});
 	}
+
+	// --- Alert Center: ingest as item_type 'alert' (All-0, ModID=63) via the
+	// shared CivicPlus helper. ---
+	await ingestAlertCenter(ctx, BASE);
 
 	// --- HTTP behavior notes ---
 	ctx.note(

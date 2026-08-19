@@ -264,3 +264,14 @@ enough that direct inspection (curl + cheerio) was sufficient.
     → HTTP 200, `content-type: application/pdf`, 65,391,225 bytes.
   - `https://agendaquick.chinohills.org:8086/docs/2026/PW/20260805_1181/1181_08-05-2026%20PWC%20Agenda%20Packet.pdf`
     → HTTP 200, `content-type: application/pdf`, 1,275,653 bytes.
+
+## Alert Center ingestion (2026-08-19, Task 4.6)
+
+Probe (pipeline UA, robots read mechanically first):
+`https://www.chinohills.org/RSSFeed.aspx?ModID=63&CID=All-0` → HTTP 200,
+valid RSS 2.0, 0 items, channel title "Chino Hills - Alert Center". Same
+posture as always: the /RSS.aspx catalog is robots-blocked, the RSSFeed.aspx
+endpoints are not. Ingested as `alert` items alongside the ModID=1 News Flash
+feed — empty is the healthy steady state (CVFD precedent). `All-0` is the
+CVFD-pattern CID confirmed live; per-category alert CIDs unverified behind
+the blocked catalog.

@@ -37,6 +37,13 @@ whenever a source changes behavior.
   - The NR-series press releases (NR26-xxx) have NO RSS feed; the index page links via `conta.cc` (Constant Contact) shortlinks — **permalinks are off-domain** (myemail.constantcontact.com). Real provenance caveat.
   - `RSSFeed.aspx` sends no ETag/Last-Modified and embeds volatile `<lastBuildDate>` → feed documents re-hash every run; item idempotency must come from stable external_ids.
 - **Chino PD (Task 0.9):** PD content flows through city CivicAlerts ("Police Spotlights") + "Police Department" calendar category — no separate scrape needed.
+- **Alert Center (added 2026-08-19, Task 4.6):** ModID=63 (`CID=All-0`) now
+  ingested as `alert` items. Valid-but-empty is the healthy steady state
+  (CVFD precedent); Phase 0's "empty at survey time, skip" call is reversed —
+  the point is being subscribed before the non-empty day. The `/RSS.aspx`
+  catalog is robots-blocked, so `All-0` is the CVFD-pattern CID confirmed
+  live against the endpoint; whether per-category alert feeds exist is
+  unverified (one-time manual browser check would close it).
 - **Link-back depth:** item-level permalinks (CivicAlerts.aspx?aid=N / Calendar.aspx?EID=N / conta.cc for NR-series).
 - **Reliability guess:** high for feeds; medium for NR-series (off-domain links).
 
@@ -44,6 +51,10 @@ whenever a source changes behavior.
 
 - **Method:** CivicPlus RSS (`RSSFeed.aspx?ModID=1&CID=...`). Note: `/RSS.aspx` itself is robots-blocked on chinohills.org (catalog enumerated out-of-band); the feed endpoints themselves are fetchable.
 - **Quirks:** teaser-only descriptions (117 chars vs 1,606 full text — same open-question-6 answer as Chino); volatile `<lastBuildDate>` re-hashes feed documents every run.
+- **Alert Center (added 2026-08-19, Task 4.6):** ModID=63 (`CID=All-0`) now
+  ingested as `alert` items; valid-but-empty on probe day, same steady-state
+  logic as CVFD's Alert Center. Catalog page robots-blocked (noted above), so
+  per-category alert CIDs are unverified.
 - **Link-back depth:** item-level (`CivicAlerts.aspx?aid=N`, 302s to canonical).
 - **Reliability guess:** high.
 

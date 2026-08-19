@@ -684,6 +684,44 @@ rejected** (reclassified under the 2026-08-17 scrape-policy clarification:
 its robots.txt blocks named AI crawlers, not our UA or general paths;
 mechanically permitted, but no feed was found and local coverage is thin).
 
+**Secondary-feed recon, third pass (2026-08-19; operator-supplied candidate
+list, probed live with the pipeline's UA and politeness rules):**
+
+- **City Alert Center feeds (both cities) — VERIFIED, ingest.**
+  `RSSFeed.aspx?ModID=63&CID=All-0` returns valid-but-empty RSS 2.0 on both
+  cityofchino.org and chinohills.org. Empty is the healthy steady state and a
+  non-empty run is an active emergency (CVFD's Alert Center set the
+  precedent) — exactly what a daily brief must not miss. Caveat: the `All-0`
+  CID is the CVFD-pattern guess confirmed against the endpoint; the catalog
+  page (`/RSS.aspx`) is robots-blocked on BOTH hosts now, so whether extra
+  per-category alert feeds exist is unverified (one-time manual browser check
+  would close it). → Task 4.6.
+- **KTLA tag feeds (`/tag/chino-hills/feed/`) — REJECTED.** robots.txt
+  disallows `/tag/` for all agents (a mechanical block, same class as
+  MaxPreps), and the homepage 403'd our honest UA on top of it.
+- **NBC4 LA (`?rss=y`) — REJECTED.** Valid feed, 53 items, 0 mentioning Chino
+  or Chino Hills; a regional firehose (435KB per fetch, full bodies) with
+  nothing to filter for.
+- **IECN (`iecn.com/feed/`) — DEFERRED.** Valid WordPress feed, full text,
+  robots open — but 0 of 10 current items are Chino-relevant
+  (Colton/Rialto/Fontana-centric) and robots asks `Crawl-delay: 90`. Revisit
+  only on evidence of actual Chino coverage.
+- **Patch — still low priority; the town page now 404s.**
+  `patch.com/california/chino` returns a clean 404 (no challenge); the
+  current town URL would need finding before any judgment.
+- **Student press (Quest News / Don Lugo HS, Bulldog Times / Ayala HS; both
+  SNO platform) — DECISION NEEDED, dormant anyway.** Quest News is genuinely
+  relevant when publishing (2 of 10 feed items were hard Chino Hills news)
+  but dormant since 2026-04-16; Bulldog Times has no hard news in its window
+  and is dormant since 2026-05-21. Both collide with the minors rule the way
+  sports does — student journalists and their subjects are mostly minors.
+  Folded into the student-naming operator decision; recheck when the school
+  year restarts (September).
+- **The Breeze (Chaffey College; SNO on WordPress) — follow-up probe.**
+  robots open, valid feed URLs discovered in head links, contents unread.
+  College paper, so the minors question mostly falls away; probe alongside
+  the school-press decision.
+
 ### Task 4.1 - Ingest the easy verified set — DONE 2026-08-17
 
 Landed same day as planned: seven scrapers (216 items on first run), a shared
@@ -849,6 +887,18 @@ Decide where incidents, sports/events, and headlines file (does `safety`
 absorb fire/EMS? fifth topic mark?), and move topic classification from
 site-side derivation (`lib/record.ts`) into the pipeline, which owns the
 source keys and item types.
+
+### Task 4.6 - City Alert Center feeds — IN REVIEW (2026-08-19)
+
+Extend `chino-news-rss` and `chinohills-news-rss` to ingest each city's Alert
+Center feed (ModID=63, CID=All-0) as `alert` items, and surface city alerts
+in the daily brief's Fire & safety section labeled by city ("City of Chino" /
+"City of Chino Hills"). Chino's Alert Center was skipped in Phase 0 as "empty
+at survey time"; the 2026-08-19 recon reversed that call — empty is the
+healthy steady state, and the whole point is being subscribed before the
+non-empty day. No new scraper keys and no new systemd units (both scrapers
+already run in the frequent group), so this structurally cannot repeat the
+Task 4.2 uninstalled-timer gap.
 
 ### Phase 4 acceptance
 

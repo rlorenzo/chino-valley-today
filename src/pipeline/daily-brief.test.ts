@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import { openDb } from "../db/index.ts";
+import { type Db, openDb } from "../db/index.ts";
 import type { ItemRow } from "../tiera/queries.ts";
 import {
 	assembleBrief,
 	assertPrerequisitesFresh,
 	type BriefInputs,
+	buildDailyBrief,
 	type CityForecast,
 	checkHeadlinesFreshness,
 	DAILY_BRIEF_PREREQUISITE_SOURCES,
@@ -328,6 +329,30 @@ describe("selectFireSafety", () => {
 		assert.deepEqual(out.map((r) => r.source_url).sort(), [
 			"https://chinovalleyfire.org/alert",
 			"https://sbcfire.org/a",
+		]);
+	});
+
+	test("city Alert Center items pass through with no relevance flag required, same as cvfd-news", () => {
+		const rows = [
+			item({
+				item_type: "alert",
+				source_key: "chino-news-rss",
+				title: "Boil Water Notice",
+				source_url: "https://www.cityofchino.org/CivicAlerts.aspx?AID=1",
+				occurred_at: "2026-08-17T02:00:00.000Z",
+			}),
+			item({
+				item_type: "alert",
+				source_key: "chinohills-news-rss",
+				title: "Evacuation Warning",
+				source_url: "https://www.chinohills.org/CivicAlerts.aspx?AID=2",
+				occurred_at: "2026-08-17T02:00:00.000Z",
+			}),
+		];
+		const out = selectFireSafety(rows, NOW);
+		assert.deepEqual(out.map((r) => r.source_url).sort(), [
+			"https://www.chinohills.org/CivicAlerts.aspx?AID=2",
+			"https://www.cityofchino.org/CivicAlerts.aspx?AID=1",
 		]);
 	});
 });
@@ -713,6 +738,35 @@ describe("assembleBrief", () => {
 		assert.equal(new Set(p.sources).size, p.sources.length);
 	});
 
+	test("city Alert Center items render in Fire & safety under their city's label", () => {
+		const inputs = quietInputs();
+		inputs.fire = [
+			item({
+				item_type: "alert",
+				source_key: "chino-news-rss",
+				title: "Boil Water Notice",
+				source_url: "https://www.cityofchino.org/CivicAlerts.aspx?AID=1",
+				occurred_at: "2026-08-17T04:00:00.000Z",
+			}),
+			item({
+				item_type: "alert",
+				source_key: "chinohills-news-rss",
+				title: "Evacuation Warning",
+				source_url: "https://www.chinohills.org/CivicAlerts.aspx?AID=2",
+				occurred_at: "2026-08-17T04:00:00.000Z",
+			}),
+		];
+		const { post: p } = assembleBrief(inputs, NOW);
+		assert.match(
+			p.bodyMd,
+			/\[Boil Water Notice\]\(https:\/\/www\.cityofchino\.org\/CivicAlerts\.aspx\?AID=1\) \(City of Chino\)/,
+		);
+		assert.match(
+			p.bodyMd,
+			/\[Evacuation Warning\]\(https:\/\/www\.chinohills\.org\/CivicAlerts\.aspx\?AID=2\) \(City of Chino Hills\)/,
+		);
+	});
+
 	test("week-ahead events ship as frontmatter, not body, and join sources", () => {
 		const inputs = quietInputs();
 		inputs.calendarEvents = [
@@ -765,6 +819,63 @@ describe("assembleBrief", () => {
 		);
 		assert.ok(isLaWednesday(WEDNESDAY));
 		assert.ok(!isLaWednesday(NOW));
+	});
+});
+
+// buildDailyBrief queries a city source's 'alert' items separately from
+// FIRE_SOURCES (whose query pulls 'news_release' and 'alert' together) and
+// merges only those into the fire input — the guard against a city news
+// release leaking into Fire & safety lives in that query split, not in
+// selectFireSafety, so it can only be proven against a real db.
+describe("buildDailyBrief: city Alert Center query split", () => {
+	function seedItem(
+		db: Db,
+		sourceKey: string,
+		itemType: string,
+		opts: { title: string; url: string; occurredAt: string },
+	): void {
+		const sourceId = db.upsertSource({
+			key: sourceKey,
+			name: sourceKey,
+			base_url: "https://example.gov",
+			method: "rss",
+		});
+		const { id: documentId } = db.insertDocument({
+			source_id: sourceId,
+			url: opts.url,
+			doc_type: "feed",
+			content_hash: `hash-${opts.url}`,
+			raw_path: "/raw/path",
+		});
+		db.insertItem({
+			document_id: documentId,
+			source_url: opts.url,
+			item_type: itemType,
+			external_id: opts.url,
+			title: opts.title,
+			occurred_at: opts.occurredAt,
+		});
+	}
+
+	test("a city alert reaches Fire & safety; a city news release does not", () => {
+		const db = openDb(":memory:");
+		seedItem(db, "chino-news-rss", "alert", {
+			title: "Boil Water Notice",
+			url: "https://www.cityofchino.org/CivicAlerts.aspx?AID=1",
+			occurredAt: "2026-08-17T02:00:00.000Z",
+		});
+		seedItem(db, "chinohills-news-rss", "news_release", {
+			title: "New library hours announced",
+			url: "https://www.chinohills.org/CivicAlerts.aspx?AID=2",
+			occurredAt: "2026-08-17T02:00:00.000Z",
+		});
+
+		const { post } = buildDailyBrief(db, NOW);
+
+		assert.match(post.bodyMd, /## Fire & safety/);
+		assert.match(post.bodyMd, /Boil Water Notice/);
+		assert.match(post.bodyMd, /\(City of Chino\)/);
+		assert.doesNotMatch(post.bodyMd, /New library hours announced/);
 	});
 });
 
