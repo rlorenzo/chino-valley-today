@@ -8,6 +8,7 @@ import type { NewPost } from "../pipeline/posts.ts";
 import { parseMeta, queryItems } from "./queries.ts";
 import {
 	cleanTitle,
+	dedupeAlertIssuances,
 	localMeetingDate,
 	mdEscape,
 	mdLink,
@@ -20,7 +21,11 @@ interface GenResult {
 }
 
 export function generateAlerts(db: Db, now: Date): GenResult {
-	const items = queryItems(db, { itemTypes: ["alert"] });
+	// One advisory, re-issued as Updates, previously became one post per
+	// issuance — three "Weather Alert: Heat Advisory" posts for a single
+	// advisory. Keeping the earliest issuance also keeps the slug stable, so
+	// a re-issue resolves to the post that already exists.
+	const items = dedupeAlertIssuances(queryItems(db, { itemTypes: ["alert"] }));
 	const posts: NewPost[] = [];
 	const notes: string[] = [];
 	let activeCount = 0;

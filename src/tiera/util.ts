@@ -146,3 +146,66 @@ export function humanDateFromLocal(localDate: string): string {
 		timeZone: "UTC",
 	}).format(d);
 }
+
+// NWS re-issues an advisory as a series of Updates: same event, same end
+// time, same area, a new id every time. Both the brief and the alert-post
+// generator keyed on that id, so one Heat Advisory re-issued three times
+// rendered three "Active alert" lines and published three near-identical
+// posts. The advisory itself is (event, ends, areaDesc) — an Update that
+// genuinely extends the end time is a different advisory and should surface.
+export function alertAdvisoryKey(row: {
+	meta: string | null;
+	external_id: string | null;
+	source_url: string;
+}): string {
+	let meta: Record<string, unknown> = {};
+	try {
+		meta = row.meta ? (JSON.parse(row.meta) as Record<string, unknown>) : {};
+	} catch {
+		meta = {};
+	}
+	const part = (k: string) =>
+		typeof meta[k] === "string" ? (meta[k] as string).trim() : "";
+	const event = part("event");
+	const ends = part("ends");
+	const area = part("areaDesc");
+	// Without the three identifying fields there is nothing to collapse on;
+	// fall back to the issuance so unrelated alerts never merge.
+	if (!event || !ends) return `id:${row.external_id ?? row.source_url}`;
+	return `${event}|${ends}|${area}`;
+}
+
+// Keeps the EARLIEST issuance of each advisory. Deliberately not the latest:
+// the alert post's slug is derived from the row that survives here, so
+// keeping the first issuance means a re-issue maps to the post that already
+// exists instead of minting another one.
+export function dedupeAlertIssuances<
+	T extends {
+		id: number;
+		meta: string | null;
+		external_id: string | null;
+		source_url: string;
+	},
+>(rows: T[]): T[] {
+	const best = new Map<string, T>();
+	for (const row of rows) {
+		const key = alertAdvisoryKey(row);
+		const held = best.get(key);
+		if (!held) {
+			best.set(key, row);
+			continue;
+		}
+		const effective = (r: T): string => {
+			try {
+				const m = r.meta ? JSON.parse(r.meta) : {};
+				return typeof m.effective === "string" ? m.effective : "";
+			} catch {
+				return "";
+			}
+		};
+		const a = effective(row);
+		const b = effective(held);
+		if (a && b ? a < b : row.id < held.id) best.set(key, row);
+	}
+	return [...best.values()];
+}

@@ -1681,3 +1681,55 @@ describe("weatherGlyph", () => {
 		assert.ok(line?.includes("Sunny today, high 95 in Chino"));
 	});
 });
+
+describe("active weather alerts", () => {
+	const HEAT = {
+		event: "Heat Advisory",
+		ends: "2026-08-20T20:00:00-07:00",
+		areaDesc: "San Bernardino and Riverside County Valleys-The Inland Empire",
+	};
+	const title =
+		"Heat Advisory issued August 18 at 11:56AM PDT until August 20 at 8:00PM PDT by NWS San Diego CA";
+
+	function alertRow(id: number, effective: string): ItemRow {
+		return item({
+			source_key: "nws-alerts",
+			item_type: "alert",
+			external_id: `urn:oid:${id}`,
+			source_url: `https://api.weather.gov/alerts/${id}`,
+			title,
+			occurred_at: effective,
+			meta: JSON.stringify({ ...HEAT, messageType: "Update", effective }),
+		});
+	}
+
+	test("one advisory re-issued three times renders one alert", () => {
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			nwsAlerts: [
+				alertRow(1, "2026-08-17T11:56:00-07:00"),
+				alertRow(2, "2026-08-17T14:47:00-07:00"),
+				alertRow(3, "2026-08-17T16:58:00-07:00"),
+			],
+		};
+		const { post } = assembleBrief(inputs, NOW);
+		const occurrences = post.bodyMd.split("**Active alert:**").length - 1;
+		assert.equal(occurrences, 1);
+	});
+
+	test("the advisory text is prose and only the label is a citation badge", () => {
+		// A 90-character title inside a nowrap citation badge produced a badge
+		// too wide to break, which overflowed the column into the rail.
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			nwsAlerts: [alertRow(1, "2026-08-17T11:56:00-07:00")],
+		};
+		const { post } = assembleBrief(inputs, NOW);
+		assert.ok(
+			post.bodyMd.includes("([NWS](https://api.weather.gov/alerts/1))"),
+		);
+		assert.ok(!post.bodyMd.includes(`[${title}]`));
+		// The advisory itself still reads in full.
+		assert.ok(post.bodyMd.includes("Heat Advisory issued August 18"));
+	});
+});

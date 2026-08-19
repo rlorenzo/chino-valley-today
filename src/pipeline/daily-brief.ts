@@ -28,6 +28,7 @@ import {
 import { type ItemRow, parseMeta, queryItems } from "../tiera/queries.ts";
 import {
 	cleanTitle,
+	dedupeAlertIssuances,
 	dedupeByKey,
 	humanDateFromLocal,
 	localMeetingDate,
@@ -383,7 +384,11 @@ export function selectActiveAlerts(
 	alertItems: ItemRow[],
 	now: Date,
 ): ItemRow[] {
-	const deduped = dedupeByKey(alertItems, (r) => r.external_id ?? r.source_url);
+	// Collapse re-issuances of the same advisory before filtering, or one
+	// Heat Advisory updated three times reads as three separate alerts.
+	const deduped = dedupeAlertIssuances(
+		dedupeByKey(alertItems, (r) => r.external_id ?? r.source_url),
+	);
 	return deduped.filter((row) => {
 		if (!cleanTitle(row.title)) return false;
 		const ends = metaString(parseMeta(row.meta), "ends");
@@ -964,8 +969,12 @@ export function assembleBrief(
 	}
 	const activeAlerts = selectActiveAlerts(inputs.nwsAlerts, now);
 	for (const alert of activeAlerts) {
+		// The advisory text is prose and the LINK LABEL is short. Citation
+		// links in prose render as a nowrap badge, so putting a 90-character
+		// advisory title inside one produced a badge too wide to wrap that
+		// overflowed the column and crossed into the calendar rail.
 		alertLines.push(
-			`**Active alert:** ${mdLink((alert.title ?? "").trim(), cite(alert.source_url))}`,
+			`**Active alert:** ${mdEscape((alert.title ?? "").trim())} (${mdLink("NWS", cite(alert.source_url))})`,
 			"",
 		);
 	}
