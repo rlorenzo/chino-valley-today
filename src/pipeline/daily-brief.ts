@@ -897,6 +897,12 @@ export function assembleBrief(
 	const weatherLine = renderWeatherLine(weather, (label, url) =>
 		mdLink(label, cite(url)),
 	);
+	if (weather.length > 0) {
+		// It needed no heading when it opened the brief as the lede. Sitting
+		// mid-document above the calendar, an unheaded line reads as an orphan
+		// sentence trailing the section above it.
+		weatherLines.push("## Weather", "");
+	}
 	if (weatherLine) {
 		weatherLines.push(weatherLine, "");
 	} else {

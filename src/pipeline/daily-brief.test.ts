@@ -1601,6 +1601,8 @@ describe("brief section order", () => {
 		};
 		const { post } = assembleBrief(inputs, NOW);
 		assert.ok(post.bodyMd.includes("Sunny today, high 95 in Chino"));
+		// Mid-document it needs a heading; unheaded, it trails the section above.
+		assert.ok(post.bodyMd.includes("## Weather"));
 		// The verbose NWS sentence must not also be rendered.
 		assert.ok(!post.bodyMd.includes("West wind 0 to 10 mph"));
 	});
