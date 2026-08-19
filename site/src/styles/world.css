@@ -204,7 +204,13 @@ img {
 	border: 1.5px solid var(--stamp);
 	padding: 0.06em 0.4em 0.02em;
 	text-decoration: none;
-	white-space: nowrap;
+	/* Not nowrap. Short labels (a hostname, "NWS") never wrap anyway, but a
+	   long one used to render as a badge that could not break and punched out
+	   of the column into the rail beside it. Wrapping costs nothing in the
+	   common case and bounds the damage in the rare one. */
+	white-space: normal;
+	max-width: 100%;
+	overflow-wrap: anywhere;
 	margin-inline: 0.12em;
 	translate: 0 -0.06em;
 }
