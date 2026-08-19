@@ -745,6 +745,19 @@ after the feature was code-complete):**
   invariants; `npm test` glob widened to `scripts/**` so the ToS-drift watchdog
   tests actually run in CI (they were silently skipped).
 
+**Brief layout, operator decision 2026-08-18:** the section order is now
+alerts → fire & safety → in the local press → new on the record → weather →
+today, pinned by test. Press headlines lead the reading (anything
+time-critical still outranks them); the forecast is reference material, so it
+sits just above the calendar as one condensed line composed from the
+structured gridpoint fields — "Sunny today, high 95 in Chino and 90 in Chino
+Hills; mostly clear overnight, lows 69 and 65" — stating a shared condition
+once and naming each city only when their conditions differ, falling back to
+the full NWS text when a period is missing. The heading reads "In the local
+press" rather than "Headlines elsewhere"; the `.headlines-elsewhere` CSS class
+and internal identifiers keep their names, because already-published briefs
+carry that class in their stored HTML.
+
 ### Task 4.3 - Daily brief assembler — CODE COMPLETE & MERGED (PR #27, 2026-08-18)
 
 New post type `daily-brief`, one per morning (~6am Pacific systemd timer, new

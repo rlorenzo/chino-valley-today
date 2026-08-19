@@ -6,6 +6,7 @@ import {
 	assembleBrief,
 	assertPrerequisitesFresh,
 	type BriefInputs,
+	type CityForecast,
 	checkHeadlinesFreshness,
 	DAILY_BRIEF_PREREQUISITE_SOURCES,
 	decodeEntities,
@@ -14,6 +15,7 @@ import {
 	jaccardSimilarity,
 	laTimeOf,
 	postTitleFromFile,
+	renderWeatherLine,
 	selectActiveAlerts,
 	selectFireSafety,
 	selectFreshLicenseEvents,
@@ -64,6 +66,8 @@ function forecastItem(over: {
 	body: string;
 	external_id?: string;
 	source_url?: string;
+	temperature?: number;
+	shortForecast?: string;
 }): ItemRow {
 	return item({
 		item_type: "forecast_period",
@@ -77,6 +81,12 @@ function forecastItem(over: {
 			city: over.city,
 			periodName: over.periodName,
 			isDaytime: over.isDaytime,
+			...(over.temperature === undefined
+				? {}
+				: { temperature: over.temperature }),
+			...(over.shortForecast === undefined
+				? {}
+				: { shortForecast: over.shortForecast }),
 		}),
 	});
 }
@@ -1341,7 +1351,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 
 		// Verified: the heading is markdown like every other section's, and the
 		// list is raw HTML carrying the attribution link class
-		assert.ok(post.bodyMd.includes("## Headlines elsewhere"));
+		assert.ok(post.bodyMd.includes("## In the local press"));
 		assert.ok(post.bodyMd.includes('<ul class="headlines-elsewhere">'));
 		assert.ok(post.bodyMd.includes('<a class="headline-link"'));
 		assert.ok(
@@ -1387,11 +1397,211 @@ describe("headlines elsewhere deduplication and selection", () => {
 		const { post, notes } = assembleBrief(inputs, NOW);
 
 		assert.ok(!post.bodyMd.includes("evil.example"));
-		assert.ok(!post.bodyMd.includes("Headlines elsewhere"));
+		assert.ok(!post.bodyMd.includes("In the local press"));
 		assert.equal(post.attributions, undefined);
 		assert.ok(notes.some((n) => n.includes("off-allowlist URL skipped")));
 		// With nothing else to report, the empty section must not suppress the
 		// quiet-morning line.
 		assert.ok(post.bodyMd.includes("A quiet morning"));
+	});
+});
+
+describe("renderWeatherLine", () => {
+	const link = (label: string, url: string) => `[${label}](${url})`;
+
+	function city(
+		name: string,
+		high: number,
+		low: number,
+		dayCond = "Sunny",
+		nightCond = "Mostly Clear",
+	): CityForecast {
+		return {
+			city: name,
+			sourceUrl: `https://forecast.weather.gov/${name}`,
+			periods: [
+				{
+					name: "Today",
+					body: "",
+					isDaytime: true,
+					temperature: high,
+					shortForecast: dayCond,
+				},
+				{
+					name: "Tonight",
+					body: "",
+					isDaytime: false,
+					temperature: low,
+					shortForecast: nightCond,
+				},
+			],
+		};
+	}
+
+	test("states a shared condition once and splits only the numbers", () => {
+		const line = renderWeatherLine(
+			[city("Chino", 95, 69), city("Chino Hills", 90, 65)],
+			link,
+		);
+		assert.equal(
+			line,
+			"Sunny today, high 95 in Chino and 90 in Chino Hills; mostly clear overnight, lows 69 and 65. " +
+				"(NWS: [Chino](https://forecast.weather.gov/Chino) · [Chino Hills](https://forecast.weather.gov/Chino Hills))",
+		);
+	});
+
+	test("names each city when the conditions actually differ", () => {
+		const line = renderWeatherLine(
+			[
+				city("Chino", 95, 69),
+				city("Chino Hills", 90, 65, "Patchy Fog then Sunny"),
+			],
+			link,
+		);
+		assert.ok(line?.includes("**Chino**: sunny, 95/69"));
+		assert.ok(line?.includes("**Chino Hills**: patchy fog then sunny, 90/65"));
+	});
+
+	test("every city keeps its own NWS link, so provenance stays unambiguous", () => {
+		const line = renderWeatherLine(
+			[city("Chino", 95, 69), city("Chino Hills", 90, 65)],
+			link,
+		);
+		assert.ok(line?.includes("https://forecast.weather.gov/Chino)"));
+		assert.ok(line?.includes("https://forecast.weather.gov/Chino Hills)"));
+	});
+
+	test("a single city reads 'low', not 'lows'", () => {
+		const line = renderWeatherLine([city("Chino", 95, 69)], link);
+		assert.ok(line?.includes("low 69"));
+		assert.ok(!line?.includes("lows"));
+	});
+
+	test("returns null rather than guess when a period is missing", () => {
+		// Half a forecast condensed into one line would silently drop the
+		// overnight low; the caller falls back to the full forecast text.
+		const partial = city("Chino", 95, 69);
+		partial.periods = [partial.periods[0]];
+		assert.equal(renderWeatherLine([partial], link), null);
+		assert.equal(renderWeatherLine([], link), null);
+	});
+
+	test("returns null when the structured temperature is absent", () => {
+		const noTemp = city("Chino", 95, 69);
+		noTemp.periods[1].temperature = null;
+		assert.equal(renderWeatherLine([noTemp], link), null);
+	});
+});
+
+describe("brief section order", () => {
+	test("press leads the reading, weather sits just above the calendar", () => {
+		// The order is an editorial decision, not an accident of how
+		// assembleBrief happens to be written, so it gets pinned here:
+		// alerts -> fire -> press -> record -> weather -> today.
+		const forecast = [
+			forecastItem({
+				city: "Chino",
+				periodName: "Today",
+				isDaytime: true,
+				occurred_at: "2026-08-17T13:00:00.000Z",
+				external_id: "grid:chino:day",
+				body: "Sunny, high near 95.",
+				temperature: 95,
+				shortForecast: "Sunny",
+			}),
+			forecastItem({
+				city: "Chino",
+				periodName: "Tonight",
+				isDaytime: false,
+				occurred_at: "2026-08-17T13:00:00.000Z",
+				external_id: "grid:chino:night",
+				body: "Mostly clear, low around 69.",
+				temperature: 69,
+				shortForecast: "Mostly Clear",
+			}),
+		];
+
+		const press = item({
+			source_key: "champion-news",
+			source_url:
+				"https://www.championnewspapers.com/community_news/article_aaaaaaaa-0000-0000-0000-000000000000.html",
+			title: "Chino divided on permitting wall murals",
+			body: "In a rare split decision, the council voted 3-2.",
+			occurred_at: "2026-08-15T00:00:00.000Z",
+			meta: JSON.stringify({
+				outlet: "The Champion",
+				city: "Chino",
+				chinoRelevant: true,
+			}),
+		});
+
+		const fire = item({
+			source_key: "sbcfire-news",
+			source_url: "https://sbcfire.org/news/structure-fire",
+			title: "Crews knock down structure fire on Riverside Drive",
+			occurred_at: "2026-08-17T09:00:00.000Z",
+			// sbcfire-news is a county-wide feed; only Chino-relevant items run.
+			meta: JSON.stringify({ chinoRelevant: true }),
+		});
+
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			forecast,
+			fire: [fire],
+			headlines: [press],
+			headlinesFreshness: {
+				"champion-news": {
+					isFresh: true,
+					status: "success",
+					finishedAt: "2026-08-15T08:00:00.000Z",
+					tosStatus: "enabled",
+				},
+			},
+		};
+
+		const { post } = assembleBrief(inputs, NOW);
+		const md = post.bodyMd;
+
+		const fireAt = md.indexOf("## Fire & safety");
+		const pressAt = md.indexOf("## In the local press");
+		const weatherAt = md.indexOf("Sunny today, high 95");
+
+		assert.ok(fireAt >= 0 && pressAt >= 0 && weatherAt >= 0);
+		// Anything time-critical still outranks a newspaper story.
+		assert.ok(fireAt < pressAt, "fire & safety must precede the press section");
+		// The forecast is reference material, not the lede.
+		assert.ok(pressAt < weatherAt, "press must precede the weather line");
+	});
+
+	test("the condensed weather line replaces the two-paragraph forecast", () => {
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			forecast: [
+				forecastItem({
+					city: "Chino",
+					periodName: "Today",
+					isDaytime: true,
+					occurred_at: "2026-08-17T13:00:00.000Z",
+					external_id: "grid:chino:day",
+					body: "Sunny, with a high near 95. West wind 0 to 10 mph.",
+					temperature: 95,
+					shortForecast: "Sunny",
+				}),
+				forecastItem({
+					city: "Chino",
+					periodName: "Tonight",
+					isDaytime: false,
+					occurred_at: "2026-08-17T13:00:00.000Z",
+					external_id: "grid:chino:night",
+					body: "Mostly clear, with a low around 69. West wind 0 to 10 mph.",
+					temperature: 69,
+					shortForecast: "Mostly Clear",
+				}),
+			],
+		};
+		const { post } = assembleBrief(inputs, NOW);
+		assert.ok(post.bodyMd.includes("Sunny today, high 95 in Chino"));
+		// The verbose NWS sentence must not also be rendered.
+		assert.ok(!post.bodyMd.includes("West wind 0 to 10 mph"));
 	});
 });

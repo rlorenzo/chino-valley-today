@@ -195,7 +195,13 @@ function metaString(meta: Record<string, unknown>, key: string): string | null {
 export interface CityForecast {
 	city: string;
 	sourceUrl: string;
-	periods: Array<{ name: string; body: string }>;
+	periods: Array<{
+		name: string;
+		body: string;
+		isDaytime: boolean;
+		temperature: number | null;
+		shortForecast: string | null;
+	}>;
 }
 
 // Today's daytime + tonight's period per city. Rows arrive in id order;
@@ -237,15 +243,99 @@ export function selectWeather(
 		const periods: CityForecast["periods"] = [];
 		for (const row of [day, night]) {
 			if (!row?.body?.trim()) continue;
-			const name = metaString(parseMeta(row.meta), "periodName");
+			const meta = parseMeta(row.meta);
+			const name = metaString(meta, "periodName");
 			if (!name) continue;
-			periods.push({ name, body: row.body.replace(/\s+/g, " ").trim() });
+			periods.push({
+				name,
+				body: row.body.replace(/\s+/g, " ").trim(),
+				isDaytime: meta.isDaytime === true,
+				temperature:
+					typeof meta.temperature === "number" ? meta.temperature : null,
+				shortForecast: metaString(meta, "shortForecast"),
+			});
 		}
 		const sourceUrl = (day ?? night)?.source_url;
 		if (periods.length === 0 || !sourceUrl) continue;
 		out.push({ city, sourceUrl, periods });
 	}
 	return out;
+}
+
+// The forecast is the least urgent thing in the brief, so it earns one line
+// rather than two paragraphs. When every city shares a condition the condition
+// is said once and only the numbers split; when the conditions genuinely
+// differ, each city is named. Composed from the structured gridpoint fields
+// (temperature, shortForecast), never by parsing the prose sentence — and it
+// returns null rather than guess if a city is missing either period, so the
+// caller can fall back to the full forecast text.
+export function renderWeatherLine(
+	weather: CityForecast[],
+	link: (label: string, url: string) => string,
+): string | null {
+	if (weather.length === 0) return null;
+
+	const cities = weather.map((fc) => ({
+		city: fc.city,
+		sourceUrl: fc.sourceUrl,
+		day: fc.periods.find((p) => p.isDaytime),
+		night: fc.periods.find((p) => !p.isDaytime),
+	}));
+
+	// Every city needs both periods with a temperature and a condition, or the
+	// condensed form would quietly drop half a city's forecast.
+	const complete = cities.every(
+		(c) =>
+			c.day?.temperature != null &&
+			c.day.shortForecast &&
+			c.night?.temperature != null &&
+			c.night.shortForecast,
+	);
+	if (!complete) return null;
+
+	const attribution = `(NWS: ${cities
+		.map((c) => link(mdEscape(c.city), c.sourceUrl))
+		.join(" · ")})`;
+
+	const joinBits = (bits: string[]): string => {
+		if (bits.length === 1) return bits[0];
+		if (bits.length === 2) return `${bits[0]} and ${bits[1]}`;
+		return `${bits.slice(0, -1).join(", ")} and ${bits.at(-1)}`;
+	};
+	// Highs name their city ("95 in Chino and 90 in Chino Hills"); the lows then
+	// ride the order the highs just established ("lows 69 and 65") rather than
+	// repeating both city names in one sentence.
+	const joinNamed = (pick: (c: (typeof cities)[number]) => number): string =>
+		joinBits(cities.map((c) => `${pick(c)} in ${mdEscape(c.city)}`));
+	const joinBare = (pick: (c: (typeof cities)[number]) => number): string =>
+		joinBits(cities.map((c) => `${pick(c)}`));
+
+	const sameCondition = (pick: (c: (typeof cities)[number]) => string) =>
+		new Set(cities.map((c) => pick(c).toLowerCase())).size === 1;
+
+	const dayCond = (c: (typeof cities)[number]) => c.day?.shortForecast ?? "";
+	const nightCond = (c: (typeof cities)[number]) =>
+		c.night?.shortForecast ?? "";
+
+	if (sameCondition(dayCond) && sameCondition(nightCond)) {
+		const day = mdEscape(dayCond(cities[0]).toLowerCase());
+		const night = mdEscape(nightCond(cities[0]).toLowerCase());
+		const highs = joinNamed((c) => c.day?.temperature ?? 0);
+		const lows = joinBare((c) => c.night?.temperature ?? 0);
+		const lowLabel = cities.length === 1 ? "low" : "lows";
+		return `${day.charAt(0).toUpperCase()}${day.slice(1)} today, high ${highs}; ${night} overnight, ${lowLabel} ${lows}. ${attribution}`;
+	}
+
+	// Conditions differ, so each city has to be named with its own.
+	const perCity = cities
+		.map(
+			(c) =>
+				`**${mdEscape(c.city)}**: ${mdEscape(
+					dayCond(c).toLowerCase(),
+				)}, ${c.day?.temperature}/${c.night?.temperature}`,
+		)
+		.join(". ");
+	return `${perCity}. ${attribution}`;
 }
 
 // Same "active" rule as the alert post generator (src/tiera/alerts.ts):
@@ -790,41 +880,58 @@ export function assembleBrief(
 		return url;
 	};
 
+	// Each section builds its own lines; the single ORDER list below is what
+	// decides where they land. Reordering the brief is a one-line change there,
+	// not a rearrangement of this whole function.
 	const body: string[] = [];
+	const alertLines: string[] = [];
+	const fireLines: string[] = [];
+	const pressLines: string[] = [];
+	const recordLines: string[] = [];
+	const weatherLines: string[] = [];
+	const todayLines: string[] = [];
 
-	// Weather line (no heading — it opens the brief).
+	// Weather: one condensed line, with the full forecast text as the fallback
+	// when a city is missing a period and the line cannot be composed honestly.
 	const weather = selectWeather(inputs.forecast, now);
-	for (const cityFc of weather) {
-		const text = cityFc.periods
-			.map((p) => `${p.name}: ${mdEscape(p.body)}`)
-			.join(" ");
-		body.push(
-			`**${mdEscape(cityFc.city)}** — ${text} (${mdLink("NWS forecast", cite(cityFc.sourceUrl))})`,
-		);
-		body.push("");
+	const weatherLine = renderWeatherLine(weather, (label, url) =>
+		mdLink(label, cite(url)),
+	);
+	if (weatherLine) {
+		weatherLines.push(weatherLine, "");
+	} else {
+		for (const cityFc of weather) {
+			const text = cityFc.periods
+				.map((p) => `${p.name}: ${mdEscape(p.body)}`)
+				.join(" ");
+			weatherLines.push(
+				`**${mdEscape(cityFc.city)}** — ${text} (${mdLink("NWS forecast", cite(cityFc.sourceUrl))})`,
+				"",
+			);
+		}
 	}
 	const activeAlerts = selectActiveAlerts(inputs.nwsAlerts, now);
 	for (const alert of activeAlerts) {
-		body.push(
+		alertLines.push(
 			`**Active alert:** ${mdLink((alert.title ?? "").trim(), cite(alert.source_url))}`,
+			"",
 		);
-		body.push("");
 	}
 	notes.push(
-		`weather: ${weather.length} city forecast(s), ${activeAlerts.length} active alert(s)`,
+		`weather: ${weather.length} city forecast(s), ${activeAlerts.length} active alert(s)${weatherLine ? "" : " (condensed line unavailable; used full text)"}`,
 	);
 
 	// Fire & safety: verbatim title + source link only — never body text.
 	const fire = selectFireSafety(inputs.fire, now);
 	if (fire.length > 0) {
-		body.push("## Fire & safety", "");
+		fireLines.push("## Fire & safety", "");
 		for (const row of fire) {
 			const label = FIRE_LABEL[row.source_key] ?? row.source_key;
-			body.push(
+			fireLines.push(
 				`- ${mdLink((row.title ?? "").trim(), cite(row.source_url))} (${label})`,
 			);
 		}
-		body.push("");
+		fireLines.push("");
 	}
 	notes.push(`fire & safety: ${fire.length} item(s) in the last 24h`);
 
@@ -837,22 +944,22 @@ export function assembleBrief(
 	const events = selectTodayEvents(inputs.calendarEvents, now);
 	const marketDay = isLaWednesday(now);
 	if (meetings.length > 0 || events.length > 0 || marketDay) {
-		body.push("## Today", "");
+		todayLines.push("## Today", "");
 		for (const m of meetings) {
 			const time = m.timeLabel ? ` — ${m.timeLabel}` : "";
-			body.push(`- **Meeting:** ${mdLink(m.title, cite(m.url))}${time}`);
+			todayLines.push(`- **Meeting:** ${mdLink(m.title, cite(m.url))}${time}`);
 		}
 		for (const e of events) {
 			const time = e.timeLabel ? `${e.timeLabel} — ` : "";
 			const venue = e.venue ? ` at ${mdEscape(e.venue)}` : "";
-			body.push(`- ${time}${mdLink(e.title, cite(e.sourceUrl))}${venue}`);
+			todayLines.push(`- ${time}${mdLink(e.title, cite(e.sourceUrl))}${venue}`);
 		}
 		if (marketDay) {
-			body.push(
+			todayLines.push(
 				`- Heritage Farmers Market, every Wednesday 3:30–7:30pm at the Shoppes (${mdLink("heritagefarmersmarket.org", cite(FARMERS_MARKET_URL))})`,
 			);
 		}
-		body.push("");
+		todayLines.push("");
 	}
 	notes.push(`today: ${meetings.length} meeting(s), ${events.length} event(s)`);
 
@@ -879,20 +986,22 @@ export function assembleBrief(
 	const newPosts = selectNewRecordPosts(inputs.publishedPosts, sinceIso);
 	const licenses = selectFreshLicenseEvents(inputs.licenseEvents, now);
 	if (newPosts.length > 0 || licenses.length > 0) {
-		body.push("## New on the record", "");
+		recordLines.push("## New on the record", "");
 		for (const p of newPosts) {
-			body.push(`- [${mdEscape(titleFor(p))}](/posts/${p.slug}/)`);
+			recordLines.push(`- [${mdEscape(titleFor(p))}](/posts/${p.slug}/)`);
 		}
 		for (const row of licenses) {
-			body.push(`- ${mdLink((row.title ?? "").trim(), cite(row.source_url))}`);
+			recordLines.push(
+				`- ${mdLink((row.title ?? "").trim(), cite(row.source_url))}`,
+			);
 		}
-		body.push("");
+		recordLines.push("");
 	}
 	notes.push(
 		`new on the record: ${newPosts.length} post(s) since ${sinceIso}, ${licenses.length} license event(s)`,
 	);
 
-	// Headlines elsewhere: secondary community press reporting (The Champion,
+	// In the local press: secondary community press reporting (The Champion,
 	// Daily Bulletin). URLs join frontmatter attributions[], NEVER sources[].
 	const headlines = selectHeadlinesElsewhere(
 		inputs.headlines,
@@ -906,8 +1015,8 @@ export function assembleBrief(
 		// The heading is markdown like every other section's, so it inherits the
 		// same .prose h2 treatment; only the list needs raw HTML, for the anchor
 		// attributes markdown links cannot carry.
-		body.push(
-			"## Headlines elsewhere",
+		pressLines.push(
+			"## In the local press",
 			"",
 			'<ul class="headlines-elsewhere">',
 			...listItems,
@@ -916,6 +1025,20 @@ export function assembleBrief(
 		);
 	}
 	notes.push(`headlines elsewhere: ${listItems.length} headline(s) selected`);
+
+	// THE ORDER OF THE BRIEF. Anything time-critical first: an active weather
+	// alert or an overnight incident outranks everything. Then what a reader
+	// came to read — other outlets' reporting, then our own new record. The
+	// forecast is reference material, not news, so it sits just above today's
+	// calendar rather than opening the page.
+	body.push(
+		...alertLines,
+		...fireLines,
+		...pressLines,
+		...recordLines,
+		...weatherLines,
+		...todayLines,
+	);
 
 	// A quiet day ships honestly: weather + schedule, plainly labeled. The
 	// label states what the morning is, not a roll call of alarming things
