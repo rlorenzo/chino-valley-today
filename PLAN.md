@@ -888,7 +888,7 @@ absorb fire/EMS? fifth topic mark?), and move topic classification from
 site-side derivation (`lib/record.ts`) into the pipeline, which owns the
 source keys and item types.
 
-### Task 4.6 - City Alert Center feeds — IN REVIEW (2026-08-19)
+### Task 4.6 - City Alert Center feeds — IN REVIEW (PR #30, 2026-08-19)
 
 Extend `chino-news-rss` and `chinohills-news-rss` to ingest each city's Alert
 Center feed (ModID=63, CID=All-0) as `alert` items, and surface city alerts
