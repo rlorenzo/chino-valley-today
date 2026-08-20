@@ -869,7 +869,7 @@ now armed (press 4x daily, ToS check Sundays) and a smoke run of
 Until that step the feature was inert — the code was there and nothing called
 it, precisely the failure mode that left cvt-tiera shipped and disabled, and
 nothing alerted because the drift watchdog only compares the checkout to
-origin/main. A unit-install drift check is the follow-up — built in PR #32,
+origin/main. A unit-install drift check is the follow-up — built in PR #32 (merged 2026-08-20),
 which extends `check-code-drift.sh` on the existing `cvt-drift-watch.timer`
 rather than adding a unit that would itself have needed a manual install to
 start working.
@@ -898,7 +898,7 @@ Astro content collection stays the last-line validator.
 - Public HTTP watchdog (`src/pipeline/brief-health.ts`) verifying DB status + bounded HTTP GET to `/brief/YYYY-MM-DD/` (10s timeout), marking `/health` `pipeline=stale` on failure.
 - Active in 7-day operational verification gate.
 
-**Production incident 2026-08-20 — one dead source cost the whole brief (fixed, PR #33):**
+**Production incident 2026-08-20 — one dead source cost the whole brief (fixed, PR #33, merged 2026-08-20):**
 
 `cbwcd.org`, a water district's event calendar carrying compost giveaways and
 holiday closures, stopped answering entirely (TCP connects, zero bytes, both
@@ -941,7 +941,44 @@ Fixed by tiering the prerequisites:
   `pipeline=fresh`, alerting on its **absence**.
 
 Day 3 of the 7-day gate is a FAIL plus manual recovery, not a pass; the streak
-restarts once PR #33 deploys.
+restarts once PR #33 deploys, which it did the same afternoon.
+
+**Production incident 2026-08-20 (second) — a root-run deploy broke CI
+deploys (fixed, PR #34, merged 2026-08-20):**
+
+Recovering the brief above, `scripts/deploy.sh local` was run by hand on the
+droplet over an `ssh root@` session. It published correctly and left
+`site/node_modules`, `site/dist` and part of `/var/www/chinovalley.today`
+owned by root. `local` and `host-update` build inside trees owned by the
+unprivileged `cvtoday` account, which is what the timers and CI's
+forced-command key run as.
+
+The next two CI deploys therefore failed, ~90 minutes later, with no
+diagnostic beyond:
+
+```text
+==> building on host from the local checkout
+##[error]Process completed with exit code 243.
+```
+
+`npm ci` deletes `node_modules` before reinstalling it, so it hit EACCES on the
+root-owned tree about 1.5s in — and `npm ci --silent` swallowed the message.
+The release prune would have failed the same way (exit 73) once five more
+releases accumulated.
+
+`deploy/README.md` already warned that `deploy.sh site` from a developer
+machine lands files owned by the wrong uid. The hazard was documented and
+never enforced, one code path over — the same shape as the prerequisite gate
+above ignoring `run-group.sh`'s "a source being down for a day is normal; it
+must not cost us the other twelve". **A principle written into one layer is
+worth grepping for the layer that has not heard about it.**
+
+Fixed in PR #34: `local` and `host-update` refuse to run as root (exit 77),
+naming the owning account and the `sudo -u` that fixes it, with
+`CVT_ALLOW_ROOT_DEPLOY=1` as the override for a genuinely root-owned install.
+Both `npm ci` calls dropped `--silent`. CI is unaffected — its key
+authenticates as `cvtoday`, so the guard cannot fire on the deploy path.
+Recovery on the host was `chown -R cvtoday:cvtoday` over both trees.
 
 ### Task 4.4 - Front page leads with Today
 
