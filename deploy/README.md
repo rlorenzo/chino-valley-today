@@ -222,6 +222,25 @@ changes at all. Nothing reported the gap; the droplet ran two merges behind for
 a day. If that entry is ever reset to `local`, code deploys silently stop again
 and only `cvt-drift-watch` will say so.
 
+**Never run `local` or `host-update` as root.** Both build inside
+`/srv/chino-valley-today/site` and publish into `/var/www/chinovalley.today`,
+and both directories belong to the `cvtoday` service account that the timers
+and CI run as. As root, everything npm and Astro write lands root-owned:
+`node_modules`, `dist`, and the new release directory. The next unprivileged
+deploy then dies inside `npm ci`, which deletes `node_modules` before
+reinstalling it, and the release prune fails the same way (exit 73).
+
+That is not theoretical. On 2026-08-20 a hand-run `deploy.sh local` over an
+`ssh root@` session published correctly and then broke the next two CI deploys,
+which failed with a bare `exit 243` and no message — `npm ci --silent` had
+swallowed the `EACCES`. Recovery is a `chown -R cvtoday:cvtoday` over both
+trees.
+
+`deploy.sh` now refuses both subcommands as root (exit 77) and names the owning
+account in the error. `CVT_ALLOW_ROOT_DEPLOY=1` overrides it, and is only
+correct on an install where those directories genuinely belong to root. The
+`npm ci` calls no longer pass `--silent`, so a failure says why.
+
 ### Upgrading a host provisioned before 2026-08-18
 
 The forced command lives on the host, not in this repo, so merging the change
