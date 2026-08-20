@@ -869,7 +869,10 @@ now armed (press 4x daily, ToS check Sundays) and a smoke run of
 Until that step the feature was inert — the code was there and nothing called
 it, precisely the failure mode that left cvt-tiera shipped and disabled, and
 nothing alerted because the drift watchdog only compares the checkout to
-origin/main. A unit-install drift check is the follow-up.
+origin/main. A unit-install drift check is the follow-up — built in PR #32,
+which extends `check-code-drift.sh` on the existing `cvt-drift-watch.timer`
+rather than adding a unit that would itself have needed a manual install to
+start working.
 `checkDegradedSources` needed no new unit; it rides the existing
 `cvt-brief-watch.timer`.
 
@@ -894,6 +897,51 @@ Astro content collection stays the last-line validator.
 - Service dependencies (`After`/`Wants` in `deploy/systemd/cvt-brief.service`) and runner retry loop in `scripts/run-brief.sh` (6 attempts $\times$ 30s).
 - Public HTTP watchdog (`src/pipeline/brief-health.ts`) verifying DB status + bounded HTTP GET to `/brief/YYYY-MM-DD/` (10s timeout), marking `/health` `pipeline=stale` on failure.
 - Active in 7-day operational verification gate.
+
+**Production incident 2026-08-20 — one dead source cost the whole brief (fixed, PR #33):**
+
+`cbwcd.org`, a water district's event calendar carrying compost giveaways and
+holiday closures, stopped answering entirely (TCP connects, zero bytes, both
+IPv4 and IPv6, confirmed from the droplet and externally). Because
+`DAILY_BRIEF_PREREQUISITE_SOURCES` was a flat list of 15 and
+`assertPrerequisitesFresh` blocked on any one of them, `cvt-brief.service`
+exited 1 and no brief published: readers lost an active heat advisory, the
+day's council schedule and the forecast because a compost giveaway could not
+be confirmed. `cvt-tiera` had succeeded at 05:50 PT and refreshed `built=`, so
+the site kept looking healthy; `cvt-brief-watch` correctly set
+`pipeline=stale` at 08:00 PT. `/health` was not itself stale, it was
+accurately reporting a missing brief.
+
+This inverted the contract the scrape layer already worked under: "A source
+being down for a day is normal; it must not cost us the other twelve"
+(`scripts/run-group.sh`). It also meant the 7-day gate above could be broken
+by any one of fifteen third-party sites having a bad morning.
+
+Fixed by tiering the prerequisites:
+
+- `BLOCKING_PREREQUISITE_SOURCES` = `nws-forecast`, `nws-alerts` only. They
+  block because the brief renders an "Active alert" section, and a brief
+  showing no alert *because the alert feed failed* asserts something false
+  about a heat advisory or an evacuation. That is the only case where
+  publishing is worse than not publishing.
+- `OPTIONAL_PREREQUISITE_SOURCES` = the other 13. The brief publishes and each
+  unreachable source is named in the section it feeds (`PREREQUISITE_SECTIONS`
+  / `PREREQUISITE_LABEL`), so an empty **Today** reads as "we could not reach
+  the library calendar" rather than "nothing is happening". A degraded section
+  renders even when otherwise empty, the reader never sees the internal scrape
+  key, and the quiet-morning line is suppressed whenever anything degraded.
+- The retry loop in `scripts/run-brief.sh` now re-scrapes the stale *blocking*
+  sources between attempts. It previously re-ran the same read-only check with
+  nothing re-fetched, so against a hard failure all six attempts were
+  guaranteed identical. Now 4 attempts $\times$ 30s, worst case ~15.5 min
+  against the unit's `TimeoutStartSec=20min`, arithmetic documented in-script.
+- `CVT_HEARTBEAT_URL_BRIEF` removed: the monitoring plan in use has no
+  heartbeat monitor type, so it was dead code that read as a safety net. The
+  live signal is keyword detection on `/health` for the literal
+  `pipeline=fresh`, alerting on its **absence**.
+
+Day 3 of the 7-day gate is a FAIL plus manual recovery, not a pass; the streak
+restarts once PR #33 deploys.
 
 ### Task 4.4 - Front page leads with Today
 
