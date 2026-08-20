@@ -922,7 +922,7 @@ non-empty day. No new scraper keys and no new systemd units (both scrapers
 already run in the frequent group), so this structurally cannot repeat the
 Task 4.2 uninstalled-timer gap.
 
-### Task 4.7 - Student press + NBC4 ingestion — IN REVIEW (2026-08-19)
+### Task 4.7 - Student press + NBC4 ingestion — IN REVIEW (PR #31, 2026-08-19)
 
 Four feed-based secondary-press sources join headlines-elsewhere:
 `quest-news` (Don Lugo HS; inherently local, meta.city Chino),
