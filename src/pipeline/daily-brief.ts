@@ -285,7 +285,7 @@ export const PREREQUISITE_LABEL: Record<string, string> = {
 	"sbparks-events": "San Bernardino County Parks events",
 	"cbwcd-events": "Chino Basin Water Conservation District events",
 	"yanksair-events": "Yanks Air Museum events",
-	"abc-licenses": "ABC licence filings",
+	"abc-licenses": "ABC license filings",
 };
 
 const FARMERS_MARKET_URL = "https://heritagefarmersmarket.org/chino-hills";
@@ -1360,6 +1360,12 @@ export function postTitleFromFile(p: PostRow): string {
 export function buildDailyBrief(
 	db: Db,
 	now: Date,
+	// Optional prerequisite sources that failed, by scrape key. Passed in
+	// rather than recomputed: main() has already run the freshness check to
+	// decide whether to publish at all, and a second scan of scrape_runs could
+	// disagree with the first if a scrape lands between them — the run would
+	// then log one degraded set and render another.
+	degradedSources: string[] = [],
 ): { post: NewPost; notes: string[] } {
 	const laToday = laDateOf(now.toISOString());
 	const prev = db.raw
@@ -1372,10 +1378,6 @@ export function buildDailyBrief(
 		.get(`${laToday}-daily-brief`) as { published_at: string } | undefined;
 
 	const headlinesFreshness = checkHeadlinesFreshness(db, now);
-
-	// The same check the CLI gate runs. Optional sources that failed become
-	// reader-facing notes rather than a reason to publish nothing.
-	const prereqs = assertPrerequisitesFresh(db, now);
 
 	const inputs: BriefInputs = {
 		forecast: queryItems(db, {
@@ -1420,7 +1422,7 @@ export function buildDailyBrief(
 		publishedPosts: db.raw
 			.prepare("SELECT * FROM posts WHERE status = 'published'")
 			.all() as unknown as PostRow[],
-		degradedSources: prereqs.degradedSources.map((s) => s.sourceKey),
+		degradedSources,
 		prevBriefPublishedAt: prev?.published_at ?? null,
 	};
 	return assembleBrief(inputs, now, postTitleFromFile);
@@ -1601,7 +1603,11 @@ function main(): void {
 		console.warn(`  degraded (optional): ${s.sourceKey}: ${s.reason}`);
 	}
 
-	const { post, notes } = buildDailyBrief(db, now);
+	const { post, notes } = buildDailyBrief(
+		db,
+		now,
+		prereqs.degradedSources.map((x) => x.sourceKey),
+	);
 	for (const note of notes) console.log(`  note: ${note}`);
 
 	if (post.sources.length === 0) {
