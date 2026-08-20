@@ -54,11 +54,11 @@ if ! CVT_DB="$TEST_DB" node src/pipeline/daily-brief.ts --check-prereqs; then
 fi
 echo "OK: Succeeded as expected on fresh database."
 
-echo "4. Testing retry failure when one source is failing..."
-STALE_DB="$TMP_DIR/stale.db"
-cp "$TEST_DB" "$STALE_DB"
-
-CVT_DB="$STALE_DB" node --input-type=module -e '
+# Fails one source and reports whether --check-prereqs exited non-zero.
+fail_source() {
+	local key="$1" db="$2"
+	cp "$TEST_DB" "$db"
+	CVT_DB="$db" CVT_FAIL_KEY="$key" node --input-type=module -e '
 import { openDb } from "./src/db/index.ts";
 
 const db = openDb(process.env.CVT_DB);
@@ -67,16 +67,41 @@ const nowIso = new Date().toISOString();
 db.raw.prepare(`
 	INSERT INTO scrape_runs (source_key, started_at, finished_at, status, error_message)
 	VALUES (?, ?, ?, ?, ?)
-`).run("sbcfire-news", nowIso, nowIso, "failure", "HTTP 500 error");
+`).run(process.env.CVT_FAIL_KEY, nowIso, nowIso, "failure", "HTTP 500 error");
 '
+}
 
-if CVT_DB="$STALE_DB" node src/pipeline/daily-brief.ts --check-prereqs >/dev/null 2>&1; then
-	echo "FAIL: Expected --check-prereqs to fail when sbcfire-news failed, but it succeeded." >&2
+echo "4. Testing an OPTIONAL source failing degrades but does not block..."
+# sbcfire-news is optional since the tiering in PR #33: the brief must still
+# publish, warn about the degraded source, and exit 0. Before tiering this
+# case blocked the brief, which is the 2026-08-20 cbwcd.org outage.
+DEGRADED_DB="$TMP_DIR/degraded.db"
+fail_source "sbcfire-news" "$DEGRADED_DB"
+
+if ! out="$(CVT_DB="$DEGRADED_DB" node src/pipeline/daily-brief.ts --check-prereqs 2>&1)"; then
+	echo "FAIL: an optional source failing must not block the brief. Got: $out" >&2
 	exit 1
 fi
-echo "OK: Failed as expected when sbcfire-news is failing."
+case "$out" in
+*"degraded (optional): sbcfire-news"*) ;;
+*)
+	echo "FAIL: expected a degraded warning naming sbcfire-news, got: $out" >&2
+	exit 1
+	;;
+esac
+echo "OK: optional failure degraded with a warning and exited 0."
 
-echo "5. Testing run-brief.sh retry exhaustion and exit code 1..."
+echo "4b. Testing a BLOCKING source failing still holds the brief..."
+STALE_DB="$TMP_DIR/stale.db"
+fail_source "nws-alerts" "$STALE_DB"
+
+if CVT_DB="$STALE_DB" node src/pipeline/daily-brief.ts --check-prereqs >/dev/null 2>&1; then
+	echo "FAIL: Expected --check-prereqs to fail when nws-alerts failed, but it succeeded." >&2
+	exit 1
+fi
+echo "OK: Failed as expected when nws-alerts is failing."
+
+echo "5. Testing run-brief.sh retry exhaustion and exit code 1 (blocking source)..."
 if CVT_DB="$STALE_DB" CVT_PREREQ_MAX_ATTEMPTS=2 CVT_PREREQ_RETRY_DELAY_SEC=0 bash scripts/run-brief.sh >/dev/null 2>&1; then
 	echo "FAIL: Expected run-brief.sh to fail with exit code 1 on stale DB, but it succeeded." >&2
 	exit 1

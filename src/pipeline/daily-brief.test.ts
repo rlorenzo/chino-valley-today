@@ -5,6 +5,7 @@ import type { ItemRow } from "../tiera/queries.ts";
 import {
 	assembleBrief,
 	assertPrerequisitesFresh,
+	BLOCKING_PREREQUISITE_SOURCES,
 	type BriefInputs,
 	buildDailyBrief,
 	type CityForecast,
@@ -15,6 +16,9 @@ import {
 	isLaWednesday,
 	jaccardSimilarity,
 	laTimeOf,
+	OPTIONAL_PREREQUISITE_SOURCES,
+	PREREQUISITE_LABEL,
+	PREREQUISITE_SECTIONS,
 	postTitleFromFile,
 	renderWeatherLine,
 	selectActiveAlerts,
@@ -979,6 +983,72 @@ describe("assertPrerequisitesFresh", () => {
 		assert.equal(res.staleSources.length, 1);
 		assert.equal(res.staleSources[0].sourceKey, "sbcfire-news");
 		assert.match(res.staleSources[0].reason, /latest scrape run failed/);
+	});
+
+	test("an optional source failing degrades the brief but does not block it", () => {
+		const db = openDb(":memory:");
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			if (key === "cbwcd-events") {
+				populateSource(db, key, {
+					runStatus: "failure",
+					errorMessage: "The operation was aborted due to timeout",
+				});
+			} else {
+				populateSource(db, key);
+			}
+		}
+		const res = assertPrerequisitesFresh(db, NOW);
+		// The record IS incomplete, and `fresh` still says so honestly...
+		assert.equal(res.fresh, false);
+		// ...but nothing here justifies publishing no brief at all. This is the
+		// 2026-08-20 cbwcd.org outage, which cost readers a whole morning.
+		assert.equal(res.blocked, false);
+		assert.equal(res.blockingSources.length, 0);
+		assert.deepEqual(
+			res.degradedSources.map((x) => x.sourceKey),
+			["cbwcd-events"],
+		);
+	});
+
+	test("a blocking source failing still holds the brief", () => {
+		const db = openDb(":memory:");
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			if (key === "nws-alerts") {
+				populateSource(db, key, {
+					runStatus: "failure",
+					errorMessage: "HTTP 503",
+				});
+			} else {
+				populateSource(db, key);
+			}
+		}
+		const res = assertPrerequisitesFresh(db, NOW);
+		assert.equal(res.blocked, true);
+		assert.deepEqual(
+			res.blockingSources.map((x) => x.sourceKey),
+			["nws-alerts"],
+		);
+		assert.equal(res.degradedSources.length, 0);
+	});
+
+	test("every optional source can fail at once without blocking", () => {
+		const db = openDb(":memory:");
+		const optional: readonly string[] = OPTIONAL_PREREQUISITE_SOURCES;
+		for (const key of DAILY_BRIEF_PREREQUISITE_SOURCES) {
+			populateSource(
+				db,
+				key,
+				optional.includes(key)
+					? { runStatus: "failure", errorMessage: "down" }
+					: {},
+			);
+		}
+		const res = assertPrerequisitesFresh(db, NOW);
+		assert.equal(res.blocked, false);
+		assert.equal(
+			res.degradedSources.length,
+			OPTIONAL_PREREQUISITE_SOURCES.length,
+		);
 	});
 
 	test("fails in partial-success-then-failure case (document saved but scrape run failed)", () => {
@@ -1961,5 +2031,87 @@ describe("active weather alerts", () => {
 		assert.ok(!post.bodyMd.includes(`[${title}]`));
 		// The advisory itself still reads in full.
 		assert.ok(post.bodyMd.includes("Heat Advisory issued August 18"));
+	});
+});
+
+describe("prerequisite tiers", () => {
+	test("only the two weather sources can block the brief", () => {
+		assert.deepEqual(
+			[...BLOCKING_PREREQUISITE_SOURCES],
+			["nws-forecast", "nws-alerts"],
+		);
+	});
+
+	test("the tiers partition the canonical 15 with no overlap", () => {
+		assert.equal(
+			BLOCKING_PREREQUISITE_SOURCES.length +
+				OPTIONAL_PREREQUISITE_SOURCES.length,
+			DAILY_BRIEF_PREREQUISITE_SOURCES.length,
+		);
+		const blocking: readonly string[] = BLOCKING_PREREQUISITE_SOURCES;
+		assert.deepEqual(
+			OPTIONAL_PREREQUISITE_SOURCES.filter((k) => blocking.includes(k)),
+			[],
+		);
+	});
+
+	// A source with no section would degrade invisibly — the exact failure the
+	// tiering exists to prevent.
+	test("every optional source names a section and a reader-facing label", () => {
+		for (const key of OPTIONAL_PREREQUISITE_SOURCES) {
+			assert.ok(PREREQUISITE_SECTIONS[key]?.length, `${key} has no section`);
+			assert.ok(PREREQUISITE_LABEL[key], `${key} has no label`);
+		}
+	});
+});
+
+describe("degraded sections", () => {
+	function degraded(keys: string[]): BriefInputs {
+		return { ...emptyInputs(), degradedSources: keys };
+	}
+
+	test("an unreachable calendar source renders Today rather than omitting it", () => {
+		const { post } = assembleBrief(degraded(["cbwcd-events"]), NOW);
+		assert.match(post.bodyMd, /## Today/);
+		assert.match(post.bodyMd, /Not checked this morning/);
+		assert.match(post.bodyMd, /Chino Basin Water Conservation District events/);
+	});
+
+	test("the reader never sees the internal scrape key", () => {
+		const { post } = assembleBrief(degraded(["cbwcd-events"]), NOW);
+		assert.doesNotMatch(post.bodyMd, /cbwcd-events/);
+	});
+
+	test("a morning with a silent source is not called a quiet morning", () => {
+		const { post } = assembleBrief(degraded(["cbwcd-events"]), NOW);
+		assert.doesNotMatch(post.bodyMd, /A quiet morning/);
+	});
+
+	test("with nothing degraded the quiet-morning line still ships", () => {
+		const { post } = assembleBrief(emptyInputs(), NOW);
+		assert.match(post.bodyMd, /A quiet morning/);
+		assert.doesNotMatch(post.bodyMd, /Not checked this morning/);
+	});
+
+	test("a source feeding two sections is noted in both", () => {
+		const { post } = assembleBrief(degraded(["chino-news-rss"]), NOW);
+		assert.match(post.bodyMd, /## Fire & safety/);
+		assert.match(post.bodyMd, /## Today/);
+		assert.equal(
+			(post.bodyMd.match(/Not checked this morning/g) ?? []).length,
+			2,
+		);
+	});
+
+	test("several dead sources in one section share one note", () => {
+		const { post } = assembleBrief(
+			degraded(["cbwcd-events", "sbclib-events"]),
+			NOW,
+		);
+		assert.equal(
+			(post.bodyMd.match(/Not checked this morning/g) ?? []).length,
+			1,
+		);
+		assert.match(post.bodyMd, /Those sources did not answer/);
 	});
 });

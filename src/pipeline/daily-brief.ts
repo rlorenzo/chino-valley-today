@@ -195,15 +195,43 @@ export interface SourceFreshness {
 	heldReason?: string | null;
 }
 
-export const DAILY_BRIEF_PREREQUISITE_SOURCES = [
-	// 6 Frequent Sources (05:17 PT group)
+// Prerequisite sources, tiered by what their absence does to the brief.
+//
+// WHY TIERS
+//
+// This list was flat, and assertPrerequisitesFresh blocked the brief when any
+// member failed. On 2026-08-20 cbwcd.org — a water district's event calendar,
+// carrying compost giveaways and holiday closures — stopped answering, and no
+// brief published at all that morning. Readers lost an active heat advisory,
+// the day's council schedule and the forecast because a compost giveaway
+// could not be confirmed.
+//
+// That inverted the contract the scrape layer already works under: "A source
+// being down for a day is normal; it must not cost us the other twelve"
+// (scripts/run-group.sh). Publishing nothing is strictly worse for a reader
+// than publishing something honestly marked incomplete.
+//
+// So blocking is reserved for the case where publishing would be actively
+// MISLEADING rather than merely thin. Only the two weather sources qualify:
+// the brief renders an "Active alert" section, and a brief showing no alert
+// because the alert feed failed states something false about a heat advisory
+// or an evacuation. Everything else degrades with a note in the section it
+// feeds — see PREREQUISITE_SECTIONS.
+export const BLOCKING_PREREQUISITE_SOURCES = [
 	"nws-forecast",
 	"nws-alerts",
+] as const;
+
+// Stale here costs a section's completeness, never the brief's honesty: each
+// one names itself in the section it feeds, so an empty Today reads as "we
+// could not reach the library calendar", not "nothing is happening".
+export const OPTIONAL_PREREQUISITE_SOURCES = [
+	// Frequent group (05:17 PT)
 	"sbcfire-news",
 	"cvfd-news",
 	"chino-news-rss",
 	"chinohills-news-rss",
-	// 9 Daily Sources (05:40 PT group)
+	// Daily group (05:40 PT)
 	"chino-legistar",
 	"chino-agendacenter",
 	"chinohills-agendas",
@@ -214,6 +242,51 @@ export const DAILY_BRIEF_PREREQUISITE_SOURCES = [
 	"yanksair-events",
 	"abc-licenses",
 ] as const;
+
+// The union. Membership is unchanged — the check still inspects all 15, it
+// just acts differently per tier.
+export const DAILY_BRIEF_PREREQUISITE_SOURCES = [
+	...BLOCKING_PREREQUISITE_SOURCES,
+	...OPTIONAL_PREREQUISITE_SOURCES,
+] as const;
+
+// Which body section each optional source feeds. A source can feed two (the
+// city RSS feeds carry both civic alerts and calendar events), so its note
+// appears in each.
+export type BriefSection = "fire" | "today" | "record";
+export const PREREQUISITE_SECTIONS: Record<string, readonly BriefSection[]> = {
+	"sbcfire-news": ["fire"],
+	"cvfd-news": ["fire"],
+	"chino-news-rss": ["fire", "today"],
+	"chinohills-news-rss": ["fire", "today"],
+	"chino-legistar": ["today"],
+	"chino-agendacenter": ["today"],
+	"chinohills-agendas": ["today"],
+	"cvusd-board": ["today"],
+	"sbclib-events": ["today"],
+	"sbparks-events": ["today"],
+	"cbwcd-events": ["today"],
+	"yanksair-events": ["today"],
+	"abc-licenses": ["record"],
+};
+
+// Reader-facing names. The scrape key is an internal identifier; a brief that
+// printed "cbwcd-events" would leak plumbing into the record.
+export const PREREQUISITE_LABEL: Record<string, string> = {
+	"sbcfire-news": "San Bernardino County Fire",
+	"cvfd-news": "Chino Valley Fire District",
+	"chino-news-rss": "City of Chino",
+	"chinohills-news-rss": "City of Chino Hills",
+	"chino-legistar": "Chino city meeting agendas",
+	"chino-agendacenter": "Chino agenda center",
+	"chinohills-agendas": "Chino Hills city meeting agendas",
+	"cvusd-board": "CVUSD Board of Education",
+	"sbclib-events": "San Bernardino County Library events",
+	"sbparks-events": "San Bernardino County Parks events",
+	"cbwcd-events": "Chino Basin Water Conservation District events",
+	"yanksair-events": "Yanks Air Museum events",
+	"abc-licenses": "ABC license filings",
+};
 
 const FARMERS_MARKET_URL = "https://heritagefarmersmarket.org/chino-hills";
 
@@ -989,6 +1062,9 @@ export interface BriefInputs {
 	publishedPosts: PostRow[];
 	// published_at of the previous daily brief; null on the first ever run,
 	// which falls back to a 24h window for "new on the record".
+	// Optional prerequisite sources that failed this morning, by scrape key.
+	// assembleBrief turns these into a note in each section they feed.
+	degradedSources?: string[];
 	prevBriefPublishedAt: string | null;
 }
 
@@ -1003,6 +1079,30 @@ export function assembleBrief(
 	const laToday = laDateOf(now.toISOString());
 	if (!laToday) throw new Error("could not compute today's LA calendar date");
 	const notes: string[] = [];
+
+	// Optional prerequisite sources that failed, grouped by the section each
+	// feeds. A degraded section must still RENDER: the entire point is that a
+	// reader can tell "we could not reach this" apart from "nothing happened".
+	const degradedKeys = inputs.degradedSources ?? [];
+	const degradedBySection = new Map<BriefSection, string[]>();
+	for (const key of degradedKeys) {
+		for (const section of PREREQUISITE_SECTIONS[key] ?? []) {
+			const labels = degradedBySection.get(section) ?? [];
+			labels.push(PREREQUISITE_LABEL[key] ?? key);
+			degradedBySection.set(section, labels);
+		}
+	}
+	const isDegraded = (section: BriefSection): boolean =>
+		(degradedBySection.get(section)?.length ?? 0) > 0;
+	const degradedNote = (section: BriefSection): string[] => {
+		const labels = degradedBySection.get(section);
+		if (!labels || labels.length === 0) return [];
+		const subject = labels.length === 1 ? "That source" : "Those sources";
+		return [
+			`*Not checked this morning: ${labels.map(mdEscape).join("; ")}. ${subject} did not answer, so this section may be incomplete.*`,
+			"",
+		];
+	};
 	const sources: string[] = [];
 	const cite = (url: string) => {
 		sources.push(url);
@@ -1062,7 +1162,7 @@ export function assembleBrief(
 
 	// Fire & safety: verbatim title + source link only — never body text.
 	const fire = selectFireSafety(inputs.fire, now);
-	if (fire.length > 0) {
+	if (fire.length > 0 || isDegraded("fire")) {
 		fireLines.push("## Fire & safety", "");
 		for (const row of fire) {
 			const label = FIRE_LABEL[row.source_key] ?? row.source_key;
@@ -1070,7 +1170,10 @@ export function assembleBrief(
 				`- ${mdLink((row.title ?? "").trim(), cite(row.source_url))} (${label})`,
 			);
 		}
-		fireLines.push("");
+		// Only separate from the list when there IS a list; otherwise the note
+		// would sit under a heading behind two blank lines.
+		if (fire.length > 0) fireLines.push("");
+		fireLines.push(...degradedNote("fire"));
 	}
 	notes.push(`fire & safety: ${fire.length} item(s) in the last 24h`);
 
@@ -1082,7 +1185,12 @@ export function assembleBrief(
 	);
 	const events = selectTodayEvents(inputs.calendarEvents, now);
 	const marketDay = isLaWednesday(now);
-	if (meetings.length > 0 || events.length > 0 || marketDay) {
+	if (
+		meetings.length > 0 ||
+		events.length > 0 ||
+		marketDay ||
+		isDegraded("today")
+	) {
 		todayLines.push("## Today", "");
 		for (const m of meetings) {
 			const time = m.timeLabel ? ` — ${m.timeLabel}` : "";
@@ -1098,7 +1206,9 @@ export function assembleBrief(
 				`- Heritage Farmers Market, every Wednesday 3:30–7:30pm at the Shoppes (${mdLink("heritagefarmersmarket.org", cite(FARMERS_MARKET_URL))})`,
 			);
 		}
-		todayLines.push("");
+		if (meetings.length > 0 || events.length > 0 || marketDay)
+			todayLines.push("");
+		todayLines.push(...degradedNote("today"));
 	}
 	notes.push(`today: ${meetings.length} meeting(s), ${events.length} event(s)`);
 
@@ -1124,7 +1234,7 @@ export function assembleBrief(
 		new Date(now.getTime() - 86400000).toISOString();
 	const newPosts = selectNewRecordPosts(inputs.publishedPosts, sinceIso);
 	const licenses = selectFreshLicenseEvents(inputs.licenseEvents, now);
-	if (newPosts.length > 0 || licenses.length > 0) {
+	if (newPosts.length > 0 || licenses.length > 0 || isDegraded("record")) {
 		recordLines.push("## New on the record", "");
 		for (const p of newPosts) {
 			recordLines.push(`- [${mdEscape(titleFor(p))}](/posts/${p.slug}/)`);
@@ -1134,7 +1244,8 @@ export function assembleBrief(
 				`- ${mdLink((row.title ?? "").trim(), cite(row.source_url))}`,
 			);
 		}
-		recordLines.push("");
+		if (newPosts.length > 0 || licenses.length > 0) recordLines.push("");
+		recordLines.push(...degradedNote("record"));
 	}
 	notes.push(
 		`new on the record: ${newPosts.length} post(s) since ${sinceIso}, ${licenses.length} license event(s)`,
@@ -1164,6 +1275,11 @@ export function assembleBrief(
 		);
 	}
 	notes.push(`headlines elsewhere: ${listItems.length} headline(s) selected`);
+	if (degradedKeys.length > 0) {
+		notes.push(
+			`degraded: ${degradedKeys.length} optional source(s) stale — ${degradedKeys.join(", ")}`,
+		);
+	}
 
 	// THE ORDER OF THE BRIEF. Anything time-critical first: an active weather
 	// alert or an overnight incident outranks everything. Then what a reader
@@ -1186,7 +1302,10 @@ export function assembleBrief(
 		fire.length === 0 &&
 		newPosts.length === 0 &&
 		licenses.length === 0 &&
-		listItems.length === 0
+		listItems.length === 0 &&
+		// A morning with an unreachable source is not a quiet morning; it is
+		// an unknown one. The section notes already say which.
+		degradedKeys.length === 0
 	) {
 		const hasSchedule = meetings.length > 0 || events.length > 0 || marketDay;
 		body.push(
@@ -1241,6 +1360,12 @@ export function postTitleFromFile(p: PostRow): string {
 export function buildDailyBrief(
 	db: Db,
 	now: Date,
+	// Optional prerequisite sources that failed, by scrape key. Passed in
+	// rather than recomputed: main() has already run the freshness check to
+	// decide whether to publish at all, and a second scan of scrape_runs could
+	// disagree with the first if a scrape lands between them — the run would
+	// then log one degraded set and render another.
+	degradedSources: string[] = [],
 ): { post: NewPost; notes: string[] } {
 	const laToday = laDateOf(now.toISOString());
 	const prev = db.raw
@@ -1297,13 +1422,25 @@ export function buildDailyBrief(
 		publishedPosts: db.raw
 			.prepare("SELECT * FROM posts WHERE status = 'published'")
 			.all() as unknown as PostRow[],
+		degradedSources,
 		prevBriefPublishedAt: prev?.published_at ?? null,
 	};
 	return assembleBrief(inputs, now, postTitleFromFile);
 }
 
 export interface PrereqCheckResult {
+	// True only when nothing at all is stale. This is the honest answer to
+	// "is the record complete?" — it is NOT the publish decision any more.
+	// Callers deciding whether to hold the brief must read `blocked`, or a
+	// newly-optional source will quietly start blocking again.
 	fresh: boolean;
+	// Stale sources whose absence would make the brief MISLEADING. Non-empty
+	// means: do not publish.
+	blocked: boolean;
+	blockingSources: Array<{ sourceKey: string; reason: string }>;
+	// Stale sources the brief ships without, each annotated in its section.
+	degradedSources: Array<{ sourceKey: string; reason: string }>;
+	// Both tiers together, for logging.
 	staleSources: Array<{ sourceKey: string; reason: string }>;
 }
 
@@ -1391,8 +1528,21 @@ export function assertPrerequisitesFresh(
 		}
 	}
 
+	// Partition by tier. A blocking source is one whose silence would let the
+	// brief assert something false; everything else is a gap we can label.
+	const blockingKeys = new Set<string>(BLOCKING_PREREQUISITE_SOURCES);
+	const blockingSources = staleSources.filter((s) =>
+		blockingKeys.has(s.sourceKey),
+	);
+	const degradedSources = staleSources.filter(
+		(s) => !blockingKeys.has(s.sourceKey),
+	);
+
 	return {
 		fresh: staleSources.length === 0,
+		blocked: blockingSources.length > 0,
+		blockingSources,
+		degradedSources,
 		staleSources,
 	};
 }
@@ -1401,36 +1551,63 @@ function main(): void {
 	const db = openDb();
 	const now = new Date();
 
+	// Machine-readable list for scripts/run-brief.sh, which re-SCRAPES these
+	// between attempts. One key per line, nothing else on stdout.
+	if (process.argv.includes("--list-blocking-stale")) {
+		const check = assertPrerequisitesFresh(db, now);
+		for (const s of check.blockingSources) console.log(s.sourceKey);
+		return;
+	}
+
 	if (process.argv.includes("--check-prereqs")) {
 		const check = assertPrerequisitesFresh(db, now);
-		if (!check.fresh) {
+		// Degraded sources are reported on every path, including success:
+		// shipping a thinner brief is normal, but it must never be silent.
+		for (const s of check.degradedSources) {
+			console.warn(`  degraded (optional): ${s.sourceKey}: ${s.reason}`);
+		}
+		if (check.blocked) {
 			console.error(
-				`Prerequisite freshness check FAILED (${check.staleSources.length} source(s) not fresh):`,
+				`Prerequisite freshness check FAILED (${check.blockingSources.length} blocking source(s) not fresh):`,
 			);
-			for (const s of check.staleSources) {
+			for (const s of check.blockingSources) {
 				console.error(`  - ${s.sourceKey}: ${s.reason}`);
 			}
 			process.exitCode = 1;
 			return;
 		}
 		console.log(
-			`Prerequisite freshness check OK: all ${DAILY_BRIEF_PREREQUISITE_SOURCES.length} sources fresh for ${laDateOf(now.toISOString())}.`,
+			check.fresh
+				? `Prerequisite freshness check OK: all ${DAILY_BRIEF_PREREQUISITE_SOURCES.length} sources fresh for ${laDateOf(now.toISOString())}.`
+				: `Prerequisite freshness check OK (degraded): ${check.degradedSources.length} optional source(s) stale, all ${BLOCKING_PREREQUISITE_SOURCES.length} blocking source(s) fresh for ${laDateOf(now.toISOString())}.`,
 		);
 		return;
 	}
 
 	console.log(`Daily brief run started at ${now.toISOString()}`);
+	// Defence in depth. run-brief.sh gates before calling us, but the
+	// assembler is also run by hand during an incident — which is exactly when
+	// publishing a brief that silently omits an active alert would do harm.
 	const prereqs = assertPrerequisitesFresh(db, now);
-	if (!prereqs.fresh) {
-		console.warn(
-			`  warning: prerequisites not fresh (${prereqs.staleSources.length} stale source(s)):`,
+	if (prereqs.blocked) {
+		console.error(
+			`  ERROR: ${prereqs.blockingSources.length} blocking source(s) not fresh — no brief published:`,
 		);
-		for (const s of prereqs.staleSources) {
-			console.warn(`    - ${s.sourceKey}: ${s.reason}`);
+		for (const s of prereqs.blockingSources) {
+			console.error(`    - ${s.sourceKey}: ${s.reason}`);
 		}
+		process.exitCode = 1;
+		return;
+	}
+	for (const s of prereqs.degradedSources) {
+		console.warn(`  degraded (optional): ${s.sourceKey}: ${s.reason}`);
 	}
 
-	const { post, notes } = buildDailyBrief(db, now);
+	const { post, notes } = buildDailyBrief(
+		db,
+		now,
+		prereqs.degradedSources.map((x) => x.sourceKey),
+	);
 	for (const note of notes) console.log(`  note: ${note}`);
 
 	if (post.sources.length === 0) {
