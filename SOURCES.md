@@ -229,6 +229,60 @@ whenever a source changes behavior.
 - **Link-back depth:** item-level (`/YYYY/MM/DD/article-slug/`).
 - **Reliability guess:** high.
 
+### quest-news / bulldogtimes-news / breeze-news — student press (SNO platform)
+
+- **Added 2026-08-19 (Phase 4 Task 4.7, operator decision).** Three student
+  papers on School Newspapers Online (WordPress): Quest News (Don Lugo HS,
+  `dalquestnews.org`), Bulldog Times (Ayala HS, `ayalabulldogtimes.org`),
+  The Breeze (Chaffey College, `thebreezepaper.com`). One shared feed-press
+  scraper core; verbatim feed title + sentence-bounded teaser (Tier A).
+- **Locality:** the HS papers are inherently local (`meta.city` = the
+  school's city at ingest); The Breeze is Rancho Cucamonga-centric, so only
+  text-matched Chino items surface.
+- **ToS:** none of the three has a reader-facing ToS (verified 2026-08-19;
+  The Breeze's only "terms" link is a donation-checkout ToS on snosites.com).
+  Each source's robots.txt is tracked in `source_tos_status` as the binding
+  access document instead. The two HS papers serve byte-identical SNO
+  template robots (`Disallow: /cgi-bin/`, `/?s=`, `/*?*`; Crawl-delay 6 —
+  one feed fetch per run stays inside it).
+- **Quirks:** school-calendar dormancy is the steady state (Quest quiet
+  since 2026-04-16, Bulldog Times since 2026-05-21, Breeze gaps ~7 weeks over
+  summer) — `zeroItemsIsHealthy` in the brief policy keeps the drift watchdog
+  quiet; the papers light up when the school year restarts (~September).
+- **Link-back depth:** item-level (WordPress permalinks).
+- **Reliability guess:** medium (small-org WordPress, platform-stable; content
+  cadence follows the school year).
+
+### nbc4-news — NBC4 Los Angeles (keyword-filtered)
+
+- **Added 2026-08-19 (Phase 4 Task 4.7, operator decision superseding the
+  same-day recon rejection).** Regional TV firehose ingested from the ONE
+  robots-Allowed feed URL (`/?rss=y&most_recent=y` — the plain `?rss=y`
+  variant is not the allowed form), filtered at ingest to items matching
+  `\bchino(\s+hills)?\b` in title/description. Rolling same-day window,
+  ~25 items/fetch, most runs insert 0 — normal (`zeroItemsIsHealthy`).
+- **ToS:** NBCUniversal general terms reviewed 2026-08-19 (tracked in
+  `source_tos_status`): no clause restricts automated access, scraping, RSS
+  use, or headline link-back.
+- **Quirks:** feed descriptions carry FULL article text — only the
+  sentence-bounded teaser is ever stored (copyright limit, EDITORIAL.md).
+  Expected surfaced volume is low: their Chino coverage skews
+  crime/accidents, which the policy filter excludes by design.
+- **Link-back depth:** item-level (article permalinks).
+- **Reliability guess:** high (major-market CMS, stable feed).
+
+### ktla — REJECTED on ToS (2026-08-19; do not revisit without a terms change)
+
+- `/feed/` is robots-permitted for our UA and live-fetchable (the 403
+  anti-bot wall guards HTML pages, not the feed), but Nexstar's Terms of Use
+  expressly prohibit any robot/spider "for any purpose" and any "data
+  gathering or data extraction practices for any purpose" — a binding ToS
+  prohibition on automated ingestion of any kind (Nixle class). The
+  geo-targeted `/tag/chino-hills/feed/` is additionally robots-blocked
+  (`Disallow: /tag/` for all agents). Terms read once in a human browser
+  2026-08-19 (the terms page itself 403s bot clients); trail in
+  reports/notes/ktla.md.
+
 ## Open questions from PLAN — answers so far
 
 1. **Legistar API enabled for Chino?** YES — confirmed live, built on it.

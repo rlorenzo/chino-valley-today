@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Quest News</title>
+	<atom:link href="https://dalquestnews.org/feed/" rel="self" type="application/rss+xml" />
+	<link>https://dalquestnews.org</link>
+	<description>The Student News Site of Don Lugo High School</description>
+	<lastBuildDate>Thu, 16 Apr 2026 20:14:02 +0000</lastBuildDate>
+	<language>en-US</language>
+	<generator>https://wordpress.org/?v=7.0.4</generator>
+
+	<item>
+		<title>Don Lugo Drama Club Stages Spring One-Act Festival</title>
+		<link>https://dalquestnews.org/2026/04/16/drama-club-spring-one-act-festival/</link>
+		<comments>https://dalquestnews.org/2026/04/16/drama-club-spring-one-act-festival/#respond</comments>
+		<dc:creator><![CDATA[ Maya Reyes]]></dc:creator>
+		<pubDate>Thu, 16 Apr 2026 19:30:00 +0000</pubDate>
+		<category><![CDATA[Arts]]></category>
+		<category><![CDATA[Drama Club]]></category>
+		<guid isPermaLink="false">https://dalquestnews.org/?p=4021</guid>
+		<description><![CDATA[The Don Lugo High School Drama Club closed out the year with a festival of student-directed one-act plays in the Conejo Theater on Tuesday night, drawing a full house of families and classmates.]]></description>
+		<content:encoded><![CDATA[<p>The Don Lugo High School Drama Club closed out the year with a festival of student-directed one-act plays in the Conejo Theater on Tuesday night, drawing a full house of families and classmates. Five one-acts were staged back to back, each written and directed entirely by students in the advanced drama seminar.</p>
+<p>Senior director Maya Reyes said the format gave underclassmen their first chance to direct a full cast. "It's a lot of pressure, but it's the best way to learn," she said.</p>]]></content:encoded>
+	</item>
+	<item>
+		<title>Boys Basketball Opens Season With Win Over Ayala</title>
+		<link>https://dalquestnews.org/2026/03/02/boys-basketball-opens-season-ayala/</link>
+		<comments>https://dalquestnews.org/2026/03/02/boys-basketball-opens-season-ayala/#respond</comments>
+		<dc:creator><![CDATA[ Diego Alvarez]]></dc:creator>
+		<pubDate>Mon, 02 Mar 2026 15:05:00 +0000</pubDate>
+		<category><![CDATA[Sports]]></category>
+		<guid isPermaLink="false">https://dalquestnews.org/?p=3988</guid>
+		<description><![CDATA[]]></description>
+		<content:encoded><![CDATA[<p>The Don Lugo Conquistadors opened their league season with a 58-49 win over Ayala at home Friday night, led by a 21-point performance from junior guard Marcus Webb.</p>
+<p>Head coach Terry Osborne credited the team's defense in the fourth quarter for pulling away from a tied game at the start of the period.</p>]]></content:encoded>
+	</item>
+</channel>
+</rss>

@@ -25,4 +25,9 @@ export const SCRAPERS: Record<string, string> = {
 	// Phase 4 Task 4.2 (headlines-elsewhere press ingestion, 2026-08-18)
 	"champion-news": "./scrapers/champion-news.ts",
 	"dailybulletin-news": "./scrapers/dailybulletin-news.ts",
+	// Press expansion (student papers + NBC4 keyword-filtered, 2026-08-19)
+	"quest-news": "./scrapers/quest-news.ts",
+	"bulldogtimes-news": "./scrapers/bulldogtimes-news.ts",
+	"breeze-news": "./scrapers/breeze-news.ts",
+	"nbc4-news": "./scrapers/nbc4-news.ts",
 };

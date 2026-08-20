@@ -83,6 +83,43 @@ reviewer. Changes to this file are editorial decisions — date them.
   releases — the minors rule takes precedence until an explicit carve-out is
   decided (open decision recorded in PRODUCT.md).
 
+## Student press and broadcast feeds (amended 2026-08-19)
+
+**Operator decision, 2026-08-19.** Student newspapers join secondary press:
+residents are interested in this coverage, and carrying it gives young
+journalists exposure. High school and college papers qualify; middle school
+and below stay out of scope entirely. Ingested under the same
+headlines-elsewhere rules as every other outlet — verbatim title, link, and a
+sentence-bounded teaser; all policy filters apply per item.
+
+- **The minors guard loses "high school" from its vocabulary** (operator
+  directive, same day). A school's name or context is not identification of a
+  minor, and with student press ingested, every item would have tripped it.
+  What still binds, unchanged: juvenile/teen/child/boy/girl vocabulary, ages
+  under 18, and the unvetted-private-person guard — including on the Nixle
+  release path, which shares the same guard. "Middle school" and "elementary"
+  stay in the vocabulary.
+- **Locality.** The high school papers (Quest News/Don Lugo, Bulldog
+  Times/Ayala) are inherently local — their masthead is a Chino Valley
+  school, so items carry `meta.city` at ingest. The Breeze (Chaffey College,
+  Rancho Cucamonga-based) is not: only items that textually anchor to Chino
+  or Chino Hills surface.
+- **Weekly-drop cap.** Student papers publish in batches; each is capped at 2
+  headlines per brief so a publication day cannot crowd out the professional
+  outlets.
+- **Broadcast feeds.** NBC4 Los Angeles is ingested from its robots-allowed
+  RSS URL, filtered at ingest to items mentioning Chino or Chino Hills.
+  NBCUniversal's ToS was reviewed 2026-08-19: no clause restricts automated
+  feed access or headline link-back. Expectation stated honestly: NBC4's
+  Chino coverage skews crime and accidents, which the policy filter excludes
+  from auto-published headlines by design, so surfaced volume will be low —
+  the eligible remainder (community, government, schools) is the point.
+- **KTLA is rejected on ToS, not robots.** Its main feed is mechanically
+  fetchable, but Nexstar's Terms of Use prohibit any "data gathering or data
+  extraction practices for any purpose" — a binding prohibition on automated
+  ingestion of any kind, same class as the Nixle scraping prohibition. Do not
+  revisit without a change in their terms.
+
 ## Agency alert channels (amended 2026-08-17)
 
 **Operator decision, 2026-08-17.** Press releases received through a subscribed

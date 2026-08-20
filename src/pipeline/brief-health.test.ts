@@ -226,10 +226,47 @@ describe("checkDegradedSources", () => {
 		const db = openDb(":memory:");
 		const results = checkDegradedSources(db);
 		assert.deepEqual(results.map((r) => r.sourceKey).sort(), [
+			"breeze-news",
+			"bulldogtimes-news",
 			"champion-news",
 			"dailybulletin-news",
+			"nbc4-news",
+			"quest-news",
 		]);
 		assert.ok(results.every((r) => r.degraded === false));
+	});
+
+	test("a zeroItemsIsHealthy source with 3 clean 0-item runs is not degraded", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "quest-news", "success", 0);
+		insertRun(db, "quest-news", "success", 0);
+		insertRun(db, "quest-news", "success", 0);
+
+		const [res] = checkDegradedSources(db, ["quest-news"]);
+		assert.equal(res.degraded, false);
+		assert.match(res.reason, /quiet-is-expected/);
+	});
+
+	test("champion-news with 3 clean 0-item runs is still degraded (no flag)", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "champion-news", "success", 0);
+		insertRun(db, "champion-news", "success", 0);
+		insertRun(db, "champion-news", "success", 0);
+
+		const [res] = checkDegradedSources(db, ["champion-news"]);
+		assert.equal(res.degraded, true);
+		assert.match(res.reason, /0 items/);
+	});
+
+	test("a zeroItemsIsHealthy source with 3 failures is still degraded", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "nbc4-news", "failure", 0);
+		insertRun(db, "nbc4-news", "failure", 0);
+		insertRun(db, "nbc4-news", "failure", 0);
+
+		const [res] = checkDegradedSources(db, ["nbc4-news"]);
+		assert.equal(res.degraded, true);
+		assert.match(res.reason, /all failed/);
 	});
 });
 

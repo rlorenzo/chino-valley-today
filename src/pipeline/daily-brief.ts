@@ -77,12 +77,12 @@ const AGENDA_SOURCES = [
 	"chinohills-agendas",
 ];
 
-// Everything that varies between the two secondary-press outlets lives here.
-// The Champion is a weekly print paper and the Daily Bulletin publishes daily,
-// so one set of windows cannot serve both — but spreading that difference
-// across `if (source_key === ...)` branches is how the third outlet gets half
-// wired up. `hosts` is the render-time allowlist: a link only reaches the page
-// if its host is one of these exactly.
+// Everything that varies between the secondary-press outlets lives here. The
+// Champion is a weekly print paper and the Daily Bulletin publishes daily, so
+// one set of windows cannot serve both — but spreading that difference across
+// `if (source_key === ...)` branches is how a third outlet gets half wired up.
+// `hosts` is the render-time allowlist: a link only reaches the page if its
+// host is one of these exactly.
 interface HeadlineSourcePolicy {
 	outlet: string;
 	hosts: readonly string[];
@@ -92,6 +92,17 @@ interface HeadlineSourcePolicy {
 	maxItemAgeHours: number;
 	// Daily outlets must not re-link what the previous brief already carried.
 	sincePrevBrief: boolean;
+	// Cross-outlet dedup precedence, ascending (lower wins). Replaces a
+	// champion-first boolean now that there are six outlets to order, not two.
+	dedupRank: number;
+	// Per-outlet cap on how many of this outlet's headlines one brief may
+	// carry. Defaults to MAX_HEADLINES_PER_OUTLET when omitted.
+	maxPerBrief?: number;
+	// True when a 0-item scrape run is this outlet's normal state (a weekly
+	// student paper between issues, NBC4's keyword filter matching nothing
+	// most days) — see checkDegradedSources in brief-health.ts, which reads
+	// this flag to stop treating quiet as drift for these sources.
+	zeroItemsIsHealthy?: boolean;
 }
 
 const HEADLINE_SOURCE_POLICY: Record<string, HeadlineSourcePolicy> = {
@@ -101,6 +112,7 @@ const HEADLINE_SOURCE_POLICY: Record<string, HeadlineSourcePolicy> = {
 		maxScrapeAgeHours: 8 * 24,
 		maxItemAgeHours: 7 * 24,
 		sincePrevBrief: false,
+		dedupRank: 0,
 	},
 	"dailybulletin-news": {
 		outlet: "Daily Bulletin",
@@ -108,10 +120,59 @@ const HEADLINE_SOURCE_POLICY: Record<string, HeadlineSourcePolicy> = {
 		maxScrapeAgeHours: 26,
 		maxItemAgeHours: 48,
 		sincePrevBrief: true,
+		dedupRank: 1,
+	},
+	"quest-news": {
+		outlet: "Quest News",
+		hosts: ["dalquestnews.org", "www.dalquestnews.org"],
+		maxScrapeAgeHours: 8 * 24,
+		maxItemAgeHours: 7 * 24,
+		sincePrevBrief: false,
+		dedupRank: 2,
+		maxPerBrief: 2,
+		zeroItemsIsHealthy: true,
+	},
+	"bulldogtimes-news": {
+		outlet: "Bulldog Times",
+		hosts: ["ayalabulldogtimes.org", "www.ayalabulldogtimes.org"],
+		maxScrapeAgeHours: 8 * 24,
+		maxItemAgeHours: 7 * 24,
+		sincePrevBrief: false,
+		dedupRank: 3,
+		maxPerBrief: 2,
+		zeroItemsIsHealthy: true,
+	},
+	"breeze-news": {
+		outlet: "The Breeze",
+		hosts: ["thebreezepaper.com", "www.thebreezepaper.com"],
+		maxScrapeAgeHours: 8 * 24,
+		maxItemAgeHours: 7 * 24,
+		sincePrevBrief: false,
+		dedupRank: 4,
+		maxPerBrief: 2,
+		zeroItemsIsHealthy: true,
+	},
+	"nbc4-news": {
+		outlet: "NBC4 Los Angeles",
+		hosts: ["www.nbclosangeles.com", "nbclosangeles.com"],
+		maxScrapeAgeHours: 26,
+		maxItemAgeHours: 48,
+		sincePrevBrief: true,
+		dedupRank: 5,
+		zeroItemsIsHealthy: true,
 	},
 };
 
 export const HEADLINES_SOURCES = Object.keys(HEADLINE_SOURCE_POLICY);
+
+// Read by checkDegradedSources (brief-health.ts) so the watchdog's
+// quiet-is-expected rule stays defined in one place, next to the policy it
+// mirrors, rather than drifting out of sync with a second copy of the flag.
+export const ZERO_ITEMS_HEALTHY_SOURCES = new Set(
+	Object.entries(HEADLINE_SOURCE_POLICY)
+		.filter(([, policy]) => policy.zeroItemsIsHealthy === true)
+		.map(([key]) => key),
+);
 
 // A publisher's clock running ahead of ours must not silently drop a story.
 const MAX_ITEM_FUTURE_HOURS = 24;
@@ -804,14 +865,18 @@ export function selectHeadlinesElsewhere(
 		(item) => filterHeadlineEligibility(item).eligible,
 	);
 
-	// 4. Cross-outlet deduplication. Precedence: the local weekly's own reporting
-	// wins over the regional daily's version of the same story, then the earlier
-	// filing, then the lower id so runs are reproducible.
+	// 4. Cross-outlet deduplication. Precedence: each outlet's dedupRank (lower
+	// wins) — the local weekly's own reporting over the regional daily's
+	// version of the same story, student press over the wire-service-scale
+	// outlets behind them — then the earlier filing, then the lower id so runs
+	// are reproducible.
 	const sortedForDedup = [...eligiblePolicy].sort((a, b) => {
-		const localFirst =
-			Number(b.source_key === "champion-news") -
-			Number(a.source_key === "champion-news");
-		if (localFirst !== 0) return localFirst;
+		const rankDiff =
+			(HEADLINE_SOURCE_POLICY[a.source_key]?.dedupRank ??
+				Number.MAX_SAFE_INTEGER) -
+			(HEADLINE_SOURCE_POLICY[b.source_key]?.dedupRank ??
+				Number.MAX_SAFE_INTEGER);
+		if (rankDiff !== 0) return rankDiff;
 		const dateDiff = (a.occurred_at ?? "").localeCompare(b.occurred_at ?? "");
 		if (dateDiff !== 0) return dateDiff;
 		return a.id - b.id;
@@ -853,8 +918,11 @@ export function selectHeadlinesElsewhere(
 
 	for (const item of finalSorted) {
 		if (result.length >= MAX_HEADLINES_TOTAL) break;
+		const cap =
+			HEADLINE_SOURCE_POLICY[item.source_key]?.maxPerBrief ??
+			MAX_HEADLINES_PER_OUTLET;
 		const count = countByOutlet[item.source_key] ?? 0;
-		if (count >= MAX_HEADLINES_PER_OUTLET) continue;
+		if (count >= cap) continue;
 
 		countByOutlet[item.source_key] = count + 1;
 		result.push(item);

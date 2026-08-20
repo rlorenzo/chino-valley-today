@@ -41,7 +41,7 @@ export function rfc2822ToIso(pubDate: string | undefined): string | null {
 // always Chino-area local time) convert to correct UTC ISO strings.
 // Moved here from chino-news-rss.ts (2026-08-17) when cvfd-news.ts became the
 // second CivicPlus scraper needing it — it is city-agnostic by construction.
-function laOffsetMinutes(approxUtcMs: number): number {
+export function laOffsetMinutes(approxUtcMs: number): number {
 	const parts = new Intl.DateTimeFormat("en-US", {
 		timeZone: "America/Los_Angeles",
 		timeZoneName: "longOffset",

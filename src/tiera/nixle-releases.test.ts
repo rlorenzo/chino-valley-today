@@ -76,7 +76,7 @@ describe("minors guard", () => {
 			"A minor was present in the vehicle",
 			"the boy was found safe",
 			"Two juveniles were interviewed",
-			"the incident occurred near Chino High School",
+			"the incident occurred near Chino Middle School",
 		]) {
 			assert.ok(mentionsMinor(s), `should have held: ${s}`);
 		}
@@ -89,6 +89,11 @@ describe("minors guard", () => {
 			"A 22 year old man was arrested following the collision",
 			"A traffic collision investigation is ongoing on Grand Ave",
 			"The 18-year-old driver was cited and released",
+			// Operator decision 2026-08-19: a high-school name/context alone is
+			// not identification of a minor — see policy-filters.ts's
+			// EXPLICIT_MINOR_RE comment. This path shares mentionsMinor with the
+			// headlines-elsewhere gate, so the exemption applies here too.
+			"the incident occurred near Chino High School",
 		]) {
 			assert.ok(!mentionsMinor(s), `should NOT have held: ${s}`);
 		}
