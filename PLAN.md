@@ -1012,6 +1012,46 @@ endpoint details, IDs, and caveats (x-robots-tag: noindex on the API — cite
 the human page, not the API URL; officers' PII in the league directory JSON
 stays out) in the vault task. Build remains.
 
+### Task 4.9 - Retire repeated press headlines into their own section
+
+**In the local press** repeats the same story every morning for up to a week.
+`champion-news` policy is `maxItemAgeHours: 7 * 24` with
+`sincePrevBrief: false`, and the only dedup in `selectHeadlinesElsewhere` is
+cross-outlet *within a single brief* — nothing anywhere asks whether an item
+already ran in an earlier one. So a Champion story filed Monday appears in all
+seven briefs Monday through Sunday, and on a slow week a reader sees an
+identical section every morning.
+
+The 7-day window is correct and should stay: The Champion is a weekly, so
+`sincePrevBrief: true` (what `dailybulletin-news` and `nbc4-news` use) would
+qualify its stories on exactly one morning and leave the section empty the
+other six. The bug is not the window, it is that a re-shown item is presented
+as though it were new.
+
+Fix is demote-not-drop, plus an honest label:
+
+- Split the section. Items not carried by any previous brief stay under
+  **In the local press**. Items that have already run move to a second list
+  headed **Still in the local press this week**.
+- Fill order is unseen first, then already-shown ones only as needed, so the
+  existing `MAX_HEADLINES_TOTAL` (5) and per-outlet caps still fill on a quiet
+  week rather than leaving the front page bare.
+- If every eligible item has already run, the fresh heading is omitted
+  entirely and only the "Still in" list renders — the conditional-section rule
+  the rest of the brief already follows.
+- Ordering, dedup, freshness, ToS and policy filters are unchanged; this is a
+  presentation split over the existing result set, not a new selection rule.
+
+Needs a durable record of what each brief carried. `attributions` on the
+published brief post is the obvious candidate (URLs already land there); an
+explicit table is the alternative if attributions turn out lossy. Decide
+during build.
+
+Out of scope: changing any outlet's `maxItemAgeHours` or `sincePrevBrief`, and
+any cap on how many times an item may reappear — a story is either still in
+the local press this week or it has aged out, and the window already says
+which.
+
 ### Phase 4 acceptance
 
 - [ ] Seven consecutive mornings publish a daily brief with zero human
