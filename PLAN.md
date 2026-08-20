@@ -938,7 +938,7 @@ watchdog learns `zeroItemsIsHealthy` so dormant papers (summer break) and a
 usually-empty keyword filter don't alarm. Minors-guard vocabulary change
 rides in the same PR. Press timer group only — no new systemd units.
 
-### Task 4.8 - HS sports scores (probe done 2026-08-19; build pending)
+### Task 4.8 - HS sports scores (endpoints verified 2026-08-19; build pending)
 
 Team-level scores/schedules/standings for the four CVUSD high schools.
 Recon found three of four schools' official athletics sites AND CIF-SS's own
@@ -947,12 +947,22 @@ ayalasports.com, cifsshome.org — robots fully open, data AJAX-loaded), with
 the remainder on PlayOn (donlugoathletics.com, chhuskies.com — no robots
 file; RSC payload carries real schedule data). Rejected: scores.cifss.org
 (AWS WAF challenge), athletic.net (robots blocks exactly the team-result
-pages, MaxPreps class), sblivesports.com (blanket 403). Next: browser-based
-endpoint discovery of the Home Campus JSON API + PlayOn RSC shape; settle
-donlugosports.com vs donlugoathletics.com; verify 2025-26 league membership
-against CIF-SS before any published league claim (conflicting recon hits:
-Baseline/Palomares realignment vs Mt. Baldy brackets). Full ranked findings
-in the vault task.
+pages, MaxPreps class), sblivesports.com (blanket 403).
+
+**Endpoint discovery done 2026-08-19 (curl-verified, no browser needed at
+ingest):** Home Campus school sites answer `POST /wp-json/sports/v1/main-teams`
+with full schedule/score JSON, no session or nonce (school IDs: Chino 103,
+Ayala 28, Don Lugo 143 — donlugosports.com turned out current, not stale, so
+one scraper core covers three schools). Chino Hills (104, no Home Campus
+site) comes from the CIF-SS schedule-score widget (server-rendered, citable
+GET per sport) or chhuskies.com's PlayOn RSC payload. League membership
+settled from CIF-SS's own 2026-27 league directory endpoint and is
+**per-sport** — both conflicting recon hits were right: Chino Hills is
+Baseline; Ayala is Palomares except football (Baseline); Chino High and Don
+Lugo are Mt. Baldy. League claims must therefore always be per-sport. Full
+endpoint details, IDs, and caveats (x-robots-tag: noindex on the API — cite
+the human page, not the API URL; officers' PII in the league directory JSON
+stays out) in the vault task. Build remains.
 
 ### Phase 4 acceptance
 
