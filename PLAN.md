@@ -910,7 +910,7 @@ absorb fire/EMS? fifth topic mark?), and move topic classification from
 site-side derivation (`lib/record.ts`) into the pipeline, which owns the
 source keys and item types.
 
-### Task 4.6 - City Alert Center feeds — IN REVIEW (PR #30, 2026-08-19)
+### Task 4.6 - City Alert Center feeds — MERGED (PR #30, 2026-08-19)
 
 Extend `chino-news-rss` and `chinohills-news-rss` to ingest each city's Alert
 Center feed (ModID=63, CID=All-0) as `alert` items, and surface city alerts
@@ -922,7 +922,7 @@ non-empty day. No new scraper keys and no new systemd units (both scrapers
 already run in the frequent group), so this structurally cannot repeat the
 Task 4.2 uninstalled-timer gap.
 
-### Task 4.7 - Student press + NBC4 ingestion — IN REVIEW (PR #31, 2026-08-19)
+### Task 4.7 - Student press + NBC4 ingestion — MERGED (PR #31, 2026-08-19)
 
 Four feed-based secondary-press sources join headlines-elsewhere:
 `quest-news` (Don Lugo HS; inherently local, meta.city Chino),
