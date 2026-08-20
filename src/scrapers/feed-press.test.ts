@@ -108,6 +108,10 @@ test("quest-news run orchestration (shared feed-press core)", async (t) => {
 		assert.equal((items[1].meta as { city: string }).city, "Chino");
 
 		assert.ok(notes.some((n) => n.includes("2 feed item(s), 2 ingested")));
+		// The quiet-is-expected reassurance is scoped to actually-quiet runs — a
+		// populated run claiming "a 0-item run is normal" reads as misleading
+		// stored evidence.
+		assert.ok(!notes.some((n) => n.includes("normal for this source")));
 	});
 
 	await t.test(

@@ -139,6 +139,6 @@ export async function runFeedPress(
 	ctx.note(
 		`${cfg.outlet}: ${items.length} feed item(s), ${ingested} ingested` +
 			(cfg.filterItem ? `, ${filteredOut} filtered out` : "") +
-			". A 0-item run is normal for this source.",
+			(ingested === 0 ? ". A 0-item run is normal for this source." : "."),
 	);
 }
