@@ -384,10 +384,17 @@ set them in `.env`:
 | `CVT_HEARTBEAT_URL_FREQUENT` | hourly at :17 | 90 min |
 | `CVT_HEARTBEAT_URL_DAILY` | 05:40 Pacific | 30 h |
 | `CVT_HEARTBEAT_URL_MEDIA` | 07:30 Pacific | 30 h |
-| `CVT_HEARTBEAT_URL_BRIEF` | 06:00 Pacific | 30 h |
 
 Unset means no ping and no alarm, which is the right default on a developer
 machine. A failed ping never fails the scrape run itself.
+
+The 06:00 daily brief is deliberately absent from that table. Its liveness is
+carried by keyword detection on `/health` instead: `brief-health.ts` flips
+`pipeline=fresh` to `pipeline=stale` when today's brief is missing, and the
+monitor alerts on the **absence** of `pipeline=fresh`. The plan in use has no
+heartbeat monitor type, so a `CVT_HEARTBEAT_URL_BRIEF` nobody could receive
+was dead code that read as a safety net to anyone auditing `run-brief.sh` —
+worse than no net at all. See the closing comment there.
 
 ### Immediate failure detail
 
