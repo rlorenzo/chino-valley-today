@@ -56,8 +56,44 @@ what="${1:-site}"
 # CVT_DEPLOY_HOST in the unit environment, so demanding one here would exit 78
 # before either could run — which would leave the forced-command CI path unable
 # to update or rebuild the checkout at all.
+# Running these as root is the trap, not a convenience.
+#
+# `local` and `host-update` build inside $APP/site and publish into $WEB, both
+# owned by the unprivileged service account that the timers and the CI forced
+# command run as. Run either as root and every file npm and Astro create lands
+# root-owned: node_modules, dist, and the release directory. The next
+# unprivileged deploy then dies in `npm ci`, which removes node_modules before
+# it reinstalls, and the release prune hits the same wall (exit 73 below).
+#
+# On 2026-08-20 a hand-run `deploy.sh local` over an ssh root@ session did
+# exactly that. It published fine, and then two CI deploys failed 90 minutes
+# later with a bare exit 243 and no message, because --silent had swallowed the
+# EACCES. deploy/README.md already warned that `deploy.sh site` from a
+# developer machine lands files owned by the wrong uid; the warning was written
+# down but never enforced, one path over.
+#
+# CVT_ALLOW_ROOT_DEPLOY exists for a genuine root-owned install, where $APP and
+# $WEB belong to root and there is no service account to collide with.
 case "$what" in
-	local | host-update) ;;
+	local | host-update)
+		if [ "$(id -u)" -eq 0 ] && [ -z "${CVT_ALLOW_ROOT_DEPLOY:-}" ]; then
+			# GNU stat; absent or non-GNU (a developer's macOS) just means we
+			# print the advice without a name rather than a broken sudo line.
+			owner="$(stat -c '%U' "$APP" 2>/dev/null || true)"
+			echo "deploy: refusing to run '$what' as root." >&2
+			echo "  Building in $APP as root leaves node_modules, dist and the new" >&2
+			echo "  release owned by root, which breaks the next unprivileged deploy" >&2
+			echo "  and the release prune." >&2
+			if [ -n "$owner" ] && [ "$owner" != root ]; then
+				echo "  $APP is owned by '$owner'. Run it as that account:" >&2
+				echo "    sudo -u $owner $0 $what" >&2
+			else
+				echo "  Run it as the account that owns $APP." >&2
+			fi
+			echo "  (set CVT_ALLOW_ROOT_DEPLOY=1 only on a root-owned install.)" >&2
+			exit 77
+		fi
+		;;
 	*)
 		if [ -z "$HOST" ]; then
 			echo "deploy: CVT_DEPLOY_HOST is not set." >&2
@@ -72,7 +108,7 @@ deploy_site() {
 	echo "==> building the site"
 	# No CVT_SITE_ORIGIN override: astro.config.mjs already defaults to
 	# https://chinovalley.today, which is what this host serves.
-	(cd site && npm ci --silent && npm run build)
+	(cd site && npm ci && npm run build)
 
 	[ -f site/dist/index.html ] || { echo "deploy: build produced no index.html" >&2; exit 1; }
 
@@ -299,7 +335,10 @@ deploy_local() {
 	echo "==> building on host from the local checkout"
 	[ -d "$ROOT/site" ] || { echo "deploy: no site/ directory here" >&2; exit 66; }
 
-	(cd "$ROOT/site" && npm ci --silent && npm run build)
+	# No --silent. It hides npm's own failures: when node_modules was
+	# root-owned, `npm ci` could not delete it, and all that reached the CI log
+	# was "exit code 243" with not one line of explanation.
+	(cd "$ROOT/site" && npm ci && npm run build)
 	[ -f "$ROOT/site/dist/index.html" ] || { echo "deploy: build produced no index.html" >&2; exit 1; }
 
 	local release
