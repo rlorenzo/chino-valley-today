@@ -22,8 +22,18 @@ import {
 // nearly every adult release and quietly undone the auto-publish decision. A
 // guard that fires on everything is not a safe guard, it is a broken one:
 // people stop reading its output.
+//
+// "high school" removed from this list by dated operator decision
+// (2026-08-19): a high-school name or context is not, by itself,
+// identification of a minor. Student press (Quest News, Bulldog Times, The
+// Breeze) is now ingested, and every one of their items names a high school —
+// leaving the term in would have tripped the guard on effectively all of
+// them. "middle school" and "elementary" stay in scope; the identification
+// signals that actually bind — juvenile/teen/child/boy/girl vocabulary, ages
+// under 18 via AGE_RE, and the unvetted-name guard — are unchanged, including
+// on the Nixle release path, which shares this function.
 const EXPLICIT_MINOR_RE =
-	/\b(?:juveniles?|minors?|child(?:ren)?|teen(?:ager)?s?|youths?|infants?|toddlers?|newborns?|bab(?:y|ies)|boys?|girls?|high\s+school|middle\s+school|elementary)\b/i;
+	/\b(?:juveniles?|minors?|child(?:ren)?|teen(?:ager)?s?|youths?|infants?|toddlers?|newborns?|bab(?:y|ies)|boys?|girls?|middle\s+school|elementary)\b/i;
 const AGE_RE = /\b(\d{1,2})[-\s]years?[-\s]old\b/gi;
 // Local place names that collide with the minors vocabulary, removed before the
 // guard runs. **Boys Republic** is a real institution in Chino Hills with a

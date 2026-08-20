@@ -45,11 +45,14 @@ case "$group" in
 	media)
 		keys=(chinohills-swagit youtube-captions chino-youtube-captions)
 		;;
-	# Secondary press reporting (The Champion, Daily Bulletin). Politeness
-	# budget: runs 4 times daily (05:00, 11:00, 17:00, 23:00 PT), fail-closed
-	# robots.txt, ToS tracking, and redirect validation.
+	# Secondary press reporting (The Champion, Daily Bulletin, three student
+	# papers, NBC4 keyword-filtered). Politeness budget: runs 4 times daily
+	# (05:00, 11:00, 17:00, 23:00 PT), fail-closed robots.txt, ToS tracking,
+	# and redirect validation. The student papers and NBC4 go quiet or empty
+	# on most runs by design (dormant between issues / no Chino match) — see
+	# zeroItemsIsHealthy in daily-brief.ts.
 	press)
-		keys=(champion-news dailybulletin-news)
+		keys=(champion-news dailybulletin-news quest-news bulldogtimes-news breeze-news nbc4-news)
 		;;
 	*)
 		echo "usage: $0 <frequent|daily|media|press>" >&2

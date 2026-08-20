@@ -24,7 +24,28 @@ test("policy-filters suite", async (t) => {
 			mentionsMinor("Boys & Girls Club announces new director"),
 			false,
 		);
-		assert.equal(mentionsMinor("Incident reported near the high school"), true);
+		// Operator decision 2026-08-19: a high-school name/context alone is not
+		// identification of a minor — student press (Quest News, Bulldog Times,
+		// The Breeze) names a high school in nearly every item, and this term
+		// would otherwise trip the guard on all of them.
+		assert.equal(
+			mentionsMinor("Incident reported near the high school"),
+			false,
+		);
+		assert.equal(
+			mentionsMinor("Incident reported near the middle school"),
+			true,
+		);
+		assert.equal(mentionsMinor("Fundraiser held for the elementary"), true);
+		assert.equal(mentionsMinor("Teen volunteers at the food bank"), true);
+		assert.equal(mentionsMinor("Juvenile detained after the incident"), true);
+		assert.equal(mentionsMinor("A 17-year-old was reported missing"), true);
+		// The narrow-signal guard this suite documents above: a bare age must
+		// not fire on every adult release.
+		assert.equal(
+			mentionsMinor("A 40-year-old was arrested on suspicion of DUI"),
+			false,
+		);
 	});
 
 	await t.test(

@@ -1084,7 +1084,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 
 	test("checkHeadlinesFreshness evaluates ToS status and scrape run age", () => {
 		const db = openDb(":memory:");
-		assert.equal(HEADLINES_SOURCES.length, 2);
+		assert.equal(HEADLINES_SOURCES.length, 6);
 
 		// Without any scrape runs recorded
 		const freshMap1 = checkHeadlinesFreshness(db, NOW);
@@ -1414,6 +1414,125 @@ describe("headlines elsewhere deduplication and selection", () => {
 				`${key} exceeded its per-outlet cap`,
 			);
 		}
+	});
+
+	test("selectHeadlinesElsewhere dedup precedence follows dedupRank, not just champion-first", () => {
+		// The Champion (dedupRank 0) must still beat NBC4 (dedupRank 5) on a
+		// shared story, and a student paper (Quest News, dedupRank 2) must also
+		// beat NBC4 — dedupRank has to generalize past the old two-outlet
+		// champion-vs-everyone-else boolean.
+		const champion = item({
+			source_key: "champion-news",
+			source_url:
+				"https://www.championnewspapers.com/news/article_dedup-a.html",
+			title: "Chino Hills council approves Peyton Drive repaving contract",
+			body: "The council voted 4-1 to approve the repaving contract.",
+			occurred_at: "2026-08-16T12:00:00.000Z",
+			meta: JSON.stringify({ outlet: "The Champion" }),
+		});
+		const nbc4DupeOfChampion = item({
+			source_key: "nbc4-news",
+			source_url:
+				"https://www.nbclosangeles.com/news/local/peyton-drive-repaving/1/",
+			title: "Chino Hills council approves Peyton Drive repaving contract deal",
+			body: "Council members voted to move forward with the repaving contract.",
+			occurred_at: "2026-08-16T14:00:00.000Z",
+			meta: JSON.stringify({
+				outlet: "NBC4 Los Angeles",
+				chinoKeyword: "Chino Hills",
+			}),
+		});
+		const quest = item({
+			source_key: "quest-news",
+			source_url: "https://dalquestnews.org/2026/08/16/football-opener/",
+			title:
+				"Don Lugo football opens season with home win over Ayala High School",
+			body: "The team won its season opener at home.",
+			occurred_at: "2026-08-16T02:00:00.000Z",
+			meta: JSON.stringify({ outlet: "Quest News", city: "Chino" }),
+		});
+		const nbc4DupeOfQuest = item({
+			source_key: "nbc4-news",
+			source_url:
+				"https://www.nbclosangeles.com/sports/local/don-lugo-football/2/",
+			title:
+				"Don Lugo football opens season with home win over Ayala High School Bulldogs",
+			body: "Don Lugo opened its season with a home win.",
+			occurred_at: "2026-08-16T04:00:00.000Z",
+			meta: JSON.stringify({
+				outlet: "NBC4 Los Angeles",
+				chinoKeyword: "Chino",
+			}),
+		});
+
+		const freshness = {
+			...FRESH,
+			"quest-news": {
+				isFresh: true,
+				status: "success" as const,
+				finishedAt: "2026-08-17T00:00:00.000Z",
+				tosStatus: "enabled" as const,
+			},
+			"nbc4-news": {
+				isFresh: true,
+				status: "success" as const,
+				finishedAt: "2026-08-17T00:00:00.000Z",
+				tosStatus: "enabled" as const,
+			},
+		};
+
+		const selected = selectHeadlinesElsewhere(
+			[champion, nbc4DupeOfChampion, quest, nbc4DupeOfQuest],
+			freshness,
+			NOW,
+		);
+
+		assert.equal(selected.length, 2);
+		assert.ok(selected.some((r) => r.source_key === "champion-news"));
+		assert.ok(selected.some((r) => r.source_key === "quest-news"));
+		assert.ok(!selected.some((r) => r.source_key === "nbc4-news"));
+	});
+
+	test("selectHeadlinesElsewhere caps a student paper at its maxPerBrief (2), not the outlet default of 3", () => {
+		const rows = [
+			item({
+				source_key: "quest-news",
+				source_url: "https://dalquestnews.org/2026/08/16/story-a/",
+				title: "Chino students showcase robotics project at regional fair",
+				occurred_at: "2026-08-16T00:00:00.000Z",
+				meta: JSON.stringify({ outlet: "Quest News", city: "Chino" }),
+			}),
+			item({
+				source_key: "quest-news",
+				source_url: "https://dalquestnews.org/2026/08/16/story-b/",
+				title: "Chino students debut new marching band field show",
+				occurred_at: "2026-08-16T01:00:00.000Z",
+				meta: JSON.stringify({ outlet: "Quest News", city: "Chino" }),
+			}),
+			item({
+				source_key: "quest-news",
+				source_url: "https://dalquestnews.org/2026/08/16/story-c/",
+				title: "Chino students take first place in yearbook design contest",
+				occurred_at: "2026-08-16T02:00:00.000Z",
+				meta: JSON.stringify({ outlet: "Quest News", city: "Chino" }),
+			}),
+		];
+		const freshness = {
+			...FRESH,
+			"quest-news": {
+				isFresh: true,
+				status: "success" as const,
+				finishedAt: "2026-08-17T00:00:00.000Z",
+				tosStatus: "enabled" as const,
+			},
+		};
+
+		const selected = selectHeadlinesElsewhere(rows, freshness, NOW);
+
+		assert.equal(
+			selected.filter((r) => r.source_key === "quest-news").length,
+			2,
+		);
 	});
 
 	test("assembleBrief renders safe semantic HTML and attributions frontmatter", () => {

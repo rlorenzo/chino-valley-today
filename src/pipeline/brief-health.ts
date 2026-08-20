@@ -18,7 +18,11 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
 import { errorMessage } from "../utils/errors.ts";
-import { HEADLINES_SOURCES, laDateOf } from "./daily-brief.ts";
+import {
+	HEADLINES_SOURCES,
+	laDateOf,
+	ZERO_ITEMS_HEALTHY_SOURCES,
+} from "./daily-brief.ts";
 
 const FRESH = "pipeline=fresh";
 const STALE = "pipeline=stale";
@@ -152,6 +156,14 @@ export interface SourceDegradedResult {
 // with 0 items. Anything mixed is left alone — a single bad run, or a
 // success/failure mix, isn't proof of drift. Fewer than 3 recorded runs is
 // insufficient evidence either way, so it is never reported as degraded.
+//
+// The 3-failures rule applies to every source unconditionally — a source that
+// cannot even be fetched is broken regardless of how quiet it normally is.
+// The 3-zero-items rule is different: for outlets in
+// ZERO_ITEMS_HEALTHY_SOURCES (the three student papers between issues,
+// NBC4's keyword filter matching nothing most days) a clean run of 0-item
+// successes is the expected, healthy state, not drift, so that rule is
+// skipped for them.
 export function checkDegradedSources(
 	db: Db,
 	sourceKeys: readonly string[] = HEADLINES_SOURCES,
@@ -184,13 +196,22 @@ export function checkDegradedSources(
 				runs,
 			};
 		}
+
 		if (runs.every((r) => r.status === "success" && r.items_count === 0)) {
-			return {
-				sourceKey,
-				degraded: true,
-				reason: "last 3 runs all succeeded but extracted 0 items",
-				runs,
-			};
+			return ZERO_ITEMS_HEALTHY_SOURCES.has(sourceKey)
+				? {
+						sourceKey,
+						degraded: false,
+						reason:
+							"last 3 runs all succeeded with 0 items; quiet-is-expected for this source",
+						runs,
+					}
+				: {
+						sourceKey,
+						degraded: true,
+						reason: "last 3 runs all succeeded but extracted 0 items",
+						runs,
+					};
 		}
 		return {
 			sourceKey,

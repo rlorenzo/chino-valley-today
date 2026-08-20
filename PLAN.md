@@ -722,6 +722,28 @@ list, probed live with the pipeline's UA and politeness rules):**
   College paper, so the minors question mostly falls away; probe alongside
   the school-press decision.
 
+**Operator decisions on the third-pass verdicts (2026-08-19, same day):**
+
+- **Student press is IN** (Quest News, Bulldog Times, The Breeze): residents
+  are interested and it gives young journalists exposure. High school and
+  college qualify; middle school and below stay out of scope. "High school"
+  is removed from the minors-guard vocabulary by operator directive (a
+  school's name is not identification of a minor; all identification signals
+  still bind). → Task 4.7, EDITORIAL.md 2026-08-19 amendment.
+- **NBC4's rejection is superseded**: ingest the robots-allowed feed with a
+  Chino/Chino Hills keyword filter at ingest. NBCUniversal ToS reviewed
+  2026-08-19 — no automated-access or reuse restriction. Expected yield is
+  low (their Chino coverage skews crime, which the policy filter excludes) —
+  accepted. → Task 4.7.
+- **KTLA re-probed and re-rejected, now on ToS**: `/feed/` turned out to be
+  robots-permitted AND fetchable (the 403 wall guards HTML pages only), but
+  Nexstar's Terms of Use prohibit data gathering/extraction "for any
+  purpose" — a binding prohibition, Nixle class. Do not revisit without a
+  terms change. (One-time human-browser read of the terms, 2026-08-19,
+  documented in reports/notes/ktla.md.)
+- **HS sports scores wanted** (team-level: scores, schedules, standings —
+  fits the interim sports rule; the naming decision stays open). → Task 4.8.
+
 ### Task 4.1 - Ingest the easy verified set — DONE 2026-08-17
 
 Landed same day as planned: seven scrapers (216 items on first run), a shared
@@ -899,6 +921,38 @@ healthy steady state, and the whole point is being subscribed before the
 non-empty day. No new scraper keys and no new systemd units (both scrapers
 already run in the frequent group), so this structurally cannot repeat the
 Task 4.2 uninstalled-timer gap.
+
+### Task 4.7 - Student press + NBC4 ingestion — IN REVIEW (PR #31, 2026-08-19)
+
+Four feed-based secondary-press sources join headlines-elsewhere:
+`quest-news` (Don Lugo HS; inherently local, meta.city Chino),
+`bulldogtimes-news` (Ayala HS; meta.city Chino Hills), `breeze-news`
+(Chaffey College; text-matched relevance only), `nbc4-news` (keyword-filtered
+at ingest to \bChino( Hills)?\b; robots-allowed feed URL). Shared feed-press
+scraper core; verbatim feed titles + sentence-bounded teasers (Tier A);
+per-source ToS registry entries (the SNO papers have no reader-facing ToS —
+robots.txt is tracked as the binding access document). Policy generalized:
+dedup precedence becomes a rank (Champion > Daily Bulletin > student papers >
+NBC4), student papers cap at 2 headlines/brief, and the degraded-source
+watchdog learns `zeroItemsIsHealthy` so dormant papers (summer break) and a
+usually-empty keyword filter don't alarm. Minors-guard vocabulary change
+rides in the same PR. Press timer group only — no new systemd units.
+
+### Task 4.8 - HS sports scores (probe done 2026-08-19; build pending)
+
+Team-level scores/schedules/standings for the four CVUSD high schools.
+Recon found three of four schools' official athletics sites AND CIF-SS's own
+schedule widget run on one platform (Home Campus: chinohighathletics.com,
+ayalasports.com, cifsshome.org — robots fully open, data AJAX-loaded), with
+the remainder on PlayOn (donlugoathletics.com, chhuskies.com — no robots
+file; RSC payload carries real schedule data). Rejected: scores.cifss.org
+(AWS WAF challenge), athletic.net (robots blocks exactly the team-result
+pages, MaxPreps class), sblivesports.com (blanket 403). Next: browser-based
+endpoint discovery of the Home Campus JSON API + PlayOn RSC shape; settle
+donlugosports.com vs donlugoathletics.com; verify 2025-26 league membership
+against CIF-SS before any published league claim (conflicting recon hits:
+Baseline/Palomares realignment vs Mt. Baldy brackets). Full ranked findings
+in the vault task.
 
 ### Phase 4 acceptance
 

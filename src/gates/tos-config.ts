@@ -31,4 +31,48 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 		notes:
 			"MediaNews Group Terms of Use for Daily Bulletin reviewed. Permits automated title and short teaser link-back under EDITORIAL.md.",
 	},
+	"quest-news": {
+		source_key: "quest-news",
+		status: "enabled",
+		terms_url: "https://dalquestnews.org/robots.txt",
+		reviewed_hash:
+			"ba956d06c6b5aa13616fc2922240aeb3655f34858a88a2f32fc9a98dc86ce3b0",
+		reviewed_at: "2026-08-19",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"No reader-facing ToS exists (verified 2026-08-19: SNO-platform site, footer carries only a copyright line). robots.txt tracked as the binding access document; permits /feed/, asks Crawl-delay 6.",
+	},
+	"bulldogtimes-news": {
+		source_key: "bulldogtimes-news",
+		status: "enabled",
+		terms_url: "https://ayalabulldogtimes.org/robots.txt",
+		reviewed_hash:
+			"ba956d06c6b5aa13616fc2922240aeb3655f34858a88a2f32fc9a98dc86ce3b0",
+		reviewed_at: "2026-08-19",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"No reader-facing ToS exists (verified 2026-08-19: SNO-platform site, footer carries only a copyright line). robots.txt tracked as the binding access document; permits /feed/, asks Crawl-delay 6.",
+	},
+	"breeze-news": {
+		source_key: "breeze-news",
+		status: "enabled",
+		terms_url: "https://thebreezepaper.com/robots.txt",
+		reviewed_hash:
+			"253de8d8c2f969fac67e684a74c09e2f0acda4e18f868d93e99bd70bc3c88345",
+		reviewed_at: "2026-08-19",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"No general reader-facing ToS (verified 2026-08-19; only a donation-checkout ToS on snosites.com exists, which does not govern reading/linking). robots.txt tracked as the binding access document.",
+	},
+	"nbc4-news": {
+		source_key: "nbc4-news",
+		status: "enabled",
+		terms_url: "https://www.nbcuniversal.com/terms",
+		reviewed_hash:
+			"888cc58e55e386cb540d228cfcbec8713565080bcecc2d5dbca9152063261ca3",
+		reviewed_at: "2026-08-19",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"NBCUniversal general ToS reviewed 2026-08-19: no clause restricts automated access, scraping, RSS use, or headline/link reuse; the feed URL is explicitly robots-Allowed. Title + sentence-bounded teaser link-back per EDITORIAL.md.",
+	},
 };
