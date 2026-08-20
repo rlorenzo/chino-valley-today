@@ -10,7 +10,10 @@
 //   (release bodies can name private individuals). sbcfire-news is a
 //   county-wide feed, so it is filtered to meta.chinoRelevant (the dossier
 //   leaves inclusion to the assembler); cvfd-news IS the local district and
-//   is included whole. Nixle/sheriff sources are never queried here — Tier C.
+//   is included whole. Each city's Alert Center (chino-news-rss,
+//   chinohills-news-rss — item_type 'alert' only; their news_release items
+//   stay out of this section) is included whole too, same as cvfd-news.
+//   Nixle/sheriff sources are never queried here — Tier C.
 // - "Headlines elsewhere" does not exist until Task 4.2 lands; no stub.
 //
 // Usage: node src/pipeline/daily-brief.ts
@@ -57,9 +60,16 @@ const CALENDAR_SOURCES = [
 	"chinohills-news-rss",
 ];
 const FIRE_SOURCES = ["sbcfire-news", "cvfd-news"];
+// Queried separately from FIRE_SOURCES (itemTypes: ["alert"] only). The city
+// scrapers also produce 'news_release' and 'event' items, and FIRE_SOURCES'
+// query pulls news_release + alert together, so folding the city keys into
+// FIRE_SOURCES would leak city news releases into Fire & safety.
+const CITY_ALERT_SOURCES = ["chino-news-rss", "chinohills-news-rss"];
 const FIRE_LABEL: Record<string, string> = {
 	"sbcfire-news": "San Bernardino County Fire",
 	"cvfd-news": "Chino Valley Fire District",
+	"chino-news-rss": "City of Chino",
+	"chinohills-news-rss": "City of Chino Hills",
 };
 const AGENDA_SOURCES = [
 	"chino-legistar",
@@ -1185,10 +1195,16 @@ export function buildDailyBrief(
 			sourceKeys: ["nws-alerts"],
 			itemTypes: ["alert"],
 		}),
-		fire: queryItems(db, {
-			sourceKeys: FIRE_SOURCES,
-			itemTypes: ["news_release", "alert"],
-		}),
+		fire: [
+			...queryItems(db, {
+				sourceKeys: FIRE_SOURCES,
+				itemTypes: ["news_release", "alert"],
+			}),
+			...queryItems(db, {
+				sourceKeys: CITY_ALERT_SOURCES,
+				itemTypes: ["alert"],
+			}),
+		],
 		calendarEvents: queryItems(db, {
 			sourceKeys: CALENDAR_SOURCES,
 			itemTypes: ["event"],

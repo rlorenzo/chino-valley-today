@@ -74,9 +74,14 @@ export function fakeScraperContext(
 
 	const ctx = {
 		sourceId: 1,
-		get db(): never {
-			throw new Error("fake context: db access is not stubbed");
-		},
+		// Stubs resolveDocumentId's item-linkage lookup as "nothing captured
+		// before" (every prepared statement's .get() returns undefined), which is
+		// the correct answer against an empty test database and falls back to the
+		// freshly fetched documentId — the only ctx.db shape any scraper's run()
+		// currently needs from a test.
+		db: {
+			raw: { prepare: () => ({ get: () => undefined }) },
+		} as unknown as ScraperContext["db"],
 		counts: {
 			documentsFetched: 0,
 			documentsNew: 0,

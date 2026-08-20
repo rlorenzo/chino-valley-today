@@ -8,9 +8,11 @@
 // scraper.
 import { XMLParser } from "fast-xml-parser";
 import { cleanPlainText } from "../utils/text-truncation.ts";
+import { resolveDocumentId } from "./document-linkage.ts";
+import type { ScraperContext } from "./types.ts";
 
 // Re-exported so the CivicPlus scrapers keep a single import site.
-export { resolveDocumentId } from "./document-linkage.ts";
+export { resolveDocumentId };
 
 export const xmlParser = new XMLParser({
 	ignoreAttributes: false,
@@ -136,4 +138,45 @@ export function parseRssItems(xml: string): FeedItem[] {
 			extra,
 		};
 	});
+}
+
+// Ingests a CivicPlus Alert Center feed (ModID=63, All-0 — same module id and
+// category slug on both cities' sites) as item_type 'alert'. Empty is the
+// normal state; a non-empty run is an active emergency notice, same treatment
+// as cvfd-news.ts's Alert Center feed (which handles it via its generic
+// FEEDS loop instead).
+export async function ingestAlertCenter(
+	ctx: ScraperContext,
+	base: string,
+): Promise<void> {
+	const alertUrl = `${base}/RSSFeed.aspx?ModID=63&CID=All-0`;
+	const alertDoc = await ctx.fetchDocument(alertUrl, {
+		docType: "feed",
+		title: "Alert Center — All",
+	});
+	const alertItems = parseRssItems(alertDoc.body.toString("utf8"));
+	for (const it of alertItems) {
+		if (!it.link) continue;
+		ctx.insertItem({
+			document_id: resolveDocumentId(
+				ctx,
+				alertDoc.documentId,
+				it.guid,
+				"alert",
+			),
+			source_url: it.link,
+			item_type: "alert",
+			external_id: it.guid,
+			title: it.title,
+			body: stripHtml(it.description) || null,
+			occurred_at: rfc2822ToIso(it.pubDate),
+			meta: { feedUrl: alertUrl, module: "Alert Center (ModID=63)" },
+		});
+	}
+	ctx.note(
+		`Alert Center (ModID=63): ${alertItems.length} item(s). ` +
+			(alertItems.length === 0
+				? "Empty is the normal state for Alert Center — a non-empty run is an active emergency notice."
+				: ""),
+	);
 }

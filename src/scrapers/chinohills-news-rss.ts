@@ -13,6 +13,10 @@
 // reading that same disallowed page as a one-time human research step, not
 // via this scraper — full list in reports/notes/chinohills.md.
 //
+// Alert Center (ModID=63) is ingested below as item_type 'alert' (All-0
+// feed). Empty feeds are the normal state; a non-empty run is an active
+// emergency notice, same treatment as cvfd-news.ts's Alert Center.
+//
 // News & Announcements (Newsflash/CivicAlerts) is ModID=1. Detail pages live
 // under /CivicAlerts.aspx?aid=N, 302-redirecting to canonicalized
 // /m/newsflash/home/detail/N URLs — same redirect-to-canonical behavior as
@@ -27,6 +31,7 @@
 import * as cheerio from "cheerio";
 import {
 	type FeedItem,
+	ingestAlertCenter,
 	parseRssItems,
 	resolveDocumentId,
 	rfc2822ToIso,
@@ -180,6 +185,10 @@ async function run(ctx: ScraperContext): Promise<void> {
 			meta: { category: c.category, feedUrl: c.feedUrl },
 		});
 	}
+
+	// --- Alert Center: ingest as item_type 'alert' (All-0, ModID=63) via the
+	// shared CivicPlus helper. ---
+	await ingestAlertCenter(ctx, BASE);
 
 	// --- HTTP behavior notes ---
 	ctx.note(
