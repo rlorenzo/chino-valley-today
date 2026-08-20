@@ -1052,6 +1052,37 @@ any cap on how many times an item may reappear — a story is either still in
 the local press this week or it has aged out, and the window already says
 which.
 
+### Task 4.10 - Put the shell integration tests in the gate
+
+`npm test` is `node --test "src/**/*.test.ts" "scripts/**/*.test.ts"`, so
+neither `tests/integration/run-brief-retry.test.sh` nor
+`tests/integration/check-unit-drift.test.sh` runs in `npm run check` or in CI.
+They pass or fail only when someone invokes them by hand.
+
+This is not hypothetical. The Task 4.3 prerequisite tiering (PR #33) inverted
+what `run-brief-retry.test.sh` step 4 asserts — that a failing `sbcfire-news`
+must fail `--check-prereqs` — and `npm run check` reported green through the
+whole change. Review caught it; the gate never would have. Both shell suites
+cover exactly the paths unit tests cannot: the retry loop's real exit codes,
+and the unit-drift check against fixture systemd dirs and a stubbed
+`systemctl`.
+
+- Add an `npm run test:integration` script running every
+  `tests/integration/*.test.sh`, and chain it into `npm run check` after
+  `npm test`.
+- Confirm both suites pass in CI, not just locally: they shell out to `node`,
+  `git`, `cmp`, `mktemp` and a stubbed `systemctl` on PATH, and
+  `check-unit-drift.test.sh` builds a throwaway git repo, so the runner needs
+  a usable git identity — the suite already sets `GIT_CONFIG_GLOBAL=/dev/null`
+  and passes `user.name`/`user.email` per command, which should hold on a bare
+  runner but is worth verifying rather than assuming.
+- Keep them out of the pre-commit hook. They are slower than the hook's
+  budget, and the hook already runs biome, markdownlint, shellcheck and
+  typecheck; the gate is the right place.
+
+Not in scope: rewriting either suite. They are correct, they were simply never
+wired up.
+
 ### Phase 4 acceptance
 
 - [ ] Seven consecutive mornings publish a daily brief with zero human
