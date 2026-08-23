@@ -19,7 +19,8 @@ summarized below; their detail is in git history and the PRs they link.
   backup running, deploy-on-push CI verified. Infrastructure identifiers live
   in the private Obsidian note, deliberately not in this public repo.
 - **Phase 4 in progress** (daily brief + expanded sources). Merged: 4.0, 4.1,
-  4.2, 4.3, 4.6, 4.7. Open: **4.4, 4.5, 4.8, 4.9, 4.10** (specs below).
+  4.2, 4.3, 4.6, 4.7, 4.10. Open: **4.4, 4.5, 4.8** (specs below); 4.9 is in
+  review ([PR #39](https://github.com/rlorenzo/chino-valley-today/pull/39)).
 - **Phase 3 not started** (podcast + newsletter + growth), deliberately
   re-sequenced after Phase 4 — the newsletter is strictly better fed by a
   daily brief.
@@ -55,7 +56,12 @@ summarized below; their detail is in git history and the PRs they link.
   that silently failed to apply, and a test that passed for the wrong reason
   because its two timestamps happened to sort the same way as strings and as
   instants. Both were caught by re-reading code already reported as done, not
-  by a test. Task 4.10 exists for the same reason.
+  by a test. Task 4.10 shipped for that reason
+  ([PR #38](https://github.com/rlorenzo/chino-valley-today/pull/38)): both
+  shell suites now run in `npm run check` and in CI. CI needed a step of its
+  own — the workflow calls `npm run coverage` directly and never calls
+  `check`, so chaining into `check` alone would have left them unrun in the
+  one place that gates a merge.
 
 ### Open decisions
 
@@ -223,26 +229,6 @@ presented as though it were new. Fix is demote-not-drop:
 
 Out of scope: changing any outlet's `maxItemAgeHours` or `sincePrevBrief`, and
 any cap on how many times an item may reappear.
-
-### Task 4.10 - Put the shell integration tests in the gate
-
-`npm test` globs only `src/**` and `scripts/**/*.test.ts`, so neither
-`tests/integration/run-brief-retry.test.sh` nor
-`tests/integration/check-unit-drift.test.sh` runs in `npm run check` or CI.
-They pass or fail only when invoked by hand — and PR #33 inverted what
-`run-brief-retry.test.sh` step 4 asserts while the gate stayed green
-throughout. Review caught it; the gate could not have.
-
-- Add `npm run test:integration` running every `tests/integration/*.test.sh`,
-  chained into `npm run check` after `npm test`.
-- Confirm both suites pass in CI, not just locally: they shell out to `node`,
-  `git`, `cmp`, `mktemp` and a stubbed `systemctl`, and `check-unit-drift`
-  builds a throwaway git repo, so verify the runner's git identity holds
-  rather than assuming it.
-- Keep them out of the pre-commit hook — slower than the hook's budget, and
-  the gate is the right place.
-
-Not in scope: rewriting either suite. They are correct, they were never wired up.
 
 ### Phase 4 acceptance
 
