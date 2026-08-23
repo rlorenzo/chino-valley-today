@@ -58,6 +58,14 @@ export interface ScraperContext {
 			// API clients (e.g. api.weather.gov's blanket Disallow). Note the
 			// justification via ctx.note() when used.
 			skipRobots?: boolean;
+			// Turns the request into a POST with this JSON body. For APIs that
+			// are POST-only (Home Campus's schedule endpoint, Task 4.8). The
+			// conditional-GET path is skipped for these: a POST has no cached
+			// representation to revalidate.
+			jsonBody?: unknown;
+			// Asserts the POST body has no side effects, so a 5xx or a transport
+			// error may be retried. Omit it and the POST is tried exactly once.
+			bodyIsIdempotent?: boolean;
 		},
 	) => Promise<FetchedDocument>;
 	insertItem: (item: NewItemInput) => { id: number; isNew: boolean };

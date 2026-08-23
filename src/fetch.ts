@@ -17,6 +17,20 @@ export interface FetchOpts {
 	allowedHosts?: string[];
 	manualRedirect?: boolean;
 	maxRedirectHops?: number;
+	// A JSON request body turns the request into a POST. Added for Home Campus
+	// (Task 4.8), whose schedule/score API is POST-only.
+	//
+	// Everything above the transport is unchanged and deliberately so: robots is
+	// still consulted, the host allow-list still applies, the rate limiter still
+	// runs, and the UA still carries our contact address. A POST is a different
+	// verb, not a different politeness contract.
+	jsonBody?: unknown;
+	// Asserts that the `jsonBody` request has no side effects, so replaying it
+	// is safe. Without it a POST is never retried, because the retry below
+	// cannot know whether a second delivery means a second effect.
+	//
+	// Only ever set it for an endpoint that is a query wearing POST's clothes.
+	bodyIsIdempotent?: boolean;
 }
 
 export interface RawResult {
@@ -180,11 +194,13 @@ async function attempt(
 	url: string,
 	headers: Record<string, string>,
 	redirect: "follow" | "manual" = "follow",
+	body?: string,
 ): Promise<Response> {
 	return fetch(url, {
 		headers,
 		redirect,
 		signal: AbortSignal.timeout(60000),
+		...(body === undefined ? {} : { method: "POST", body }),
 	});
 }
 
@@ -209,31 +225,84 @@ export async function politeFetch(
 
 		const headers: Record<string, string> = { "user-agent": USER_AGENT };
 		if (opts.accept) headers.accept = opts.accept;
+		// A POST carries a request body, so there is no cached representation to
+		// revalidate: if-none-match on a POST asks a question the verb cannot
+		// answer, and some servers reject it outright.
+		const reqBody =
+			opts.jsonBody === undefined ? undefined : JSON.stringify(opts.jsonBody);
+		if (reqBody !== undefined) headers["content-type"] = "application/json";
 		// Only send conditional GET headers on initial request (hop 0)
-		if (hops === 0) {
+		if (hops === 0 && reqBody === undefined) {
 			if (opts.etag) headers["if-none-match"] = opts.etag;
 			if (opts.lastModified) headers["if-modified-since"] = opts.lastModified;
 		}
 
-		const redirectMode = opts.manualRedirect ? "manual" : "follow";
+		// Redirects are inspected hop by hop whenever letting the runtime follow
+		// them silently would skip a check this function is responsible for.
+		//
+		// A BODY, because redirect:"follow" replays a POST body on 307/308 at a
+		// location we never validated.
+		//
+		// An ALLOW-LIST, because validateHostAndProtocol runs at the top of this
+		// loop and nowhere else. Under redirect:"follow" the runtime resolves the
+		// chain internally, so a cross-host redirect escapes both the allow-list
+		// and the robots check for the host it lands on — which makes
+		// `allowedHosts` advisory exactly when a source starts behaving oddly,
+		// the moment it most needs to mean what it says.
+		//
+		// Same-host redirects still resolve normally: the loop validates and
+		// continues. Only a hop outside the allow-list now fails, which is the
+		// intent of passing one.
+		const inspectRedirects =
+			opts.manualRedirect ||
+			reqBody !== undefined ||
+			(opts.allowedHosts?.length ?? 0) > 0;
+		const redirectMode = inspectRedirects ? "manual" : "follow";
+		// A GET may always be retried. A POST may not, unless the caller has said
+		// its body carries no side effects: a transport error leaves us unable to
+		// tell a request that never arrived from one that arrived and whose
+		// response was lost, and replaying the second kind delivers it twice.
+		const mayRetry = reqBody === undefined || opts.bodyIsIdempotent === true;
 		let res: Response;
 		try {
-			res = await attempt(currentUrl, headers, redirectMode);
-			if (res.status >= 500) {
+			res = await attempt(currentUrl, headers, redirectMode, reqBody);
+			if (res.status >= 500 && mayRetry) {
 				await sleep(RETRY_PAUSE_MS);
-				res = await attempt(currentUrl, headers, redirectMode);
+				res = await attempt(currentUrl, headers, redirectMode, reqBody);
 			}
 		} catch (err) {
 			// Sources onboarded fail-closed surface the transport error instead of
 			// silently retrying: for those, whether the request happened at all is
 			// part of what the caller is being asked to decide.
 			if (opts.failClosedRobots) throw err;
+			if (!mayRetry) throw err;
 			await sleep(RETRY_PAUSE_MS);
-			res = await attempt(currentUrl, headers, redirectMode);
+			res = await attempt(currentUrl, headers, redirectMode, reqBody);
 		}
 
 		// Handle manual redirect inspect loop
-		if (opts.manualRedirect && [301, 302, 303, 307, 308].includes(res.status)) {
+		if (inspectRedirects && [301, 302, 303, 307, 308].includes(res.status)) {
+			// A redirected POST is refused, not followed.
+			//
+			// Following one correctly means rewriting the method: 303 MUST become
+			// a GET, and 301/302 became one by universal practice long before the
+			// spec caught up; only 307/308 preserve the body. Replaying the body
+			// at the new location, which is what this loop would otherwise do,
+			// can duplicate a side effect.
+			//
+			// Rewriting is not the right answer here either. This loop exists so
+			// that fail-closed sources inspect every hop rather than trusting the
+			// redirect chain, and a POST endpoint that starts redirecting means
+			// the API moved — something to notice loudly, not to paper over by
+			// quietly re-issuing the request somewhere else. Unreachable today
+			// (no source sets both), which is exactly when it is cheap to close.
+			if (reqBody !== undefined) {
+				throw new Error(
+					`Refusing to follow HTTP ${res.status} redirect for a POST to ${currentUrl}: ` +
+						"a redirected POST would either replay the body or silently become a GET. " +
+						"Update the endpoint URL instead.",
+				);
+			}
 			const loc = res.headers.get("location");
 			if (!loc) {
 				throw new Error(
@@ -261,7 +330,7 @@ export async function politeFetch(
 			etag: res.headers.get("etag"),
 			lastModified: res.headers.get("last-modified"),
 			contentType: res.headers.get("content-type"),
-			finalUrl: opts.manualRedirect ? currentUrl : res.url || currentUrl,
+			finalUrl: inspectRedirects ? currentUrl : res.url || currentUrl,
 		};
 	}
 }

@@ -75,12 +75,17 @@ export function buildContext(
 			politeFetch(url, applyFetchDefaults(def, url, opts ?? {})),
 		async fetchDocument(url, meta) {
 			const prev = db.latestDocument(url);
+			// A jsonBody makes this a POST, and politeFetch drops the conditional
+			// headers in that case: a POST has no cached representation to
+			// revalidate. So the 304 branch below stays reachable only for GETs.
 			const res = await politeFetch(
 				url,
 				applyFetchDefaults(def, url, {
 					etag: prev?.etag ?? undefined,
 					lastModified: prev?.last_modified ?? undefined,
 					skipRobots: meta.skipRobots,
+					jsonBody: meta.jsonBody,
+					bodyIsIdempotent: meta.bodyIsIdempotent,
 				}),
 			);
 			counts.documentsFetched++;
