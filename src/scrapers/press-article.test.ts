@@ -132,6 +132,10 @@ test("collectArticleLinks", async (t) => {
 });
 
 test("ingestArticles", async (t) => {
+	// These fixtures use bare slugs, not a real outlet's permalink shape; the
+	// path check is exercised on its own below.
+	const anyPath = (): boolean => true;
+
 	const article = (
 		html: string,
 		url: string,
@@ -159,6 +163,7 @@ test("ingestArticles", async (t) => {
 					{ url: "https://site.example/b", city: "Chino Hills" },
 				],
 				article,
+				anyPath,
 			);
 
 			assert.equal(items.length, 2);
@@ -194,6 +199,7 @@ test("ingestArticles", async (t) => {
 					{ url: "https://site.example/good" },
 				],
 				article,
+				anyPath,
 			);
 
 			assert.equal(items.length, 1);
@@ -214,6 +220,7 @@ test("ingestArticles", async (t) => {
 				ctx,
 				[{ url: "https://site.example/untitled" }],
 				article,
+				anyPath,
 			);
 
 			assert.equal(items.length, 0);
@@ -239,10 +246,73 @@ test("ingestArticles", async (t) => {
 				ctx,
 				[{ url: "https://site.example/old-slug" }],
 				article,
+				anyPath,
 			);
 
 			assert.equal(items[0].source_url, "https://site.example/new-slug");
 			assert.equal(items[0].external_id, "/new-slug");
+		},
+	);
+
+	await t.test(
+		"drops a redirect that lands somewhere the outlet does not publish articles",
+		async () => {
+			// dailybulletin.com carries stub permalinks matching the article path
+			// shape whose only job is to 301 onto a tag archive. Ingested, the
+			// archive becomes an "article" with a tag name for a headline, no
+			// teaser, and the timestamp of whatever it last listed — so it reads
+			// as fresh every morning and never ages out of the brief.
+			const { ctx, items, notes } = fakeScraperContext({
+				"https://site.example/2025/03/01/high-school-football-redirect/": {
+					status: 200,
+					body: "<html>tag archive</html>",
+					finalUrl: "https://site.example/tag/high-school-football/",
+				},
+				"https://site.example/2026/08/20/a-real-story/": "<html>real</html>",
+			});
+
+			await ingestArticles(
+				ctx,
+				[
+					{
+						url: "https://site.example/2025/03/01/high-school-football-redirect/",
+					},
+					{ url: "https://site.example/2026/08/20/a-real-story/" },
+				],
+				article,
+				(pathname) => /^\/\d{4}\/\d{2}\/\d{2}\/[a-z0-9-]+\/?$/.test(pathname),
+			);
+
+			assert.deepEqual(
+				items.map((i) => i.source_url),
+				["https://site.example/2026/08/20/a-real-story/"],
+			);
+			assert.ok(
+				notes.some(
+					(n) =>
+						n.includes("redirected to a non-article page") &&
+						n.includes("/tag/high-school-football/"),
+				),
+			);
+		},
+	);
+
+	await t.test(
+		"drops a candidate whose own path is not an article",
+		async () => {
+			const { ctx, items, notes } = fakeScraperContext({
+				"https://site.example/tag/sports/": "<html>tag</html>",
+			});
+
+			await ingestArticles(
+				ctx,
+				[{ url: "https://site.example/tag/sports/" }],
+				article,
+				(pathname) => pathname.startsWith("/news/"),
+			);
+
+			assert.equal(items.length, 0);
+			assert.ok(notes.some((n) => n.includes("Skipping non-article URL")));
 		},
 	);
 });

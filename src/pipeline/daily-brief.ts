@@ -23,6 +23,10 @@ import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
 import { filterHeadlineEligibility } from "../gates/policy-filters.ts";
 import { esc } from "../html.ts";
+import {
+	CHAMPION_ARTICLE_PATH_RE,
+	DAILY_BULLETIN_ARTICLE_PATH_RE,
+} from "../scrapers/press-paths.ts";
 import { ROOT } from "../store.ts";
 import {
 	normalizeLocation,
@@ -98,6 +102,10 @@ interface HeadlineSourcePolicy {
 	// Per-outlet cap on how many of this outlet's headlines one brief may
 	// carry. Defaults to MAX_HEADLINES_PER_OUTLET when omitted.
 	maxPerBrief?: number;
+	// The shape this outlet's article permalinks take, for the outlets we reach
+	// by crawling URLs. Absent for the feed-driven outlets, whose links come
+	// from the publisher's own RSS and have no path shape to assert.
+	articlePathRe?: RegExp;
 	// True when a 0-item scrape run is this outlet's normal state (a weekly
 	// student paper between issues, NBC4's keyword filter matching nothing
 	// most days) — see checkDegradedSources in brief-health.ts, which reads
@@ -113,6 +121,7 @@ const HEADLINE_SOURCE_POLICY: Record<string, HeadlineSourcePolicy> = {
 		maxItemAgeHours: 7 * 24,
 		sincePrevBrief: false,
 		dedupRank: 0,
+		articlePathRe: CHAMPION_ARTICLE_PATH_RE,
 	},
 	"dailybulletin-news": {
 		outlet: "Daily Bulletin",
@@ -121,6 +130,7 @@ const HEADLINE_SOURCE_POLICY: Record<string, HeadlineSourcePolicy> = {
 		maxItemAgeHours: 48,
 		sincePrevBrief: true,
 		dedupRank: 1,
+		articlePathRe: DAILY_BULLETIN_ARTICLE_PATH_RE,
 	},
 	"quest-news": {
 		outlet: "Quest News",
@@ -1029,6 +1039,14 @@ function renderHeadlineListItems(
 		}
 		if (url.protocol !== "https:" || !policy?.hosts.includes(url.hostname)) {
 			notes.push(`headlines: off-allowlist URL skipped: ${h.source_url}`);
+			continue;
+		}
+		// Host alone does not make a page an article: a stub permalink that
+		// redirects onto the outlet's own tag archive keeps the host and loses
+		// the story. Assert the path shape too, against the same pattern the
+		// scraper discovered by.
+		if (policy.articlePathRe && !policy.articlePathRe.test(url.pathname)) {
+			notes.push(`headlines: non-article URL skipped: ${h.source_url}`);
 			continue;
 		}
 

@@ -1717,6 +1717,43 @@ describe("headlines elsewhere deduplication and selection", () => {
 		// quiet-morning line.
 		assert.ok(post.bodyMd.includes("A quiet morning"));
 	});
+
+	test("assembleBrief refuses a headline URL that is not an article path", () => {
+		// The outlet's own host, so the allowlist passes it — but a tag archive
+		// is not a story. This is what reached the front page on 2026-08-22: a
+		// stub permalink 301'd onto /tag/high-school-football/, and the archive's
+		// <head> became a headline with no teaser and a timestamp that refreshed
+		// itself daily. Caught at ingest now; this is the second gate.
+		const tagArchive = item({
+			source_key: "dailybulletin-news",
+			source_url: "https://www.dailybulletin.com/tag/high-school-football/",
+			title: "high school football",
+			body: null,
+			occurred_at: "2026-08-16T00:00:00.000Z",
+			meta: JSON.stringify({ outlet: "Daily Bulletin", city: "Chino" }),
+		});
+
+		const inputs: BriefInputs = {
+			forecast: [],
+			nwsAlerts: [],
+			fire: [],
+			calendarEvents: [],
+			agendaItems: [],
+			cvusdEvents: [],
+			licenseEvents: [],
+			headlines: [tagArchive],
+			headlinesFreshness: FRESH,
+			publishedPosts: [],
+			prevBriefPublishedAt: null,
+		};
+
+		const { post, notes } = assembleBrief(inputs, NOW);
+
+		assert.ok(!post.bodyMd.includes("high school football"));
+		assert.ok(!post.bodyMd.includes("In the local press"));
+		assert.equal(post.attributions, undefined);
+		assert.ok(notes.some((n) => n.includes("non-article URL skipped")));
+	});
 });
 
 describe("renderWeatherLine", () => {
