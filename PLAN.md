@@ -19,7 +19,7 @@ summarized below; their detail is in git history and the PRs they link.
   backup running, deploy-on-push CI verified. Infrastructure identifiers live
   in the private Obsidian note, deliberately not in this public repo.
 - **Phase 4 in progress** (daily brief + expanded sources). Merged: 4.0, 4.1,
-  4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9, 4.10. Open: **4.8** (spec below).
+  4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9, 4.10. Open: **4.8, 4.11** (specs below).
 - **Phase 3 not started** (podcast + newsletter + growth), deliberately
   re-sequenced after Phase 4 — the newsletter is strictly better fed by a
   daily brief.
@@ -67,9 +67,14 @@ summarized below; their detail is in git history and the PRs they link.
 - CVUSD agenda-PDF robots exception: scoped `skipRobots` vs listing-only.
 - Student-athlete naming vs the minors rule (interim rule is team-level only;
   see EDITORIAL.md).
-- Published posts live only on the droplet — nothing pushes them back to git.
-  Decide: write-capable deploy key with auto-commit on publish, or make
-  committing part of the review ritual.
+- ~~Published posts live only on the droplet~~ — **decided 2026-08-23: CI
+  pulls.** A scheduled workflow copies new published posts off the host and
+  opens a PR, so the droplet needs no write credential and posts arrive as
+  reviewable commits rather than unattended pushes to `main`. Rejected:
+  auto-commit on publish (a write-capable key on a host running four unrelated
+  production sites), and committing as part of the review ritual (already
+  skipped for 7 of 7 alert posts, which publish unattended at 05:50 with no
+  human step to attach it to). Not yet built — see Task 4.11.
 
 ---
 
@@ -173,6 +178,22 @@ outside the file:
 ---
 
 ## Phase 4: open tasks
+
+### Task 4.11 - Publish posts back into git
+
+CI pulls; the droplet never pushes. A scheduled workflow SSHes in over a second
+command-restricted command alongside `deploy-site`, copies anything in
+`content/published/` that git does not have, and opens a PR. The deploy key
+stays read-only in the direction that matters, and new posts land as reviewable
+commits.
+
+Backlog to clear on first run: 8 posts exist only on the host — 7 alerts and
+`2026-09-01-chino-city-council-preview`. Daily briefs are gitignored and stay
+that way; they are regenerated every morning and are not a record.
+
+Why it matters beyond tidiness: the repo is currently an incomplete copy of what
+the site has published, and every frontmatter migration has to be run twice —
+once in git, once on the host — as Task 4.5's `topics:` backfill was.
 
 ### Task 4.8 - HS sports scores (endpoints verified 2026-08-19; build pending)
 
