@@ -183,14 +183,15 @@ describe("superseded alert suppression", () => {
 
 	test("issuances are compared as instants, not as strings", () => {
 		// The same moment, one written with an offset and one as UTC. Compared
-		// lexicographically "2026-08-22T13..." sorts before "2026-08-22T20...",
-		// so the older issuance would win and the superseded window would be the
-		// one shown.
+		// instant order and string order disagree here. Row 2 is the later
+		// issuance — 14:00-07:00 is 21:00Z, half an hour after row 1's 20:30Z —
+		// but as strings "2026-08-22T14..." sorts before "2026-08-22T20...", so
+		// a lexicographic compare keeps row 1 and renders the superseded window.
 		const rows = [
-			issuance(1, "2026-08-21T20:00:00Z", {
+			issuance(1, "2026-08-22T20:30:00Z", {
 				ends: "2026-08-24T20:00:00-07:00",
 			}),
-			issuance(2, "2026-08-22T13:10:00-07:00", {
+			issuance(2, "2026-08-22T14:00:00-07:00", {
 				ends: "2026-08-25T10:00:00-07:00",
 			}),
 		];

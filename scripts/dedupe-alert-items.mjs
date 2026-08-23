@@ -22,12 +22,15 @@ import { openDb } from "../src/db/index.ts";
 const apply = process.argv.includes("--apply");
 const dbFlag = process.argv.indexOf("--db");
 // A bare --db used to fall through to openDb()'s default, so a run meant for a
-// throwaway copy would delete from the real database instead.
-if (dbFlag !== -1 && !process.argv[dbFlag + 1]) {
+// throwaway copy would delete from the real database instead. `--db --apply`
+// is the same mistake wearing a path: it would open, and create, a file named
+// "--apply" and report a clean database.
+const dbPath = dbFlag === -1 ? null : process.argv[dbFlag + 1];
+if (dbFlag !== -1 && (!dbPath || dbPath.startsWith("--"))) {
 	console.error("--db requires a path, e.g. --db /tmp/copy.db");
 	process.exit(1);
 }
-const db = dbFlag === -1 ? openDb() : openDb(process.argv[dbFlag + 1]);
+const db = dbPath === null ? openDb() : openDb(dbPath);
 
 const dupes = db.raw
 	.prepare(
