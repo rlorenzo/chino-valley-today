@@ -50,12 +50,9 @@ reviewer. Changes to this file are editorial decisions — date them.
   timestamps), and links only. The recap may state what was decided and who
   voted how; it may not describe motives, tone, or sides beyond quoted words.
 
-## Secondary press (amended 2026-08-17)
+## Secondary press (decided 2026-08-17)
 
-- Original rule (2026-08-12): link-only, at most one line of neutral framing,
-  never excerpted beyond a headline. **Superseded 2026-08-17 by operator
-  decision:** the blanket never-scrape stance was never the operator's rule.
-  The boundary for secondary press is the same as for every other source —
+- The boundary for secondary press is the same as for every other source:
   robots.txt read mechanically against our own honest User-Agent, plus any
   binding platform ToS.
 - A secondary-press item (The Champion, Daily Bulletin, regional TV, and all
@@ -83,68 +80,57 @@ reviewer. Changes to this file are editorial decisions — date them.
   releases — the minors rule takes precedence until an explicit carve-out is
   decided (open decision recorded in PRODUCT.md).
 
-## Student press and broadcast feeds (amended 2026-08-19)
+## Student press and broadcast feeds (decided 2026-08-19)
 
-**Operator decision, 2026-08-19.** Student newspapers join secondary press:
-residents are interested in this coverage, and carrying it gives young
-journalists exposure. High school and college papers qualify; middle school
-and below stay out of scope entirely. Ingested under the same
-headlines-elsewhere rules as every other outlet — verbatim title, link, and a
-sentence-bounded teaser; all policy filters apply per item.
+**Operator decision.** Student newspapers join secondary press: residents are
+interested in this coverage, and carrying it gives young journalists exposure.
+High school and college papers qualify; middle school and below stay out of
+scope entirely. Ingested under the same headlines-elsewhere rules as every
+other outlet — verbatim title, link, and a sentence-bounded teaser; all policy
+filters apply per item.
 
-- **The minors guard loses "high school" from its vocabulary** (operator
-  directive, same day). A school's name or context is not identification of a
-  minor, and with student press ingested, every item would have tripped it.
-  What still binds, unchanged: juvenile/teen/child/boy/girl vocabulary, ages
-  under 18, and the unvetted-private-person guard — including on the Nixle
-  release path, which shares the same guard. "Middle school" and "elementary"
-  stay in the vocabulary.
+- **The minors guard does not include "high school"** (operator directive, same
+  day). A school's name or context is not identification of a minor, and with
+  student press ingested every item would have tripped it. What still binds,
+  unchanged: juvenile/teen/child/boy/girl vocabulary, ages under 18, and the
+  unvetted-private-person guard — including on the Nixle release path, which
+  shares the same guard. "Middle school" and "elementary" stay in the vocabulary.
 - **Locality.** The high school papers (Quest News/Don Lugo, Bulldog
-  Times/Ayala) are inherently local — their masthead is a Chino Valley
-  school, so items carry `meta.city` at ingest. The Breeze (Chaffey College,
-  Rancho Cucamonga-based) is not: only items that textually anchor to Chino
-  or Chino Hills surface.
+  Times/Ayala) are inherently local — their masthead is a Chino Valley school,
+  so items carry `meta.city` at ingest. The Breeze (Chaffey College,
+  Rancho Cucamonga-based) is not: only items that textually anchor to Chino or
+  Chino Hills surface.
 - **Weekly-drop cap.** Student papers publish in batches; each is capped at 2
-  headlines per brief so a publication day cannot crowd out the professional
-  outlets.
-- **Broadcast feeds.** NBC4 Los Angeles is ingested from its robots-allowed
-  RSS URL, filtered at ingest to items mentioning Chino or Chino Hills.
-  NBCUniversal's ToS was reviewed 2026-08-19: no clause restricts automated
-  feed access or headline link-back. Expectation stated honestly: NBC4's
-  Chino coverage skews crime and accidents, which the policy filter excludes
-  from auto-published headlines by design, so surfaced volume will be low —
-  the eligible remainder (community, government, schools) is the point.
+  headlines per brief so a publication day cannot crowd out professional outlets.
+- **Broadcast feeds.** NBC4 Los Angeles is ingested from its robots-allowed RSS
+  URL, filtered at ingest to items mentioning Chino or Chino Hills.
+  NBCUniversal's ToS (reviewed 2026-08-19) restricts neither automated feed
+  access nor headline link-back. Expect low volume: NBC4's Chino coverage skews
+  crime and accidents, which the policy filter excludes by design.
 - **KTLA is rejected on ToS, not robots.** Its main feed is mechanically
   fetchable, but Nexstar's Terms of Use prohibit any "data gathering or data
-  extraction practices for any purpose" — a binding prohibition on automated
-  ingestion of any kind, same class as the Nixle scraping prohibition. Do not
-  revisit without a change in their terms.
+  extraction practices for any purpose" — same class as the Nixle scraping
+  prohibition. Do not revisit without a change in their terms.
 
-## Agency alert channels (amended 2026-08-17)
+## Agency alert channels (decided 2026-08-17, amended 2026-08-18)
 
-**Operator decision, 2026-08-17.** Press releases received through a subscribed
-agency notification channel (today: the Sheriff's Nixle channels) auto-publish
-without the per-item acknowledgment Tier C otherwise requires.
+**Operator decision.** Press releases received through a subscribed agency
+notification channel (today: the Sheriff's Nixle channels) auto-publish without
+the per-item acknowledgment Tier C otherwise requires. **What publishes is the
+agency's own headline and a link to its page. The release body is never
+rendered** — the same shape the daily brief uses for fire and safety.
 
-**Amended 2026-08-18, superseding the full-text form above.** What publishes is
-the agency's own headline and a link to its page. **The release body is never
-rendered.** The original decision allowed full body text on the reasoning that
-the agency had already published it; reading the first real Chino Hills release
-changed the calculation:
+Two reasons the body never renders, both found in the first real Chino Hills
+release and both still live hazards:
 
 - Bodies carry `SUSPECT1: <name>, Age <n>, <city> Resident` lines, plus victims
   and witnesses. A headline names nobody, and a reader who wants the detail
-  follows the department's own link to the department's own page. We point at
-  the record instead of rehosting it.
+  follows the department's own link. We point at the record instead of
+  rehosting it.
 - Every message ends with a per-recipient account link containing the
   subscription id, our mailbox address and an auth token
   (`/settings/subscription/<id>/<email>/<token>/`). Rendering bodies verbatim
-  would have published a live credential. Nothing leaked, because the only
-  Chino-relevant release to date was held by the minors guard, but that was
-  luck rather than design.
-
-This is the same shape the daily brief already uses for fire and safety:
-verbatim title, source link, never body text.
+  would publish a live credential.
 
 - **What this overrides:** the Tier C "human always … no exceptions" clause,
   for this source class only. Tier C is unchanged for every other source, and
@@ -153,14 +139,12 @@ verbatim title, source link, never body text.
 - **What still binds, enforced deterministically before publication:**
   - **Minors.** Any release whose text indicates a minor is involved is HELD,
     never auto-published. The minors rule under "Private persons" is a separate
-    and stronger prohibition; it was not part of this decision and still holds
-    even when the source document names them.
+    and stronger prohibition; it holds even when the source document names them.
   - **Geography.** Only releases flagged `chinoRelevant` publish. A Nixle
     subscription delivers every agency channel covering the area, so
     county-wide releases about other cities are archived, not published.
-  - **Headline and link only.** No LLM touches these. The agency's own title
-    renders verbatim above a link to its page. Nothing is summarized,
-    characterized, or restated as our own claim, so these render Tier A.
+  - **Headline and link only.** No LLM touches these; the agency's own title
+    renders verbatim above a link to its page, so these render Tier A.
     Residual risk recorded honestly: an agency headline *could* name someone,
     since nothing but convention stops it. Bodies are where names actually
     live, and those no longer reach the site at all.
