@@ -24,7 +24,38 @@ summarized below; their detail is in git history and the PRs they link.
   re-sequenced after Phase 4 — the newsletter is strictly better fed by a
   daily brief.
 - **7-day daily-brief acceptance streak restarted 2026-08-20** after the
-  prerequisite-tiering fix (PR #33) deployed.
+  prerequisite-tiering fix (PR #33) deployed. The 08-22 brief was regenerated
+  by hand twice that evening to deploy the two fixes below; no human writing
+  was involved, but the 06:00 timer run was not what readers saw that day.
+- **A tag archive led the front page ([PR #35](https://github.com/rlorenzo/chino-valley-today/pull/35)).**
+  dailybulletin.com publishes stub permalinks matching the article path shape
+  whose only job is to 301 onto a tag archive. `ingestArticles` stored
+  `doc.finalUrl` without re-checking it was still an article, so the archive's
+  `<head>` became an item: a tag name for a headline, no teaser, and
+  `occurred_at` read off the newest `<time>` in the listing — so it re-dated
+  itself every scrape, never aged out, and outranked every real story. It was
+  the entire **In the local press** section on 08-22. Path shape is now
+  asserted at three points, and one of them had to move: the renderer's check
+  ran *after* selection had capped at five, so an invalid row still took a
+  slot from an article that could have filled it.
+- **A superseded heat advisory sat beside its replacement ([PR #36](https://github.com/rlorenzo/chino-valley-today/pull/36)).**
+  `alertAdvisoryKey` groups on `(event, ends, areaDesc)`, so an Update that
+  *extends* an advisory reads as a second advisory. Right for post identity —
+  it keeps a slug stable across re-issues — and wrong for a reader, who was
+  told the heat ended a day early. The brief now groups on `(event, areaDesc)`
+  and keeps the newest issuance; the post generator is unchanged. Distinct
+  products still stand apart: an Extreme Heat Watch overlapping an advisory is
+  a second warning, not a duplicate.
+- **Every active alert was stored twice** (same PR). The scraper reads two
+  feeds and item identity is `(document url, item_type, external_id)`, so an
+  alert listed by both was inserted once per feed. 11 pairs cleared from
+  production with `scripts/dedupe-alert-items.mjs`; the scraper now collects
+  across both feeds before storing.
+- **Two of the night's defects were invisible to the gate**: a source edit
+  that silently failed to apply, and a test that passed for the wrong reason
+  because its two timestamps happened to sort the same way as strings and as
+  instants. Both were caught by re-reading code already reported as done, not
+  by a test. Task 4.10 exists for the same reason.
 
 ### Open decisions
 
