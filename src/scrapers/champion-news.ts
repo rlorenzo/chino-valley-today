@@ -12,6 +12,7 @@ import {
 	type PressArticle,
 	parseArticleHead,
 } from "./press-article.ts";
+import { CHAMPION_ARTICLE_PATH_RE } from "./press-paths.ts";
 import type { ScraperDef } from "./types.ts";
 
 const BASE_URL = "https://www.championnewspapers.com";
@@ -22,10 +23,8 @@ const OUTLET = "The Champion";
 // The CMS appends " | The Champion[ Newspapers]" to every <title>.
 const TITLE_SUFFIX_RE = /\s*\|\s*The Champion.*$/i;
 
-// Editorial sections we ingest. legal_notices and obituaries are deliberately
-// excluded — neither is community reporting worth linking from a brief.
-const ARTICLE_PATH_RE =
-	/^\/(?:community_news|news|business|sports_and_recreation)\/article_([a-f0-9-]+)\.html$/;
+const isArticlePath = (pathname: string): boolean =>
+	CHAMPION_ARTICLE_PATH_RE.test(pathname);
 
 const xmlParser = new XMLParser({ ignoreAttributes: true });
 
@@ -61,7 +60,7 @@ export function parseSitemapIndex(xml: string): string[] {
 export function parseEditionSitemap(xml: string): string[] {
 	return locs(xml).filter((loc) => {
 		try {
-			return ARTICLE_PATH_RE.test(new URL(loc).pathname);
+			return isArticlePath(new URL(loc).pathname);
 		} catch {
 			return false;
 		}
@@ -69,9 +68,7 @@ export function parseEditionSitemap(xml: string): string[] {
 }
 
 export function parseHtmlCategoryIndex(html: string): string[] {
-	return collectArticleLinks(html, BASE_URL, (pathname) =>
-		ARTICLE_PATH_RE.test(pathname),
-	);
+	return collectArticleLinks(html, BASE_URL, isArticlePath);
 }
 
 export function extractArticleMetadata(
@@ -81,7 +78,7 @@ export function extractArticleMetadata(
 	const { title, teaser, occurredAt } = parseArticleHead(html, TITLE_SUFFIX_RE);
 
 	const pathname = new URL(url).pathname;
-	const idMatch = pathname.match(ARTICLE_PATH_RE);
+	const idMatch = pathname.match(CHAMPION_ARTICLE_PATH_RE);
 	const rel = isLocallyRelevant({ title, body: teaser });
 
 	return {
@@ -164,7 +161,12 @@ const championNewsScraper: ScraperDef = {
 			.slice(0, MAX_ARTICLES_PER_RUN)
 			.map((url) => ({ url }));
 
-		await ingestArticles(ctx, candidates, extractArticleMetadata);
+		await ingestArticles(
+			ctx,
+			candidates,
+			extractArticleMetadata,
+			isArticlePath,
+		);
 	},
 };
 

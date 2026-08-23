@@ -12,6 +12,7 @@ import {
 	type PressArticle,
 	parseArticleHead,
 } from "./press-article.ts";
+import { DAILY_BULLETIN_ARTICLE_PATH_RE } from "./press-paths.ts";
 import type { ScraperDef } from "./types.ts";
 
 const BASE_URL = "https://www.dailybulletin.com";
@@ -21,8 +22,8 @@ const OUTLET = "Daily Bulletin";
 // WordPress appends " – Daily Bulletin" to every <title>.
 const TITLE_SUFFIX_RE = /\s*–\s*Daily Bulletin.*$/i;
 
-// WordPress permalinks: /YYYY/MM/DD/slug/
-const ARTICLE_PATH_RE = /^\/\d{4}\/\d{2}\/\d{2}\/[a-z0-9-]+\/?$/;
+const isArticlePath = (pathname: string): boolean =>
+	DAILY_BULLETIN_ARTICLE_PATH_RE.test(pathname);
 
 const LOCATION_HUBS = [
 	{
@@ -36,9 +37,9 @@ const LOCATION_HUBS = [
 ];
 
 export function parseLocationHub(html: string): string[] {
-	return collectArticleLinks(html, BASE_URL, (pathname) =>
-		ARTICLE_PATH_RE.test(pathname),
-	).map((url) => (url.endsWith("/") ? url : `${url}/`));
+	return collectArticleLinks(html, BASE_URL, isArticlePath).map((url) =>
+		url.endsWith("/") ? url : `${url}/`,
+	);
 }
 
 export function extractDailyBulletinMetadata(
@@ -109,6 +110,7 @@ const dailyBulletinNewsScraper: ScraperDef = {
 			candidates.slice(0, MAX_ARTICLES_PER_RUN),
 			(html, url, candidate) =>
 				extractDailyBulletinMetadata(html, url, candidate.city),
+			isArticlePath,
 		);
 	},
 };

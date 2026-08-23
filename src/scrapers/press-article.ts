@@ -87,6 +87,16 @@ export function parseArticleHead(
 
 const bareHost = (hostname: string): string => hostname.replace(/^www\./, "");
 
+// An unparseable URL yields "", which no article-path pattern can match — a bad
+// URL fails the path check rather than throwing past it.
+const pathname = (url: string): string => {
+	try {
+		return new URL(url).pathname;
+	} catch {
+		return "";
+	}
+};
+
 /**
  * Collects same-site links whose pathname the outlet recognizes as an article,
  * resolved against `baseUrl` so relative hrefs work. Order is preserved and
@@ -141,6 +151,10 @@ export interface ArticleCandidate {
  * Fetches, extracts and inserts each candidate. A single article failing to
  * fetch or parse is noted and skipped — one bad URL must not cost the run the
  * articles behind it.
+ *
+ * `isArticlePath` gates both ends: the candidate before it costs a request, and
+ * wherever the fetch actually landed. It is required rather than optional
+ * because the check is only worth having if no caller can forget it.
  */
 export async function ingestArticles(
 	ctx: ScraperContext,
@@ -150,13 +164,35 @@ export async function ingestArticles(
 		url: string,
 		candidate: ArticleCandidate,
 	) => PressArticle,
+	isArticlePath: (pathname: string) => boolean,
 ): Promise<void> {
 	for (const candidate of candidates) {
+		// Rejected before it costs a request, and before ctx.fetchDocument
+		// archives a page we have already decided not to publish.
+		if (!isArticlePath(pathname(candidate.url))) {
+			ctx.note(`Skipping non-article URL: ${candidate.url}`);
+			continue;
+		}
+
 		try {
 			const doc = await ctx.fetchDocument(candidate.url, {
 				docType: ITEM_TYPE,
 			});
 			const url = doc.finalUrl || candidate.url;
+
+			// Where a redirect lands is not where discovery vetted. dailybulletin.com
+			// publishes stub permalinks that match the article path shape and whose
+			// only job is to 301 onto a tag archive. Ingested, that archive's <head>
+			// becomes an "article" carrying a tag name for a headline and no teaser,
+			// stamped with whatever it most recently listed — so it reads as fresh
+			// every morning and never ages out of the brief.
+			if (!isArticlePath(pathname(url))) {
+				ctx.note(
+					`Skipping ${candidate.url}: redirected to a non-article page (${url})`,
+				);
+				continue;
+			}
+
 			const article = extract(doc.body.toString("utf8"), url, candidate);
 			if (!article.title) {
 				ctx.note(`Skipping article without title: ${candidate.url}`);
