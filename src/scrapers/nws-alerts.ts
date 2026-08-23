@@ -25,12 +25,35 @@ interface AlertFeature {
 	};
 }
 
+interface AlertSighting {
+	feature: AlertFeature;
+	documentId: number;
+}
+
+/**
+ * One entry per alert, keyed on the id the feed gives it. An alert that is
+ * currently active is listed by BOTH the active feed and the recent feed, and
+ * item identity is (document url, item_type, external_id) — two different
+ * document URLs, so storing each feed on its own stored every active alert
+ * twice, once per feed. Earlier sightings win, so an active alert is attributed
+ * to the active feed it came from.
+ */
+function collectAlerts(
+	seen: Map<string, AlertSighting>,
+	features: AlertFeature[],
+	documentId: number,
+): void {
+	for (const feature of features) {
+		const id = feature.properties.id ?? feature.id;
+		if (!seen.has(id)) seen.set(id, { feature, documentId });
+	}
+}
+
 function storeAlerts(
 	ctx: Parameters<ScraperDef["run"]>[0],
-	documentId: number,
-	features: AlertFeature[],
+	sightings: Iterable<AlertSighting>,
 ) {
-	for (const f of features) {
+	for (const { feature: f, documentId } of sightings) {
 		const p = f.properties;
 		ctx.insertItem({
 			document_id: documentId,
@@ -76,7 +99,8 @@ const scraper: ScraperDef = {
 		};
 		const activeFeatures = activeFeed.features ?? [];
 		ctx.note(`${activeFeatures.length} active alert(s) for zone ${ZONE}`);
-		storeAlerts(ctx, active.documentId, activeFeatures);
+		const seen = new Map<string, AlertSighting>();
+		collectAlerts(seen, activeFeatures, active.documentId);
 
 		// Also pull recent (incl. expired) alerts so the POC has sample items even
 		// on a quiet weather day.
@@ -92,10 +116,11 @@ const scraper: ScraperDef = {
 			features?: AlertFeature[];
 		};
 		const recentFeatures = recentFeed.features ?? [];
+		collectAlerts(seen, recentFeatures, recent.documentId);
 		ctx.note(
-			`${recentFeatures.length} recent alert(s) (incl. expired) stored for sample purposes`,
+			`${recentFeatures.length} recent alert(s) (incl. expired); ${seen.size} distinct alert(s) across both feeds`,
 		);
-		storeAlerts(ctx, recent.documentId, recentFeatures);
+		storeAlerts(ctx, seen.values());
 
 		ctx.note(
 			"api.weather.gov requires a User-Agent header; supports ETag (If-None-Match honored).",

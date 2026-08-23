@@ -35,8 +35,8 @@ import {
 import { type ItemRow, parseMeta, queryItems } from "../tiera/queries.ts";
 import {
 	cleanTitle,
-	dedupeAlertIssuances,
 	dedupeByKey,
+	dropSupersededAlerts,
 	humanDateFromLocal,
 	localMeetingDate,
 	mdEscape,
@@ -538,9 +538,12 @@ export function selectActiveAlerts(
 	alertItems: ItemRow[],
 	now: Date,
 ): ItemRow[] {
-	// Collapse re-issuances of the same advisory before filtering, or one
-	// Heat Advisory updated three times reads as three separate alerts.
-	const deduped = dedupeAlertIssuances(
+	// Collapse re-issuances before filtering, or one Heat Advisory updated
+	// three times reads as three separate alerts. Grouped by (event, areaDesc)
+	// with the newest issuance kept: an advisory NWS extends is still one
+	// advisory, and showing the superseded window beside its replacement tells
+	// a reader the heat ends a day earlier than it does.
+	const deduped = dropSupersededAlerts(
 		dedupeByKey(alertItems, (r) => r.external_id ?? r.source_url),
 	);
 	return deduped.filter((row) => {
