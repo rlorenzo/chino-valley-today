@@ -136,6 +136,8 @@ sources:
   - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2484s"
   - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2504s"
   - "https://www.youtube.com/watch?v=hRO51ueaqb4&t=2522s"
+topics:
+  - cvusd
 ---
 
 The Chino Valley Unified School District (CVUSD) Board of Education held its regular meeting on July 16, 2026, with all five members present — President Shaw, and members Cervantes, Cruz, Naw, and Smith [source](https://www.youtube.com/watch?v=hRO51ueaqb4&t=21s). The meeting included closed session actions, recognitions, public comments, and the adoption of consent items.

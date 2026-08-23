@@ -7,6 +7,8 @@ meeting_date: "2026-08-18"
 sources:
   - "https://agendaquick.chinohills.org:8086/docs/2026/PLAN/20260818_1179/1179_08-18-2026%20PC%20Agenda%20Packet.pdf#page=2"
   - "https://agendaquick.chinohills.org:8086/docs/2026/PLAN/20260818_1179/1179_08-18-2026%20PC%20Agenda%20Packet.pdf#page=3"
+topics:
+  - planning
 ---
 
 - **Date:** August 18, 2026 ([agenda packet](https://agendaquick.chinohills.org:8086/docs/2026/PLAN/20260818_1179/1179_08-18-2026%20PC%20Agenda%20Packet.pdf#page=2))

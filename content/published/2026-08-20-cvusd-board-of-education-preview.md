@@ -6,6 +6,8 @@ date: "2026-08-18T02:58:13.966Z"
 meeting_date: "2026-08-20"
 sources:
   - "https://files.smartsites.parentsquare.com/7144/08-20-2026_agenda.pdf"
+topics:
+  - cvusd
 ---
 
 - **Date:** 2026-08-20 ([board meeting page](https://files.smartsites.parentsquare.com/7144/08-20-2026_agenda.pdf))

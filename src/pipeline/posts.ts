@@ -4,6 +4,7 @@ import { existsSync, mkdirSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { type Db, nowIso } from "../db/index.ts";
 import { ROOT } from "../store.ts";
+import { classifyTopics } from "./topics.ts";
 
 export type PostStatus = "queued" | "held" | "published" | "rejected";
 export type Tier = "A" | "B" | "C";
@@ -44,6 +45,12 @@ export interface NewPost {
 	eventsAhead?: BriefEventAhead[];
 	sources: string[]; // source_urls backing every claim in the post
 	attributions?: string[]; // secondary press article URLs (never primary provenance)
+	// Classification signals. The pipeline owns these — they are the source
+	// keys and item types the post was actually built from, which is why topic
+	// classification lives here rather than in the site's rendering of a title.
+	// A generator that passes neither still classifies, on postType and title.
+	sourceKeys?: string[];
+	itemTypes?: string[];
 	// Set by a generator that has decided this post must NOT auto-publish, and
 	// why. The Tier A runner routes such a post to the held queue instead of
 	// publishing it, so it reaches the dashboard's existing approve/reject flow
@@ -161,6 +168,15 @@ function y(s: string): string {
 }
 
 export function renderPostFile(p: NewPost, createdAt: string): string {
+	// Classified here rather than by each generator, so every write path files a
+	// post the same way and no generator can forget to.
+	const topics = classifyTopics({
+		postType: p.postType,
+		title: p.title,
+		sourceKeys: p.sourceKeys,
+		itemTypes: p.itemTypes,
+		sources: p.sources,
+	});
 	const fm = [
 		"---",
 		`title: ${y(p.title)}`,
@@ -186,6 +202,7 @@ export function renderPostFile(p: NewPost, createdAt: string): string {
 		...(p.attributions?.length
 			? ["attributions:", ...p.attributions.map((a) => `  - ${y(a)}`)]
 			: []),
+		...(topics.length ? ["topics:", ...topics.map((t) => `  - ${t}`)] : []),
 		"---",
 	].join("\n");
 	// The glossary shares the footer's exempt region: it must sit after the last

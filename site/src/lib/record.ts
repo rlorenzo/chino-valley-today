@@ -21,40 +21,39 @@ export const TOPICS = [
 	{
 		slug: "safety",
 		name: "Safety",
-		blurb: "Alerts and public-safety notices from agency channels.",
+		blurb:
+			"Alerts, incidents, and public-safety notices, including fire and EMS.",
+	},
+	{
+		slug: "sports",
+		name: "Sports",
+		blurb: "Team-level scores and schedules for the district's high schools.",
 	},
 ] as const;
 
 export type TopicSlug = (typeof TOPICS)[number]["slug"];
 
 /**
- * Topics are DERIVED here, not carried in frontmatter.
+ * Topics are CLASSIFIED BY THE PIPELINE and read from frontmatter.
  *
- * The pipeline does not emit a topic field, so this is the site's own
- * deterministic reading of post_type plus title. It is deliberately
- * conservative: a post is filed under a topic only when the evidence is
- * unambiguous, because mis-filing a civic record is worse than leaving it
- * untagged. Untagged posts still appear in the main record, which is the
- * complete set.
+ * They used to be derived here by regex over the post's title, which could only
+ * ever guess: a Planning Commission preview and a City Council preview render
+ * from the same source and differ by wording alone. src/pipeline/topics.ts owns
+ * this now, because it owns the source keys and item types that actually
+ * identify a subject, and it writes the result into `topics`.
  *
- * This belongs in the pipeline eventually — it owns the source keys and item
- * types that would classify far more accurately than a title match can.
+ * A post with no topics still appears in the main record, which is the complete
+ * set. Several post types carry none by design — briefs and digests span every
+ * subject, and secondary press is attribution rather than record.
+ *
+ * The slugs here must match TOPIC_SLUGS in the pipeline; src/site/topic-taxonomy.test.ts
+ * fails the build if they drift apart.
  */
 export function topicsFor(post: Post): TopicSlug[] {
-	const hay = `${post.data.title} ${post.id}`.toLowerCase();
-	const type = post.data.post_type;
-	const topics = new Set<TopicSlug>();
-
-	if (type === "business_tracker" || type === "business_narrative") {
-		topics.add("business");
-	}
-	if (type === "alert") topics.add("safety");
-
-	if (/cvusd|board of education/.test(hay)) topics.add("cvusd");
-	if (/planning/.test(hay)) topics.add("planning");
-	if (/sheriff|nixle|alert|evacuat|closure/.test(hay)) topics.add("safety");
-
-	return [...topics];
+	const declared = post.data.topics ?? [];
+	// Order by TOPICS so a post's chips always render in the same order,
+	// whatever order the frontmatter happens to list them in.
+	return TOPICS.map((t) => t.slug).filter((slug) => declared.includes(slug));
 }
 
 /** Newest first — a record reads backwards from now. */

@@ -6,6 +6,8 @@ date: "2026-08-12T06:52:52.961Z"
 meeting_date: "2026-08-19"
 sources:
   - "https://www.cityofchino.org/Calendar.aspx?EID=1567"
+topics:
+  - planning
 ---
 
 - **Date:** August 19, 2026 ([calendar](https://www.cityofchino.org/Calendar.aspx?EID=1567))

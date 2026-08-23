@@ -210,6 +210,8 @@ export function generateNixleReleases(db: Db, now: Date): GenResult {
 			title: headline,
 			bodyMd: lines.join("\n"),
 			sources: [row.source_url],
+			sourceKeys: [row.source_key],
+			itemTypes: [row.item_type],
 			...(minor
 				? {
 						heldReason:
