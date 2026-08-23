@@ -30,4 +30,9 @@ export const SCRAPERS: Record<string, string> = {
 	"bulldogtimes-news": "./scrapers/bulldogtimes-news.ts",
 	"breeze-news": "./scrapers/breeze-news.ts",
 	"nbc4-news": "./scrapers/nbc4-news.ts",
+	// Phase 4 Task 4.8 (high school sports, 2026-08-23). Three schools, one
+	// Home Campus core; Chino Hills has no Home Campus site and is separate.
+	"chinohigh-sports": "./scrapers/chinohigh-sports.ts",
+	"ayala-sports": "./scrapers/ayala-sports.ts",
+	"donlugo-sports": "./scrapers/donlugo-sports.ts",
 };

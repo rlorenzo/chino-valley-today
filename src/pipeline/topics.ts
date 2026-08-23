@@ -69,6 +69,9 @@ const TOPIC_BY_SOURCE_KEY: Record<string, TopicSlug> = {
 	"nws-alerts": "safety",
 	"sbsheriff-news": "safety",
 	"sbsheriff-nixle-mail": "safety",
+	"chinohigh-sports": "sports",
+	"ayala-sports": "sports",
+	"donlugo-sports": "sports",
 };
 
 /** Item types that identify a topic regardless of where they came from. */
@@ -77,8 +80,10 @@ const TOPIC_BY_ITEM_TYPE: Record<string, TopicSlug> = {
 	fire_incident: "safety",
 	ems_incident: "safety",
 	license_event: "business",
-	game_result: "sports",
-	game_schedule: "sports",
+	// One type for played and unplayed games alike: identity is
+	// (document, item_type, external_id), so splitting them would open a second
+	// row the moment a scheduled game gained its score.
+	game: "sports",
 };
 
 /**

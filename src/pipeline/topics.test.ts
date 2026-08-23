@@ -34,6 +34,25 @@ describe("classifyTopics", () => {
 		);
 	});
 
+	it("files every Home Campus school under sports", () => {
+		for (const key of ["chinohigh-sports", "ayala-sports", "donlugo-sports"]) {
+			assert.deepEqual(
+				classifyTopics({ postType: "sports_roundup", sourceKeys: [key] }),
+				["sports"],
+				`${key} should file under sports`,
+			);
+		}
+	});
+
+	it("files a game under sports whatever it was scraped from", () => {
+		// One item type for played and unplayed games alike, so that a scheduled
+		// game gaining its score updates its row instead of opening a second one.
+		assert.deepEqual(
+			classifyTopics({ postType: "sports_roundup", itemTypes: ["game"] }),
+			["sports"],
+		);
+	});
+
 	it("files business tracker and narrative posts under business", () => {
 		assert.deepEqual(classifyTopics({ postType: "business_tracker" }), [
 			"business",
@@ -176,7 +195,7 @@ describe("classifyTopics", () => {
 			postType: "business_tracker",
 			title: "Planning Commission and Board of Education",
 			sourceKeys: ["cvusd-board", "nws-alerts", "abc-licenses"],
-			itemTypes: ["game_result"],
+			itemTypes: ["game"],
 		});
 		for (const slug of every) {
 			assert.ok(
