@@ -241,29 +241,7 @@ account in the error. `CVT_ALLOW_ROOT_DEPLOY=1` overrides it, and is only
 correct on an install where those directories genuinely belong to root. The
 `npm ci` calls no longer pass `--silent`, so a failure says why.
 
-### Upgrading a host provisioned before 2026-08-18
-
-The forced command lives on the host, not in this repo, so merging the change
-does not migrate an existing install. Two one-time steps as root, after which
-`scripts/deploy.sh code` verifies both on every run:
-
-```bash
-# 1. Point CI at host-update. Nothing else decides what a push to main runs.
-sudo -u cvtoday sed -i \
-  's|scripts/deploy.sh local|scripts/deploy.sh host-update|' \
-  /srv/chino-valley-today/.ssh/authorized_keys
-
-# 2. Give the checkout back to the service account. Deploys used to run git and
-#    npm as root, so the tree drifted to root ownership — 4792 files on this
-#    host — and a fetch as cvtoday then failed on .git/FETCH_HEAD. `deploy.sh
-#    code` now does this itself before dropping privileges, so this is only
-#    needed if you are repairing by hand.
-chown -R cvtoday:cvtoday /srv/chino-valley-today
-```
-
-Then `scripts/deploy.sh code` and confirm it prints `forced command runs
-host-update`. It exits non-zero if the entry is wrong, missing, unrestricted,
-or lacks `no-port-forwarding`.
+### Releases and the content-divergence guard
 
 The checkout update refuses to run if `content/published` on the host holds
 anything that differs from `origin/main`, backs the directory up under

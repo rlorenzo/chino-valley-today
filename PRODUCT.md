@@ -183,9 +183,8 @@ held, published, rejected.
 ## Brand Commitments
 
 - **Name:** Chino Valley Today.
-- **Domain:** `chinovalley.today`, confirmed 2026-08-16. PLAN.md names
-  `cvtoday.rexlorenzo.com` as an interim host on an existing Caddy droplet; the
-  site origin should be a single config value so moving between them is one line.
+- **Domain:** `chinovalley.today`, registered and live since 2026-08-17. The
+  site origin is a single config value, so moving hosts stays a one-line change.
 - **Voice, as established by the editorial rules rather than a style guide:**
   factual, extractive, and uncharacterized. State what the record says and stop.
   No motive, tone, or adjectives of judgment. A status change is reported as the
