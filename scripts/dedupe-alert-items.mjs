@@ -51,20 +51,30 @@ if (dupes.length === 0) {
 }
 
 let removed = 0;
-for (const row of dupes) {
-	const ids = String(row.ids)
-		.split(",")
-		.map(Number)
-		.filter((id) => id !== Number(row.keep_id));
-	console.log(
-		`${row.external_id}: keep ${row.keep_id}, drop ${ids.join(", ")}`,
-	);
-	if (apply) {
-		for (const id of ids) {
-			db.raw.prepare("DELETE FROM items WHERE id = ?").run(id);
-			removed++;
+// All or nothing, the way insertItemAtomic does it: a failure partway through
+// would otherwise leave the table half-cleaned, with nothing recording how far
+// it got — the worst state to resume a one-shot cleanup from.
+if (apply) db.raw.exec("BEGIN IMMEDIATE");
+try {
+	for (const row of dupes) {
+		const ids = String(row.ids)
+			.split(",")
+			.map(Number)
+			.filter((id) => id !== Number(row.keep_id));
+		console.log(
+			`${row.external_id}: keep ${row.keep_id}, drop ${ids.join(", ")}`,
+		);
+		if (apply) {
+			for (const id of ids) {
+				db.raw.prepare("DELETE FROM items WHERE id = ?").run(id);
+				removed++;
+			}
 		}
 	}
+	if (apply) db.raw.exec("COMMIT");
+} catch (err) {
+	if (apply) db.raw.exec("ROLLBACK");
+	throw err;
 }
 
 console.log(
