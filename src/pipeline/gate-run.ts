@@ -148,6 +148,9 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 		bodyMd: draftMd,
 		...(o.meetingDate ? { meetingDate: o.meetingDate } : {}),
 		sources: bundle.allowedUrls,
+		// The bundle knows which source it was built from; topic filing reads
+		// that rather than guessing from the recap's title.
+		sourceKeys: [bundle.sourceKey],
 	});
 	console.log(`Post ${o.slug}: ${post.outcome}`);
 	if (post.outcome === "skipped") {

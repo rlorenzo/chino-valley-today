@@ -69,6 +69,8 @@ export function generateNewsDigest(db: Db, now: Date): GenResult {
 		title: `Chino Valley News Digest — ${week}`,
 		bodyMd: lines.join("\n\n"),
 		sources: sorted.map((r) => r.source_url),
+		sourceKeys: [...new Set(sorted.map((r) => r.source_key))],
+		itemTypes: [...new Set(sorted.map((r) => r.item_type))],
 	});
 
 	notes.push(

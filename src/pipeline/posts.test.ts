@@ -107,6 +107,39 @@ describe("glossary placement in the rendered post", () => {
 	});
 });
 
+describe("topics in the rendered frontmatter", () => {
+	// classifyTopics is unit-tested in topics.test.ts; what matters here is that
+	// renderPostFile is the single place that calls it, so no generator can ship
+	// a post with no `topics:` block by forgetting to classify.
+	test("emits the classified topics, last in the frontmatter", () => {
+		const file = renderPostFile(post("Body."), "2026-08-15T00:00:00Z");
+		assert.match(file, /\ntopics:\n {2}- business\n---\n/);
+	});
+
+	test("omits the key entirely when a post classifies to nothing", () => {
+		// The schema declares `topics` optional; an empty `topics:` with no items
+		// would parse as null and fail the build.
+		const file = renderPostFile(
+			{ ...post("Body."), postType: "daily-brief", briefDate: "2026-08-15" },
+			"2026-08-15T00:00:00Z",
+		);
+		assert.doesNotMatch(file, /topics:/);
+	});
+
+	test("classifies from the source keys the generator passed, not the title", () => {
+		const file = renderPostFile(
+			{
+				...post("Body."),
+				postType: "meeting_preview",
+				title: "Meeting Preview: Regular Meeting — August 20, 2026",
+				sourceKeys: ["cvusd-board"],
+			},
+			"2026-08-15T00:00:00Z",
+		);
+		assert.match(file, /\ntopics:\n {2}- cvusd\n/);
+	});
+});
+
 describe("the glossary is invisible to the gates", () => {
 	// The whole reason it lives in the footer: "California Department of
 	// Alcoholic Beverage Control" is a proper name absent from the corpus, and

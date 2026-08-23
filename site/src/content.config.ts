@@ -72,6 +72,15 @@ const posts = defineCollection({
 
 			// Secondary press links cited for attribution rather than primary civic provenance.
 			attributions: z.array(z.string().url()).optional(),
+
+			// Topics are classified by the pipeline (src/pipeline/topics.ts), which
+			// owns the source keys and item types that identify a subject. The site
+			// renders what it is told and no longer guesses from the title. Optional
+			// because most post types carry no topic by design (briefs and digests
+			// span every subject; secondary press is attribution, not record).
+			topics: z
+				.array(z.enum(["planning", "cvusd", "business", "safety", "sports"]))
+				.optional(),
 		})
 		.refine(
 			(d) => d.post_type !== "daily-brief" || d.brief_date !== undefined,

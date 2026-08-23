@@ -101,6 +101,21 @@ function sourcesFrom(rows: ItemRow[]): string[] {
 	).map((r) => r.url);
 }
 
+/**
+ * The classification signals behind a preview: which sources it was built from
+ * and which item types. Passed to createPost so topic filing reads the record
+ * the post came from rather than the wording of its title.
+ */
+function signalsFrom(rows: ItemRow[]): {
+	sourceKeys: string[];
+	itemTypes: string[];
+} {
+	return {
+		sourceKeys: [...new Set(rows.map((r) => r.source_key))],
+		itemTypes: [...new Set(rows.map((r) => r.item_type))],
+	};
+}
+
 // ---- Candidate A: chino-news-rss city calendar ('event' items) ----
 
 function chinoCalendarBodyName(rawTitle: string): {
@@ -277,6 +292,7 @@ function genChinoCalendarPreviews(
 			bodyMd,
 			meetingDate: localDate,
 			sources: sourcesFrom([row, ...matched]),
+			...signalsFrom([row, ...matched]),
 		});
 	}
 
@@ -341,6 +357,7 @@ function genCvusdPreviews(db: Db, now: Date): GenResult {
 			bodyMd: lines.join("\n"),
 			meetingDate: localDate,
 			sources: sourceUrls,
+			...signalsFrom([row]),
 		});
 	}
 
@@ -409,6 +426,7 @@ function genLegistarPreviews(
 			bodyMd: lines.join("\n"),
 			meetingDate: localDate,
 			sources: sourcesFrom(rows),
+			...signalsFrom(rows),
 		});
 	}
 
@@ -481,6 +499,7 @@ function genChinohillsAgendaPreviews(
 			bodyMd: lines.join("\n"),
 			meetingDate: localDate,
 			sources: sourcesFrom(rows),
+			...signalsFrom(rows),
 		});
 	}
 

@@ -80,6 +80,8 @@ export function generateBusinessTracker(db: Db, now: Date): GenResult {
 		title: `Business License Tracker — ${week}`,
 		bodyMd: sections.join("\n\n"),
 		sources,
+		sourceKeys: [...new Set(inWindow.map((r) => r.source_key))],
+		itemTypes: [...new Set(inWindow.map((r) => r.item_type))],
 	});
 
 	notes.push(

@@ -5,6 +5,8 @@ tier: B
 date: "2026-08-15T01:45:26.909Z"
 sources:
   - "https://www.abc.ca.gov/licensing/licensing-reports/status-changes/"
+topics:
+  - business
 ---
 
 Two Chino ABC licenses were moved to revoked-pending (REVPEN) status this week, affecting a market and a lounge, according to the California ABC status-change report dated August 12, 2026 [source](https://www.abc.ca.gov/licensing/licensing-reports/status-changes/).

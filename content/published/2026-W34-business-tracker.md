@@ -5,6 +5,8 @@ tier: A
 date: "2026-08-18T02:58:13.978Z"
 sources:
   - "https://www.abc.ca.gov/licensing/licensing-reports/status-changes/"
+topics:
+  - business
 ---
 
 ### 2026-08-12
