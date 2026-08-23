@@ -19,8 +19,7 @@ summarized below; their detail is in git history and the PRs they link.
   backup running, deploy-on-push CI verified. Infrastructure identifiers live
   in the private Obsidian note, deliberately not in this public repo.
 - **Phase 4 in progress** (daily brief + expanded sources). Merged: 4.0, 4.1,
-  4.2, 4.3, 4.6, 4.7, 4.10. Open: **4.4, 4.5, 4.8** (specs below); 4.9 is in
-  review ([PR #39](https://github.com/rlorenzo/chino-valley-today/pull/39)).
+  4.2, 4.3, 4.4, 4.6, 4.7, 4.9, 4.10. Open: **4.5, 4.8** (specs below).
 - **Phase 3 not started** (podcast + newsletter + growth), deliberately
   re-sequenced after Phase 4 — the newsletter is strictly better fed by a
   daily brief.
@@ -156,8 +155,10 @@ outside the file:
 - **Phase 4 merged so far:** 4.0 source probes; 4.1 easy verified set (seven
   scrapers); 4.2 headlines-elsewhere ingestion ([PR #28]); 4.3 daily brief
   assembler ([PR #27]) plus prerequisite tiering ([PR #33]) and the root-run
-  deploy guard ([PR #34]); 4.6 City Alert Center feeds ([PR #30]); 4.7 student
-  press + NBC4 ([PR #31]).
+  deploy guard ([PR #34]); 4.4 index leads with Today (`941f2f7`, attribution
+  treatment in [PR #28]); 4.6 City Alert Center feeds ([PR #30]); 4.7 student
+  press + NBC4 ([PR #31]); 4.9 repeated press headlines demoted, not dropped
+  ([PR #39]).
 
 [PR #27]: https://github.com/rlorenzo/chino-valley-today/pull/27
 [PR #28]: https://github.com/rlorenzo/chino-valley-today/pull/28
@@ -165,17 +166,11 @@ outside the file:
 [PR #31]: https://github.com/rlorenzo/chino-valley-today/pull/31
 [PR #33]: https://github.com/rlorenzo/chino-valley-today/pull/33
 [PR #34]: https://github.com/rlorenzo/chino-valley-today/pull/34
+[PR #39]: https://github.com/rlorenzo/chino-valley-today/pull/39
 
 ---
 
 ## Phase 4: open tasks
-
-### Task 4.4 - Front page leads with Today
-
-Rebuild index per surface brief v2 (`.impeccable/surfaces/`): Today → This week
-→ the record (v1 treatment demoted, not degraded). Dairy Inspection Mark
-retained; violet remains provenance-only; headlines-elsewhere links take a
-crate-outline attribution treatment, never violet.
 
 ### Task 4.5 - Topic taxonomy for new content
 
@@ -202,34 +197,6 @@ Team-level scores/schedules/standings for the four CVUSD high schools.
 - Rejected platforms: scores.cifss.org (AWS WAF), athletic.net (robots blocks
   exactly the team-result pages), sblivesports.com (blanket 403).
 
-### Task 4.9 - Retire repeated press headlines into their own section
-
-**In the local press** repeats the same story every morning for up to a week.
-`champion-news` policy is `maxItemAgeHours: 7 * 24` with `sincePrevBrief: false`,
-and the only dedup in `selectHeadlinesElsewhere` is cross-outlet *within a single
-brief* — nothing asks whether an item already ran in an earlier one.
-
-The 7-day window is correct and stays: The Champion is a weekly, so
-`sincePrevBrief: true` would qualify its stories on exactly one morning and
-leave the section empty the other six. The bug is that a re-shown item is
-presented as though it were new. Fix is demote-not-drop:
-
-- Split the section. Items no previous brief carried stay under **In the local
-  press**; already-run items move to **Still in the local press this week**.
-- Fill unseen first, then already-shown as needed, so `MAX_HEADLINES_TOTAL` (5)
-  and the per-outlet caps still fill on a quiet week.
-- If every eligible item has already run, omit the fresh heading entirely and
-  render only the "Still in" list — the conditional-section rule the rest of
-  the brief follows.
-- Ordering, dedup, freshness, ToS and policy filters are unchanged; this is a
-  presentation split over the existing result set, not a new selection rule.
-- Needs a durable record of what each brief carried. `attributions` on the
-  published brief post is the obvious candidate (URLs already land there); an
-  explicit table is the fallback if attributions turn out lossy.
-
-Out of scope: changing any outlet's `maxItemAgeHours` or `sincePrevBrief`, and
-any cap on how many times an item may reappear.
-
 ### Phase 4 acceptance
 
 - [ ] Seven consecutive mornings publish a daily brief with zero human writing
@@ -238,7 +205,7 @@ any cap on how many times an item may reappear.
 - [ ] Every brief item's link passes the citation spot-check ritual
 - [ ] Headlines-elsewhere items render as short attributed summaries only
 - [ ] No student-athlete name anywhere (team-level rule holds)
-- [ ] Index leads with Today; the record remains fully reachable and citable
+- [x] Index leads with Today; the record remains fully reachable and citable
 
 ---
 
