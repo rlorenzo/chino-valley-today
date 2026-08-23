@@ -19,7 +19,7 @@ summarized below; their detail is in git history and the PRs they link.
   backup running, deploy-on-push CI verified. Infrastructure identifiers live
   in the private Obsidian note, deliberately not in this public repo.
 - **Phase 4 in progress** (daily brief + expanded sources). Merged: 4.0, 4.1,
-  4.2, 4.3, 4.4, 4.6, 4.7, 4.9, 4.10. Open: **4.5, 4.8** (specs below).
+  4.2, 4.3, 4.4, 4.5, 4.6, 4.7, 4.9, 4.10. Open: **4.8** (spec below).
 - **Phase 3 not started** (podcast + newsletter + growth), deliberately
   re-sequenced after Phase 4 — the newsletter is strictly better fed by a
   daily brief.
@@ -157,7 +157,8 @@ outside the file:
   assembler ([PR #27]) plus prerequisite tiering ([PR #33]) and the root-run
   deploy guard ([PR #34]); 4.4 index leads with Today (`941f2f7`, attribution
   treatment in [PR #28]); 4.6 City Alert Center feeds ([PR #30]); 4.7 student
-  press + NBC4 ([PR #31]); 4.9 repeated press headlines demoted, not dropped
+  press + NBC4 ([PR #31]); 4.5 pipeline-owned topic taxonomy ([PR #42], host
+  backfill run 2026-08-23); 4.9 repeated press headlines demoted, not dropped
   ([PR #39]).
 
 [PR #27]: https://github.com/rlorenzo/chino-valley-today/pull/27
@@ -167,28 +168,11 @@ outside the file:
 [PR #33]: https://github.com/rlorenzo/chino-valley-today/pull/33
 [PR #34]: https://github.com/rlorenzo/chino-valley-today/pull/34
 [PR #39]: https://github.com/rlorenzo/chino-valley-today/pull/39
+[PR #42]: https://github.com/rlorenzo/chino-valley-today/pull/42
 
 ---
 
 ## Phase 4: open tasks
-
-### Task 4.5 - Topic taxonomy for new content (built; one host step remains)
-
-Taxonomy settled 2026-08-23 and built: `safety` absorbs fire/EMS incidents
-rather than gaining a mark of its own; `sports` is a fifth mark, fed by the
-Task 4.8 roundup and empty until it lands; calendar events get no mark because
-they are not posts and `/calendar/` already serves them; secondary press gets
-none, because a topic page is the record and another outlet's reporting is
-attribution; daily briefs and news digests get none, because both span every
-subject. Classification moved from `site/src/lib/record.ts` into
-`src/pipeline/topics.ts`, which reads the source keys and item types a post was
-built from instead of guessing at its title, and writes `topics` frontmatter.
-
-**Remaining: run `scripts/backfill-post-topics.ts --write` on the droplet.**
-The repo's `content/published/` holds 13 tracked posts; production holds more,
-including every alert post, because published posts live only on the droplet
-(see Open decisions). Until the backfill runs there, production's Safety mark
-reads zero while its alert posts sit untagged.
 
 ### Task 4.8 - HS sports scores (endpoints verified 2026-08-19; build pending)
 
