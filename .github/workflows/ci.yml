@@ -62,6 +62,17 @@ jobs:
       - name: Test with coverage
         run: npm run coverage
 
+      # Separate from the step above because `npm run coverage` globs only
+      # "src/**/*.test.ts" and "scripts/**/*.test.ts" — neither matches
+      # tests/integration/*.test.sh, so those suites were invoked by nothing
+      # and PR #33 could invert what run-brief-retry.test.sh asserts while CI
+      # stayed green.
+      # They shell out to node, git, cmp, mktemp and a stubbed systemctl, and
+      # check-unit-drift builds a throwaway git repo, so this proves they hold
+      # on the runner and not just on a developer's machine.
+      - name: Integration tests (shell)
+        run: npm run test:integration
+
   analyze:
     name: fallow
     runs-on: ubuntu-latest
