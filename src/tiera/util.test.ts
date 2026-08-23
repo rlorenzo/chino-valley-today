@@ -164,4 +164,45 @@ describe("superseded alert suppression", () => {
 		};
 		assert.equal(dropSupersededAlerts([broken]).length, 1);
 	});
+
+	test("meta that parses to something other than an object is survivable", () => {
+		// "null", "[]" and "\"x\"" all parse cleanly and would have thrown on the
+		// property read that follows — parseable is not the same as usable.
+		for (const meta of ["null", "[]", '"x"', "7"]) {
+			const row = {
+				id: 1,
+				external_id: "x",
+				source_url: "https://example.gov/1",
+				meta,
+			};
+			assert.equal(dropSupersededAlerts([row]).length, 1, meta);
+			assert.equal(dedupeAlertIssuances([row]).length, 1, meta);
+			assert.match(alertEventKey(row), /^id:/, meta);
+		}
+	});
+
+	test("issuances are compared as instants, not as strings", () => {
+		// The same moment, one written with an offset and one as UTC. Compared
+		// lexicographically "2026-08-22T13..." sorts before "2026-08-22T20...",
+		// so the older issuance would win and the superseded window would be the
+		// one shown.
+		const rows = [
+			issuance(1, "2026-08-21T20:00:00Z", {
+				ends: "2026-08-24T20:00:00-07:00",
+			}),
+			issuance(2, "2026-08-22T13:10:00-07:00", {
+				ends: "2026-08-25T10:00:00-07:00",
+			}),
+		];
+		const out = dropSupersededAlerts(rows);
+		assert.equal(out.length, 1);
+		assert.equal(out[0].id, 2);
+	});
+
+	test("an unparseable timestamp falls back to id order, not NaN", () => {
+		const rows = [issuance(1, "not a date"), issuance(2, "also not a date")];
+		const out = dropSupersededAlerts(rows);
+		assert.equal(out.length, 1);
+		assert.equal(out[0].id, 2);
+	});
 });

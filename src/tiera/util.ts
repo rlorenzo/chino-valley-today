@@ -147,17 +147,32 @@ export function humanDateFromLocal(localDate: string): string {
 	}).format(d);
 }
 
+// The tests assert that unparseable meta is survivable rather than fatal, and
+// a row reading literal "null" or "[]" is parseable but just as fatal: the
+// property reads below would throw on null. Anything that is not a plain
+// object becomes {}.
 function parseAlertMeta(meta: string | null): Record<string, unknown> {
+	if (!meta) return {};
 	try {
-		return meta ? (JSON.parse(meta) as Record<string, unknown>) : {};
+		const parsed: unknown = JSON.parse(meta);
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+			return {};
+		return parsed as Record<string, unknown>;
 	} catch {
 		return {};
 	}
 }
 
-function alertEffective(row: { meta: string | null }): string {
+// Compared as instants, never as strings: NWS stamps these with an offset
+// ("-07:00") and the same moment written as "Z" sorts earlier lexicographically
+// than an offset spelling of itself, which would pick the wrong issuance and
+// resurrect exactly the superseded advisory this file exists to suppress.
+// Returns null for absent or unparseable values so callers fall back to id.
+function alertEffectiveMs(row: { meta: string | null }): number | null {
 	const v = parseAlertMeta(row.meta).effective;
-	return typeof v === "string" ? v : "";
+	if (typeof v !== "string") return null;
+	const t = new Date(v).getTime();
+	return Number.isNaN(t) ? null : t;
 }
 
 // NWS re-issues an advisory as a series of Updates: same event, same end
@@ -205,9 +220,9 @@ export function dedupeAlertIssuances<
 			best.set(key, row);
 			continue;
 		}
-		const a = alertEffective(row);
-		const b = alertEffective(held);
-		if (a && b ? a < b : row.id < held.id) best.set(key, row);
+		const a = alertEffectiveMs(row);
+		const b = alertEffectiveMs(held);
+		if (a !== null && b !== null ? a < b : row.id < held.id) best.set(key, row);
 	}
 	return [...best.values()];
 }
@@ -256,11 +271,11 @@ export function dropSupersededAlerts<
 			best.set(key, row);
 			continue;
 		}
-		const a = alertEffective(row);
-		const b = alertEffective(held);
+		const a = alertEffectiveMs(row);
+		const b = alertEffectiveMs(held);
 		// Newest issuance wins; without usable timestamps the later row does,
 		// since alerts are inserted in the order the feed lists them.
-		if (a && b ? a > b : row.id > held.id) best.set(key, row);
+		if (a !== null && b !== null ? a > b : row.id > held.id) best.set(key, row);
 	}
 	return [...best.values()];
 }

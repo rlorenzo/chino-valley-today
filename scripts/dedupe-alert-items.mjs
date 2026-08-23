@@ -21,6 +21,12 @@ import { openDb } from "../src/db/index.ts";
 
 const apply = process.argv.includes("--apply");
 const dbFlag = process.argv.indexOf("--db");
+// A bare --db used to fall through to openDb()'s default, so a run meant for a
+// throwaway copy would delete from the real database instead.
+if (dbFlag !== -1 && !process.argv[dbFlag + 1]) {
+	console.error("--db requires a path, e.g. --db /tmp/copy.db");
+	process.exit(1);
+}
 const db = dbFlag === -1 ? openDb() : openDb(process.argv[dbFlag + 1]);
 
 const dupes = db.raw
@@ -29,6 +35,10 @@ const dupes = db.raw
 		        MIN(id) AS keep_id, GROUP_CONCAT(id) AS ids
 		   FROM items
 		  WHERE item_type = 'alert'
+		    -- SQLite GROUP BY treats every NULL as the same key, so without this
+		    -- a set of unrelated alerts missing an external_id would look like
+		    -- one over-duplicated alert and all but the first would be deleted.
+		    AND external_id IS NOT NULL
 		  GROUP BY external_id, item_type
 		 HAVING n > 1
 		  ORDER BY keep_id`,
