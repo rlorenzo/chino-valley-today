@@ -25,7 +25,11 @@ export interface FakeScraperContext {
 	notes: string[];
 	/** Every URL requested, in order, across fetchRaw and fetchDocument. */
 	requested: string[];
+	/** The (url, meta) pair of each fetchDocument call, in order. */
+	documents: { url: string; meta: FetchDocumentMeta }[];
 }
+
+type FetchDocumentMeta = Parameters<ScraperContext["fetchDocument"]>[1];
 
 function toRawResult(url: string, response: FakeResponse): RawResult {
 	if (response instanceof Error) throw response;
@@ -60,6 +64,7 @@ export function fakeScraperContext(
 	const items: NewItemInput[] = [];
 	const notes: string[] = [];
 	const requested: string[] = [];
+	const documents: { url: string; meta: FetchDocumentMeta }[] = [];
 	let nextDocumentId = 1;
 	let nextItemId = 1;
 
@@ -89,7 +94,11 @@ export function fakeScraperContext(
 			itemsNew: 0,
 		},
 		fetchRaw,
-		async fetchDocument(url: string): Promise<FetchedDocument> {
+		async fetchDocument(
+			url: string,
+			meta: FetchDocumentMeta,
+		): Promise<FetchedDocument> {
+			documents.push({ url, meta });
 			const res = await fetchRaw(url);
 			// Mirrors buildContext, which throws rather than handing a scraper an
 			// error page to parse.
@@ -111,5 +120,5 @@ export function fakeScraperContext(
 		},
 	} as unknown as ScraperContext;
 
-	return { ctx, items, notes, requested };
+	return { ctx, items, notes, requested, documents };
 }

@@ -283,6 +283,59 @@ whenever a source changes behavior.
   2026-08-19 (the terms page itself 403s bot clients); trail in
   reports/notes/ktla.md.
 
+### chinohigh-sports / ayala-sports / donlugo-sports — HS athletics (Home Campus)
+
+Three of the four CVUSD high schools run athletics on the Home Campus platform,
+so one scraper core (`homecampus-sports.ts`) serves all three. Chino Hills has
+no Home Campus site and is a separate source.
+
+- `POST /wp-json/sports/v1/main-teams` returns structured schedule and score
+  rows. **No cookie, nonce or session** — verified with plain curl 2026-08-19
+  and again on 2026-08-23. School ids are platform-global and shared with the
+  CIF-SS widget: Chino High 103 (`www.chinohighathletics.com`), Ayala 28
+  (`www.ayalasports.com`), Don Lugo 143 (`www.donlugosports.com`).
+- **One request per school per run.** `per_page: 100` over a bounded date
+  window (14 days back, 21 forward) returns the whole window in a single
+  response; the default of 20 paginates a season across 17 pages.
+- **Citation never points at the API.** Responses carry `x-robots-tag:
+  noindex` — an indexing directive, not an access prohibition, so fetching is
+  mechanically compliant, but a reader must land on the school's own page.
+  Items cite `/varsity/<sport>/schedule-results`, resolved by scraping the
+  slugs out of the school's nav. Derivation alone does not survive contact:
+  "Football (11 person)" is served at `/varsity/football/`, and
+  "Swimming & Diving, Boys" at `/varsity/swimming-diving-boys-3/`. When no slug
+  matches, the item cites `/schedule/` rather than a constructed URL that 404s.
+- **Item identity is the platform `id`, and there is one `item_type` (`game`)
+  for played and unplayed games alike.** `event_identifier` encodes the date,
+  so a rescheduled game would arrive as a new item; and splitting played from
+  unplayed would open a second row the moment a scheduled game gained its
+  score.
+- **`result_remark` is deliberately not ingested.** It is free text, and free
+  text about a high school game is where a minor's name would appear.
+  EDITORIAL.md's interim rule is team-level only.
+- Rows carry a literal `"TBA"` opponent before a matchup is set (cross-country
+  meets, tournaments). Stored for the record, flagged `opponentTbd` in meta so
+  a roundup can skip them — "Chino at TBA" tells a reader nothing.
+- `occurred_at` is a **bare local date**: the API gives a school-day date and a
+  wall-clock time with no zone, and inventing one would be a guess.
+- `overall_records` and `league_records` come back `0`, so standings are not
+  available here. League membership is per-sport and must be read from the
+  CIF-SS league directory — never publish a blanket "X plays in league Y".
+- robots.txt: standard WordPress disallows, `/wp-json/` **not** disallowed. All
+  three serve a byte-identical robots.txt from one platform template. No
+  reader-facing terms page exists, so robots.txt is the binding access document
+  (same treatment as the SNO student papers) and is tracked in
+  `SOURCE_TOS_REGISTRY` for drift.
+
+### chinohills sports — NOT YET INGESTED
+
+Chino Hills (school id 104) has no Home Campus site. Two verified options, both
+pending: the CIF-SS widget at `cifsshome.org/widget/schedule-score` (server-
+rendered, citable, one request per sport) or chhuskies.com's PlayOn RSC payload
+(needs a real ToS review). Until one lands, sports coverage is 3 of the 4
+district high schools — which is why nothing sports-related is reader-facing
+yet.
+
 ## Open questions from PLAN — answers so far
 
 1. **Legistar API enabled for Chino?** YES — confirmed live, built on it.

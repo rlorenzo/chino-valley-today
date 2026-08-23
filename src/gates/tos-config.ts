@@ -9,6 +9,39 @@ export interface SourceTosConfig {
 }
 
 export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
+	"chinohigh-sports": {
+		source_key: "chinohigh-sports",
+		status: "enabled",
+		terms_url: "https://www.chinohighathletics.com/robots.txt",
+		reviewed_hash:
+			"fd866565598b822109a8624c8cbe3bb9289b6190c07640f368d7c693a2d16f8f",
+		reviewed_at: "2026-08-23",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"Home Campus (Chino High) publishes no reader-facing terms page, so robots.txt is the binding access document — same treatment as the SNO student papers. Standard WordPress disallows (/wp-admin/, /wp-includes/, /wp-content/plugins/); /wp-json/ is NOT disallowed. Responses carry x-robots-tag: noindex, an indexing directive rather than an access prohibition: items cite the school's human schedule page, never the API. All three schools serve a byte-identical robots.txt from the same platform template.",
+	},
+	"ayala-sports": {
+		source_key: "ayala-sports",
+		status: "enabled",
+		terms_url: "https://www.ayalasports.com/robots.txt",
+		reviewed_hash:
+			"fd866565598b822109a8624c8cbe3bb9289b6190c07640f368d7c693a2d16f8f",
+		reviewed_at: "2026-08-23",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"Home Campus (Ayala) publishes no reader-facing terms page, so robots.txt is the binding access document — same treatment as the SNO student papers. Standard WordPress disallows (/wp-admin/, /wp-includes/, /wp-content/plugins/); /wp-json/ is NOT disallowed. Responses carry x-robots-tag: noindex, an indexing directive rather than an access prohibition: items cite the school's human schedule page, never the API. All three schools serve a byte-identical robots.txt from the same platform template.",
+	},
+	"donlugo-sports": {
+		source_key: "donlugo-sports",
+		status: "enabled",
+		terms_url: "https://www.donlugosports.com/robots.txt",
+		reviewed_hash:
+			"fd866565598b822109a8624c8cbe3bb9289b6190c07640f368d7c693a2d16f8f",
+		reviewed_at: "2026-08-23",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"Home Campus (Don Lugo) publishes no reader-facing terms page, so robots.txt is the binding access document — same treatment as the SNO student papers. Standard WordPress disallows (/wp-admin/, /wp-includes/, /wp-content/plugins/); /wp-json/ is NOT disallowed. Responses carry x-robots-tag: noindex, an indexing directive rather than an access prohibition: items cite the school's human schedule page, never the API. All three schools serve a byte-identical robots.txt from the same platform template.",
+	},
 	"champion-news": {
 		source_key: "champion-news",
 		status: "enabled",
