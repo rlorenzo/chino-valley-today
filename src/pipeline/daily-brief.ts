@@ -1449,8 +1449,14 @@ export function briefAttributionsFromFile(
 	try {
 		const text = readFileSync(join(ROOT, p.file_path), "utf8");
 		// Frontmatter only: bail at the closing delimiter so a body that happens
-		// to contain "attributions:" cannot be read as the list.
-		const fm = text.split(/^---\s*$/m)[1];
+		// to contain "attributions:" cannot be read as the list. A file with no
+		// closing delimiter — truncated mid-write, hand-edited — would otherwise
+		// hand the whole body back as "frontmatter", and a URL quoted in prose
+		// would silently join the already-carried set and suppress a real
+		// headline. Fewer than three parts is not frontmatter; treat it as none.
+		const parts = text.split(/^---\s*$/m);
+		if (parts.length < 3 || parts[0].trim() !== "") return [];
+		const fm = parts[1];
 		if (!fm) return [];
 		// Scanned line by line rather than matched as one block: the list is the
 		// last key in the frontmatter, so a block regex needs an end-of-input
@@ -1524,15 +1530,20 @@ export function buildDailyBrief(
 	const carriedSince = laDateOf(
 		new Date(now.getTime() - 8 * 86400000).toISOString(),
 	);
+	// file_path is the only column briefAttributionsFromFile reads, and asking
+	// for it alone is what lets the result type be honest — SELECT * would need
+	// an `as unknown as PostRow[]` cast asserting columns nothing here touches.
 	const priorBriefs = db.raw
 		.prepare(
-			`SELECT * FROM posts
+			`SELECT file_path FROM posts
        WHERE post_type = 'daily-brief' AND status = 'published'
          AND slug != ? AND published_at IS NOT NULL
          AND published_at >= ?
        ORDER BY published_at DESC`,
 		)
-		.all(`${laToday}-daily-brief`, carriedSince) as unknown as PostRow[];
+		.all(`${laToday}-daily-brief`, carriedSince) as Array<{
+		file_path: string;
+	}>;
 	const alreadyCarriedUrls = new Set(
 		priorBriefs.flatMap((p) => briefAttributionsFromFile(p)),
 	);

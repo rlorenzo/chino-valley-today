@@ -2425,6 +2425,43 @@ describe("briefAttributionsFromFile", () => {
 		assert.deepEqual(briefAttributionsFromFile({ file_path }), []);
 	});
 
+	test("a brief with no closing delimiter yields nothing", () => {
+		// Truncated mid-write, or hand-edited. Splitting on "---" would hand the
+		// whole remainder back as "frontmatter", and a URL quoted anywhere in the
+		// body would silently join the already-carried set — suppressing a real
+		// headline as though a reader had already seen it.
+		const name = "brief-truncated.md";
+		const abs = join(dir, name);
+		writeFileSync(
+			abs,
+			[
+				"---",
+				'title: "A truncated brief"',
+				"post_type: daily-brief",
+				"",
+				"attributions:",
+				'  - "https://www.championnewspapers.com/community_news/article_ff0000.html"',
+			].join("\n"),
+		);
+
+		assert.deepEqual(
+			briefAttributionsFromFile({ file_path: relative(ROOT, abs) }),
+			[],
+		);
+	});
+
+	test("a file that is not a post at all yields nothing", () => {
+		const abs = join(dir, "not-a-post.md");
+		writeFileSync(
+			abs,
+			'# Just a heading\n\nattributions:\n  - "https://x.example/y"\n',
+		);
+		assert.deepEqual(
+			briefAttributionsFromFile({ file_path: relative(ROOT, abs) }),
+			[],
+		);
+	});
+
 	test("a missing file is empty, not an exception", () => {
 		assert.deepEqual(
 			briefAttributionsFromFile({
