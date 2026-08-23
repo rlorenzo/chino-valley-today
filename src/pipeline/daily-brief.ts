@@ -945,6 +945,9 @@ export function selectHeadlinesElsewhere(
 	now: Date,
 	prevBriefPublishedAt?: string | null,
 	notes?: string[],
+	// Secondary-press URLs earlier briefs already carried. Empty is the honest
+	// default: nothing carried means nothing is a repeat.
+	alreadyCarried: ReadonlySet<string> = new Set(),
 ): ItemRow[] {
 	if (!headlineItems || headlineItems.length === 0) return [];
 	const nowMs = now.getTime();
@@ -1038,17 +1041,27 @@ export function selectHeadlinesElsewhere(
 	const result: ItemRow[] = [];
 	const countByOutlet: Record<string, number> = {};
 
-	for (const item of finalSorted) {
-		if (result.length >= MAX_HEADLINES_TOTAL) break;
-		const cap =
-			HEADLINE_SOURCE_POLICY[item.source_key]?.maxPerBrief ??
-			MAX_HEADLINES_PER_OUTLET;
-		const count = countByOutlet[item.source_key] ?? 0;
-		if (count >= cap) continue;
+	const fill = (rows: ItemRow[]): void => {
+		for (const item of rows) {
+			if (result.length >= MAX_HEADLINES_TOTAL) break;
+			const cap =
+				HEADLINE_SOURCE_POLICY[item.source_key]?.maxPerBrief ??
+				MAX_HEADLINES_PER_OUTLET;
+			const count = countByOutlet[item.source_key] ?? 0;
+			if (count >= cap) continue;
 
-		countByOutlet[item.source_key] = count + 1;
-		result.push(item);
-	}
+			countByOutlet[item.source_key] = count + 1;
+			result.push(item);
+		}
+	};
+
+	// Unseen headlines claim the slots first, then already-run ones fill what is
+	// left. Both caps still apply across the two passes, so a quiet week fills
+	// the section as before instead of shrinking to whatever happens to be new.
+	// Ordering within each pass is untouched — this decides which items make the
+	// cut, not how they are sorted.
+	fill(finalSorted.filter((item) => !alreadyCarried.has(item.source_url)));
+	fill(finalSorted.filter((item) => alreadyCarried.has(item.source_url)));
 
 	return result;
 }
@@ -1101,6 +1114,9 @@ export interface BriefInputs {
 	licenseEvents: ItemRow[];
 	headlines?: ItemRow[];
 	headlinesFreshness?: Record<string, SourceFreshness>;
+	// Secondary-press URLs earlier published briefs already carried, so a
+	// re-shown story can be demoted rather than presented as new.
+	alreadyCarriedUrls?: ReadonlySet<string>;
 	publishedPosts: PostRow[];
 	// published_at of the previous daily brief; null on the first ever run,
 	// which falls back to a 24h window for "new on the record".
@@ -1295,29 +1311,57 @@ export function assembleBrief(
 
 	// In the local press: secondary community press reporting (The Champion,
 	// Daily Bulletin). URLs join frontmatter attributions[], NEVER sources[].
+	const alreadyCarried = inputs.alreadyCarriedUrls ?? new Set<string>();
 	const headlines = selectHeadlinesElsewhere(
 		inputs.headlines,
 		inputs.headlinesFreshness,
 		now,
 		inputs.prevBriefPublishedAt,
 		notes,
+		alreadyCarried,
 	);
-	const { listItems, attributions } = renderHeadlineListItems(headlines, notes);
 
-	if (listItems.length > 0) {
-		// The heading is markdown like every other section's, so it inherits the
-		// same .prose h2 treatment; only the list needs raw HTML, for the anchor
-		// attributes markdown links cannot carry.
+	// Demote, do not drop. The Champion is a weekly, so its stories stay
+	// eligible for seven days and the section would empty out six mornings in
+	// seven if a repeat were simply dropped. What was wrong was presenting a
+	// story a reader already saw as though it were new.
+	const fresh = headlines.filter((h) => !alreadyCarried.has(h.source_url));
+	const stillRunning = headlines.filter((h) =>
+		alreadyCarried.has(h.source_url),
+	);
+	const freshRender = renderHeadlineListItems(fresh, notes);
+	const stillRender = renderHeadlineListItems(stillRunning, notes);
+	const attributions = [
+		...freshRender.attributions,
+		...stillRender.attributions,
+	];
+
+	// The headings are markdown like every other section's, so they inherit the
+	// same .prose h2 treatment; only the lists need raw HTML, for the anchor
+	// attributes markdown links cannot carry.
+	const pressSection = (heading: string, listItems: string[]): void => {
+		if (listItems.length === 0) return;
 		pressLines.push(
-			"## In the local press",
+			heading,
 			"",
 			'<ul class="headlines-elsewhere">',
 			...listItems,
 			"</ul>",
 			"",
 		);
-	}
-	notes.push(`headlines elsewhere: ${listItems.length} headline(s) selected`);
+	};
+	// Each heading appears only when it has something under it, the same
+	// conditional-section rule the rest of the brief follows: on a week where
+	// everything has already run, the reader sees only "Still in the local
+	// press this week" rather than an empty "In the local press" above it.
+	pressSection("## In the local press", freshRender.listItems);
+	pressSection("## Still in the local press this week", stillRender.listItems);
+
+	const shownCount =
+		freshRender.listItems.length + stillRender.listItems.length;
+	notes.push(
+		`headlines elsewhere: ${shownCount} headline(s) selected (${freshRender.listItems.length} new, ${stillRender.listItems.length} still running)`,
+	);
 	if (degradedKeys.length > 0) {
 		notes.push(
 			`degraded: ${degradedKeys.length} optional source(s) stale — ${degradedKeys.join(", ")}`,
@@ -1345,7 +1389,9 @@ export function assembleBrief(
 		fire.length === 0 &&
 		newPosts.length === 0 &&
 		licenses.length === 0 &&
-		listItems.length === 0 &&
+		// Both press sections: a morning carrying only already-run stories is
+		// still a morning with something to read, so it is not "quiet".
+		shownCount === 0 &&
 		// A morning with an unreachable source is not a quiet morning; it is
 		// an unknown one. The section notes already say which.
 		degradedKeys.length === 0
@@ -1387,6 +1433,55 @@ export function postTitleFromSlug(p: PostRow): string {
 // The real title lives in the post file's frontmatter, written by
 // renderPostFile() as a JSON string literal (`title: "..."`), so it parses
 // back with JSON.parse. Titles are not stored in the posts table.
+/**
+ * The secondary-press URLs a published brief carried, read back out of its
+ * frontmatter `attributions:` block. That list is written by
+ * renderHeadlineListItems and by nothing else, so it is an exact record of
+ * which headlines that morning's readers were shown — no separate table needed.
+ *
+ * A brief whose file is missing or unreadable contributes nothing rather than
+ * throwing: the cost of being wrong here is re-showing a headline as new, which
+ * is the status quo, not a broken brief.
+ */
+export function briefAttributionsFromFile(
+	p: Pick<PostRow, "file_path">,
+): string[] {
+	try {
+		const text = readFileSync(join(ROOT, p.file_path), "utf8");
+		// Frontmatter only: bail at the closing delimiter so a body that happens
+		// to contain "attributions:" cannot be read as the list.
+		const fm = text.split(/^---\s*$/m)[1];
+		if (!fm) return [];
+		// Scanned line by line rather than matched as one block: the list is the
+		// last key in the frontmatter, so a block regex needs an end-of-input
+		// anchor — and JS has no \Z. It is an identity escape for a literal "Z",
+		// so the pattern compiles, never matches, and returns nothing quietly.
+		const urls: string[] = [];
+		let inList = false;
+		for (const line of fm.split("\n")) {
+			if (!inList) {
+				if (/^attributions:\s*$/.test(line)) inList = true;
+				continue;
+			}
+			// The list ends at the next top-level key.
+			if (line.trim() !== "" && !/^\s/.test(line)) break;
+			const m = line.match(/^\s+-\s+(".*")\s*$/);
+			// Written with JSON.stringify (posts.ts `y`), so it parses back the
+			// same way. A line that does not is skipped, not guessed at.
+			if (!m) continue;
+			try {
+				const url = JSON.parse(m[1]) as string;
+				if (typeof url === "string" && url) urls.push(url);
+			} catch {
+				// not a quoted string; skip
+			}
+		}
+		return urls;
+	} catch {
+		return [];
+	}
+}
+
 export function postTitleFromFile(p: PostRow): string {
 	try {
 		const text = readFileSync(join(ROOT, p.file_path), "utf8");
@@ -1419,6 +1514,28 @@ export function buildDailyBrief(
        ORDER BY published_at DESC LIMIT 1`,
 		)
 		.get(`${laToday}-daily-brief`) as { published_at: string } | undefined;
+
+	// Which secondary-press URLs earlier briefs already showed. Bounded to the
+	// longest eligibility window any outlet has (The Champion's 7 days) plus a
+	// day of slack: a story older than that cannot be selected anyway, so
+	// reading further back would only add file reads. Today's own brief is
+	// excluded — regenerating a brief in place must not make its own headlines
+	// look like repeats of themselves.
+	const carriedSince = laDateOf(
+		new Date(now.getTime() - 8 * 86400000).toISOString(),
+	);
+	const priorBriefs = db.raw
+		.prepare(
+			`SELECT * FROM posts
+       WHERE post_type = 'daily-brief' AND status = 'published'
+         AND slug != ? AND published_at IS NOT NULL
+         AND published_at >= ?
+       ORDER BY published_at DESC`,
+		)
+		.all(`${laToday}-daily-brief`, carriedSince) as unknown as PostRow[];
+	const alreadyCarriedUrls = new Set(
+		priorBriefs.flatMap((p) => briefAttributionsFromFile(p)),
+	);
 
 	const headlinesFreshness = checkHeadlinesFreshness(db, now);
 
@@ -1462,6 +1579,7 @@ export function buildDailyBrief(
 			itemTypes: ["news_article"],
 		}),
 		headlinesFreshness,
+		alreadyCarriedUrls,
 		publishedPosts: db.raw
 			.prepare("SELECT * FROM posts WHERE status = 'published'")
 			.all() as unknown as PostRow[],

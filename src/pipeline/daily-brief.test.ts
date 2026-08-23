@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative } from "node:path";
 import { describe, test } from "node:test";
 import { type Db, openDb } from "../db/index.ts";
+import { ROOT } from "../store.ts";
 import type { ItemRow } from "../tiera/queries.ts";
 import {
 	assembleBrief,
 	assertPrerequisitesFresh,
 	BLOCKING_PREREQUISITE_SOURCES,
 	type BriefInputs,
+	briefAttributionsFromFile,
 	buildDailyBrief,
 	type CityForecast,
 	checkHeadlinesFreshness,
@@ -33,7 +38,7 @@ import {
 	titleTokens,
 	weatherGlyph,
 } from "./daily-brief.ts";
-import { type PostRow, renderPostFile } from "./posts.ts";
+import { type NewPost, type PostRow, renderPostFile } from "./posts.ts";
 
 // 6:05 AM PDT, Monday 2026-08-17 — the timer's real run window.
 const NOW = new Date("2026-08-17T13:05:00.000Z");
@@ -1633,6 +1638,145 @@ describe("headlines elsewhere deduplication and selection", () => {
 		);
 	});
 
+	test("an already-run story is demoted to its own section, not dropped", () => {
+		const carried = headline({
+			title: "Chino divided on permitting wall murals",
+			body: "The council voted 3-2 on July 7.",
+			occurred_at: "2026-08-15T00:00:00.000Z",
+		});
+		const fresh = headline({
+			title: "Chino Hills approves a park maintenance agreement",
+			body: "The agreement runs three years.",
+			occurred_at: "2026-08-16T00:00:00.000Z",
+		});
+
+		const inputs: BriefInputs = {
+			forecast: [],
+			nwsAlerts: [],
+			fire: [],
+			calendarEvents: [],
+			agendaItems: [],
+			cvusdEvents: [],
+			licenseEvents: [],
+			headlines: [carried, fresh],
+			headlinesFreshness: FRESH,
+			alreadyCarriedUrls: new Set([carried.source_url]),
+			publishedPosts: [],
+			prevBriefPublishedAt: null,
+		};
+
+		const { post } = assembleBrief(inputs, NOW);
+
+		assert.ok(post.bodyMd.includes("## In the local press"));
+		assert.ok(post.bodyMd.includes("## Still in the local press this week"));
+		// Demoted, not dropped: the story is still linked and still attributed.
+		assert.ok(post.bodyMd.includes("wall murals"));
+		assert.ok(post.attributions?.includes(carried.source_url));
+		// And it sits below the fresh section, not above it.
+		assert.ok(
+			post.bodyMd.indexOf("## In the local press") <
+				post.bodyMd.indexOf("## Still in the local press this week"),
+		);
+	});
+
+	test("a week where everything has already run renders only the Still-in list", () => {
+		const a = headline({
+			title: "Chino divided on permitting wall murals",
+			occurred_at: "2026-08-15T00:00:00.000Z",
+		});
+		const b = headline({
+			title: "Chino Hills approves a park maintenance agreement",
+			occurred_at: "2026-08-14T00:00:00.000Z",
+		});
+
+		const inputs: BriefInputs = {
+			forecast: [],
+			nwsAlerts: [],
+			fire: [],
+			calendarEvents: [],
+			agendaItems: [],
+			cvusdEvents: [],
+			licenseEvents: [],
+			headlines: [a, b],
+			headlinesFreshness: FRESH,
+			alreadyCarriedUrls: new Set([a.source_url, b.source_url]),
+			publishedPosts: [],
+			prevBriefPublishedAt: null,
+		};
+
+		const { post } = assembleBrief(inputs, NOW);
+
+		// The empty heading is omitted entirely, per the conditional-section
+		// rule the rest of the brief follows.
+		assert.ok(!post.bodyMd.includes("## In the local press"));
+		assert.ok(post.bodyMd.includes("## Still in the local press this week"));
+		// A morning carrying only already-run stories still has something to
+		// read, so it must not claim to be quiet.
+		assert.ok(!post.bodyMd.includes("A quiet morning"));
+	});
+
+	test("unseen headlines claim the capped slots before already-run ones", () => {
+		// Six eligible Champion stories for a per-outlet cap of 3, with the three
+		// OLDEST unseen — so a selection that ignored what ran before would take
+		// the three newest, all of them repeats, and the fresh section would be
+		// empty on a morning that had three new stories to show.
+		// Titles differ enough to survive the 0.6 Jaccard dedup — near-identical
+		// ones collapse into each other and the caps never come into play.
+		const rows = [
+			...[
+				"Chino council approves the Central Avenue repaving contract",
+				"Planning Commission reviews a Schaefer Avenue fuel proposal",
+				"Chino Hills extends summer library hours through September",
+			].map((title, i) =>
+				headline({ title, occurred_at: `2026-08-16T0${9 - i}:00:00.000Z` }),
+			),
+			...[
+				"Chino approves an update to the downtown awning sign code",
+				"County takes over administration of block grants for Chino",
+				"Chino Hills sets an autumn compost giveaway at the water yard",
+			].map((title, i) =>
+				headline({ title, occurred_at: `2026-08-15T0${3 - i}:00:00.000Z` }),
+			),
+		];
+		const carried = new Set(rows.slice(0, 3).map((r) => r.source_url));
+
+		const selected = selectHeadlinesElsewhere(
+			rows,
+			FRESH,
+			NOW,
+			null,
+			[],
+			carried,
+		);
+
+		assert.equal(selected.length, 3);
+		assert.ok(
+			selected.every((r) => !carried.has(r.source_url)),
+			"the three unseen stories took all three slots",
+		);
+	});
+
+	test("already-run stories still fill the section on a quiet week", () => {
+		// Only two eligible stories and both have run. Dropping them would empty
+		// the section six mornings in seven, which is why this demotes instead.
+		const rows = [
+			headline({ title: "Chino council approves the Central Avenue plan" }),
+			headline({ title: "Chino Hills extends its summer library hours" }),
+		];
+		const carried = new Set(rows.map((r) => r.source_url));
+
+		const selected = selectHeadlinesElsewhere(
+			rows,
+			FRESH,
+			NOW,
+			null,
+			[],
+			carried,
+		);
+
+		assert.equal(selected.length, 2);
+	});
+
 	test("selectHeadlinesElsewhere caps a student paper at its maxPerBrief (2), not the outlet default of 3", () => {
 		const rows = [
 			item({
@@ -2220,5 +2364,73 @@ describe("degraded sections", () => {
 			1,
 		);
 		assert.match(post.bodyMd, /Those sources did not answer/);
+	});
+});
+
+describe("briefAttributionsFromFile", () => {
+	const dir = mkdtempSync(join(tmpdir(), "cvt-attr-"));
+
+	// briefAttributionsFromFile resolves against ROOT, as production file_paths
+	// are repo-relative, so hand it a path relative to ROOT rather than the
+	// absolute temp one.
+	function writeBrief(name: string, post: NewPost): string {
+		const abs = join(dir, name);
+		writeFileSync(abs, renderPostFile(post, "2026-08-22T13:05:00.000Z"));
+		return relative(ROOT, abs);
+	}
+
+	test("reads back exactly what renderPostFile wrote", () => {
+		const urls = [
+			"https://www.championnewspapers.com/community_news/article_abc123.html",
+			"https://www.dailybulletin.com/2026/08/20/a-story-about-chino/",
+		];
+		const file_path = writeBrief("brief-a.md", {
+			title: 'A brief with "quotes" in it',
+			postType: "daily-brief",
+			tier: "A",
+			slug: "2026-08-22-daily-brief",
+			bodyMd: "## In the local press\n\nbody",
+			sources: ["https://api.weather.gov/alerts/x"],
+			attributions: urls,
+		});
+
+		assert.deepEqual(briefAttributionsFromFile({ file_path }), urls);
+	});
+
+	test("a brief that carried no headlines yields nothing", () => {
+		const file_path = writeBrief("brief-b.md", {
+			title: "A quiet brief",
+			postType: "daily-brief",
+			tier: "A",
+			slug: "2026-08-21-daily-brief",
+			bodyMd: "body",
+			sources: ["https://api.weather.gov/alerts/x"],
+		});
+
+		assert.deepEqual(briefAttributionsFromFile({ file_path }), []);
+	});
+
+	test("an attributions line in the body is not mistaken for the list", () => {
+		// The reader must stop at the frontmatter delimiter, or a brief quoting
+		// the word in its prose would poison the already-carried set.
+		const file_path = writeBrief("brief-c.md", {
+			title: "A brief mentioning the word",
+			postType: "daily-brief",
+			tier: "A",
+			slug: "2026-08-20-daily-brief",
+			bodyMd: 'attributions:\n  - "https://evil.example/not-a-headline"',
+			sources: ["https://api.weather.gov/alerts/x"],
+		});
+
+		assert.deepEqual(briefAttributionsFromFile({ file_path }), []);
+	});
+
+	test("a missing file is empty, not an exception", () => {
+		assert.deepEqual(
+			briefAttributionsFromFile({
+				file_path: relative(ROOT, join(dir, "nope.md")),
+			}),
+			[],
+		);
 	});
 });
