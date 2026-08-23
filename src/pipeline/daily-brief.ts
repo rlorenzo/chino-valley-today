@@ -910,11 +910,38 @@ export function jaccardSimilarity(a: Set<string>, b: Set<string>): number {
 	return union === 0 ? 0 : intersection / union;
 }
 
+/**
+ * Why a headline row must not reach a reader, or null if it may. Host and path
+ * are both load-bearing: a stub permalink that 301s onto the outlet's own tag
+ * archive keeps the host and loses the story, so host alone would pass it.
+ *
+ * Selection applies this before capping and the renderer applies it again on
+ * the way out — one definition, because a row rejected only at render time has
+ * already taken a slot from an article that could have filled it.
+ */
+function headlineUrlProblem(item: ItemRow): string | null {
+	const policy = HEADLINE_SOURCE_POLICY[item.source_key];
+	let url: URL;
+	try {
+		url = new URL(item.source_url);
+	} catch {
+		return `unparseable URL skipped: ${item.source_url}`;
+	}
+	if (url.protocol !== "https:" || !policy?.hosts.includes(url.hostname)) {
+		return `off-allowlist URL skipped: ${item.source_url}`;
+	}
+	if (policy.articlePathRe && !policy.articlePathRe.test(url.pathname)) {
+		return `non-article URL skipped: ${item.source_url}`;
+	}
+	return null;
+}
+
 export function selectHeadlinesElsewhere(
 	headlineItems: ItemRow[] | undefined,
 	freshness: Record<string, SourceFreshness> | undefined,
 	now: Date,
 	prevBriefPublishedAt?: string | null,
+	notes?: string[],
 ): ItemRow[] {
 	if (!headlineItems || headlineItems.length === 0) return [];
 	const nowMs = now.getTime();
@@ -943,12 +970,21 @@ export function selectHeadlinesElsewhere(
 		return true;
 	});
 
-	// 3. Policy & relevance filter
-	const eligiblePolicy = inWindow.filter(
+	// 3. URL validity. Ahead of the caps on purpose: a row the renderer would
+	// refuse must not first consume one of the five slots and shut out an
+	// article that could have filled it.
+	const withUsableUrl = inWindow.filter((item) => {
+		const problem = headlineUrlProblem(item);
+		if (problem) notes?.push(`headlines: ${problem}`);
+		return problem === null;
+	});
+
+	// 4. Policy & relevance filter
+	const eligiblePolicy = withUsableUrl.filter(
 		(item) => filterHeadlineEligibility(item).eligible,
 	);
 
-	// 4. Cross-outlet deduplication. Precedence: each outlet's dedupRank (lower
+	// 5. Cross-outlet deduplication. Precedence: each outlet's dedupRank (lower
 	// wins) — the local weekly's own reporting over the regional daily's
 	// version of the same story, student press over the wire-service-scale
 	// outlets behind them — then the earlier filing, then the lower id so runs
@@ -986,7 +1022,7 @@ export function selectHeadlinesElsewhere(
 		}
 	}
 
-	// 5. Final ordering & capping. Deterministic: occurred_at DESC, title ASC,
+	// 6. Final ordering & capping. Deterministic: occurred_at DESC, title ASC,
 	// id ASC — the same inputs must always produce the same brief.
 	const finalSorted = [...deduped].sort((a, b) => {
 		const dateDiff = (b.occurred_at ?? "").localeCompare(a.occurred_at ?? "");
@@ -1016,10 +1052,9 @@ export function selectHeadlinesElsewhere(
 
 /**
  * Renders the selected headlines as <li> markup and collects the URLs that go
- * into frontmatter `attributions`. A link whose host is not the outlet's own is
- * dropped rather than rendered: `selectHeadlinesElsewhere` trusts the scraper's
- * stored source_url, and this is the last place to catch a redirect or a bad
- * row before it reaches a reader.
+ * into frontmatter `attributions`. Re-applies `headlineUrlProblem` as the last
+ * gate before a reader: selection already dropped these rows, but callers can
+ * hand this function a list selection never saw.
  */
 function renderHeadlineListItems(
 	headlines: ItemRow[],
@@ -1029,30 +1064,16 @@ function renderHeadlineListItems(
 	const attributions: string[] = [];
 
 	for (const h of headlines) {
-		const policy = HEADLINE_SOURCE_POLICY[h.source_key];
-		let url: URL;
-		try {
-			url = new URL(h.source_url);
-		} catch {
-			notes.push(`headlines: unparseable URL skipped: ${h.source_url}`);
-			continue;
-		}
-		if (url.protocol !== "https:" || !policy?.hosts.includes(url.hostname)) {
-			notes.push(`headlines: off-allowlist URL skipped: ${h.source_url}`);
-			continue;
-		}
-		// Host alone does not make a page an article: a stub permalink that
-		// redirects onto the outlet's own tag archive keeps the host and loses
-		// the story. Assert the path shape too, against the same pattern the
-		// scraper discovered by.
-		if (policy.articlePathRe && !policy.articlePathRe.test(url.pathname)) {
-			notes.push(`headlines: non-article URL skipped: ${h.source_url}`);
+		const problem = headlineUrlProblem(h);
+		if (problem) {
+			notes.push(`headlines: ${problem}`);
 			continue;
 		}
 
 		attributions.push(h.source_url);
 
-		const outlet = metaString(parseMeta(h.meta), "outlet") ?? policy.outlet;
+		const policy = HEADLINE_SOURCE_POLICY[h.source_key];
+		const outlet = metaString(parseMeta(h.meta), "outlet") ?? policy?.outlet;
 		const teaser = h.body?.trim() ? ` &mdash; ${esc(h.body.trim())}` : "";
 
 		// `headline-link` opts the anchor out of the violet source-stamp styling:
@@ -1276,6 +1297,7 @@ export function assembleBrief(
 		inputs.headlinesFreshness,
 		now,
 		inputs.prevBriefPublishedAt,
+		notes,
 	);
 	const { listItems, attributions } = renderHeadlineListItems(headlines, notes);
 

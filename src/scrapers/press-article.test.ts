@@ -298,21 +298,31 @@ test("ingestArticles", async (t) => {
 	);
 
 	await t.test(
-		"drops a candidate whose own path is not an article",
+		"drops a candidate whose own path is not an article, without fetching it",
 		async () => {
-			const { ctx, items, notes } = fakeScraperContext({
+			const { ctx, items, notes, requested } = fakeScraperContext({
 				"https://site.example/tag/sports/": "<html>tag</html>",
+				"https://site.example/news/real-story": "<html>real</html>",
 			});
 
 			await ingestArticles(
 				ctx,
-				[{ url: "https://site.example/tag/sports/" }],
+				[
+					{ url: "https://site.example/tag/sports/" },
+					{ url: "https://site.example/news/real-story" },
+				],
 				article,
 				(pathname) => pathname.startsWith("/news/"),
 			);
 
-			assert.equal(items.length, 0);
+			assert.deepEqual(
+				items.map((i) => i.source_url),
+				["https://site.example/news/real-story"],
+			);
 			assert.ok(notes.some((n) => n.includes("Skipping non-article URL")));
+			// Never requested at all: a URL we have already decided not to publish
+			// should cost neither a round trip nor a row in the raw archive.
+			assert.deepEqual(requested, ["https://site.example/news/real-story"]);
 		},
 	);
 });

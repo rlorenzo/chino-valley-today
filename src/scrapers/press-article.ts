@@ -152,9 +152,9 @@ export interface ArticleCandidate {
  * fetch or parse is noted and skipped — one bad URL must not cost the run the
  * articles behind it.
  *
- * `isArticlePath` is re-applied to wherever the fetch actually landed, not just
- * to the URL discovery vetted. It is required rather than optional because the
- * check is only worth having if no caller can forget it.
+ * `isArticlePath` gates both ends: the candidate before it costs a request, and
+ * wherever the fetch actually landed. It is required rather than optional
+ * because the check is only worth having if no caller can forget it.
  */
 export async function ingestArticles(
 	ctx: ScraperContext,
@@ -167,6 +167,13 @@ export async function ingestArticles(
 	isArticlePath: (pathname: string) => boolean,
 ): Promise<void> {
 	for (const candidate of candidates) {
+		// Rejected before it costs a request, and before ctx.fetchDocument
+		// archives a page we have already decided not to publish.
+		if (!isArticlePath(pathname(candidate.url))) {
+			ctx.note(`Skipping non-article URL: ${candidate.url}`);
+			continue;
+		}
+
 		try {
 			const doc = await ctx.fetchDocument(candidate.url, {
 				docType: ITEM_TYPE,
@@ -181,9 +188,7 @@ export async function ingestArticles(
 			// every morning and never ages out of the brief.
 			if (!isArticlePath(pathname(url))) {
 				ctx.note(
-					url === candidate.url
-						? `Skipping non-article URL: ${candidate.url}`
-						: `Skipping ${candidate.url}: redirected to a non-article page (${url})`,
+					`Skipping ${candidate.url}: redirected to a non-article page (${url})`,
 				);
 				continue;
 			}

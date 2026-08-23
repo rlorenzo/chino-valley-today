@@ -1361,9 +1361,16 @@ describe("headlines elsewhere deduplication and selection", () => {
 	// Helper for the window/cap tests below: a policy-clean, locally relevant
 	// Champion story that differs enough from its siblings to survive dedup.
 	function headline(over: Partial<ItemRow>): ItemRow {
+		// The URL has to belong to the outlet the row claims: selection now
+		// rejects a row whose host or path shape is not that outlet's own, so a
+		// source_key override has to bring a matching URL with it.
+		const sourceKey = over.source_key ?? "champion-news";
 		return item({
-			source_key: "champion-news",
-			source_url: `https://www.championnewspapers.com/news/article_${seq}.html`,
+			source_key: sourceKey,
+			source_url:
+				sourceKey === "dailybulletin-news"
+					? `https://www.dailybulletin.com/2026/08/16/chino-story-${seq}/`
+					: `https://www.championnewspapers.com/news/article_${seq}.html`,
 			title: "Chino Planning Commission approves Central Avenue plan",
 			body: "The project heads to Chino City Council next month.",
 			occurred_at: "2026-08-16T00:00:00.000Z",
@@ -1494,7 +1501,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 		const champion = item({
 			source_key: "champion-news",
 			source_url:
-				"https://www.championnewspapers.com/news/article_dedup-a.html",
+				"https://www.championnewspapers.com/news/article_deadbee1.html",
 			title: "Chino Hills council approves Peyton Drive repaving contract",
 			body: "The council voted 4-1 to approve the repaving contract.",
 			occurred_at: "2026-08-16T12:00:00.000Z",
@@ -1561,6 +1568,69 @@ describe("headlines elsewhere deduplication and selection", () => {
 		assert.ok(selected.some((r) => r.source_key === "champion-news"));
 		assert.ok(selected.some((r) => r.source_key === "quest-news"));
 		assert.ok(!selected.some((r) => r.source_key === "nbc4-news"));
+	});
+
+	test("an invalid row never takes a capped slot from a publishable article", () => {
+		// Genuine contention: 3 Daily Bulletin stories (that outlet's cap) plus 3
+		// Champion stories is 6 candidates for 5 total slots. Add the 2026-08-22
+		// tag archive as the newest row of all and the harm is exact — refused
+		// only at render time it takes slot 1, and the brief ships 4 stories
+		// where 5 were available.
+		const tagArchive = headline({
+			source_key: "dailybulletin-news",
+			source_url: "https://www.dailybulletin.com/tag/high-school-football/",
+			title: "high school football",
+			body: null,
+			occurred_at: "2026-08-17T09:00:00.000Z",
+			meta: JSON.stringify({ outlet: "Daily Bulletin", city: "Chino" }),
+		});
+		const bulletin = [
+			"Chino council approves Central Avenue repaving contract",
+			"Chino Hills extends its summer library hours through September",
+			"Chino Planning Commission reviews a Schaefer Avenue proposal",
+		].map((title, i) =>
+			headline({
+				source_key: "dailybulletin-news",
+				title,
+				body: `${title}, the city said.`,
+				occurred_at: `2026-08-17T0${6 - i}:00:00.000Z`,
+				meta: JSON.stringify({ outlet: "Daily Bulletin", city: "Chino" }),
+			}),
+		);
+		const champion = [
+			"Chino Hills approves a new park maintenance agreement",
+			"Chino updates the downtown sign code for awnings",
+			"Chino Hills water district sets its autumn compost giveaway",
+		].map((title, i) =>
+			headline({
+				title,
+				body: `${title}, according to the agenda.`,
+				occurred_at: `2026-08-16T0${3 - i}:00:00.000Z`,
+			}),
+		);
+
+		const notes: string[] = [];
+		const selected = selectHeadlinesElsewhere(
+			[tagArchive, ...bulletin, ...champion],
+			FRESH,
+			NOW,
+			null,
+			notes,
+		);
+
+		assert.ok(!selected.some((r) => r.source_url.includes("/tag/")));
+		assert.ok(notes.some((n) => n.includes("non-article URL skipped")));
+		// Five slots, five stories — the archive's slot went to an article
+		// rather than going unused.
+		assert.equal(selected.length, 5);
+		assert.equal(
+			selected.filter((r) => r.source_key === "dailybulletin-news").length,
+			3,
+		);
+		assert.equal(
+			selected.filter((r) => r.source_key === "champion-news").length,
+			2,
+		);
 	});
 
 	test("selectHeadlinesElsewhere caps a student paper at its maxPerBrief (2), not the outlet default of 3", () => {
