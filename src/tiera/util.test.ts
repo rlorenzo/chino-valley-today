@@ -3,6 +3,9 @@ import { describe, test } from "node:test";
 import {
 	alertAdvisoryKey,
 	alertEventKey,
+	alertPostSlug,
+	alertPostSlugHash,
+	alertPostSlugHashOf,
 	dedupeAlertIssuances,
 	dropSupersededAlerts,
 } from "./util.ts";
@@ -205,5 +208,58 @@ describe("superseded alert suppression", () => {
 		const out = dropSupersededAlerts(rows);
 		assert.equal(out.length, 1);
 		assert.equal(out[0].id, 2);
+	});
+});
+
+describe("alert post slugs", () => {
+	const row = issuance(7, "2026-08-18T11:56:00-07:00");
+
+	test("the hash rides on the issuance identity, not the title", () => {
+		// This is what lets the brief match a post against an "Active alert"
+		// line whose title reads differently.
+		const a = alertPostSlug("2026-08-22", "Heat Advisory", row);
+		const b = alertPostSlug(
+			"2026-08-22",
+			"Heat Advisory issued August 22",
+			row,
+		);
+		assert.notEqual(a, b, "the title still shapes the readable part");
+		assert.equal(alertPostSlugHashOf(a), alertPostSlugHashOf(b));
+		assert.notEqual(
+			alertPostSlugHash(row),
+			alertPostSlugHash(issuance(8, "2026-08-18T11:56:00-07:00")),
+			"a genuinely different issuance hashes differently",
+		);
+	});
+
+	test("falls back to the source url when there is no external id", () => {
+		assert.equal(
+			alertPostSlugHash({ ...row, external_id: null }).length,
+			8,
+			"a row without an external id still gets a stable hash",
+		);
+	});
+
+	test("a built slug round-trips back to its hash", () => {
+		// The builder and the parser are the two halves of one format; this is
+		// what catches them drifting apart.
+		const slug = alertPostSlug("2026-08-22", "Heat Advisory", row);
+		assert.equal(
+			slug,
+			`2026-08-22-heat-advisory-alert-${alertPostSlugHash(row)}`,
+		);
+		assert.equal(alertPostSlugHashOf(slug), alertPostSlugHash(row));
+	});
+
+	test("does not read a hash out of a nixle slug", () => {
+		// Nixle posts are alert-typed and end the same shape; the `-alert-`
+		// marker is the only thing keeping them out of the brief's join.
+		assert.equal(
+			alertPostSlugHashOf(
+				`2026-08-17-vehicle-theft-nixle-${alertPostSlugHash(row)}`,
+			),
+			null,
+		);
+		assert.equal(alertPostSlugHashOf("2026-08-24-chino-preview"), null);
 	});
 });

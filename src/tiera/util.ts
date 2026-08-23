@@ -1,6 +1,8 @@
 // Shared helpers for Tier A generators: date/timezone handling, slugs, and
 // safe markdown embedding of DB-sourced text. Kept dependency-free.
 
+import { createHash } from "node:crypto";
+
 const LA_TZ = "America/Los_Angeles";
 
 function isDateOnly(s: string): boolean {
@@ -225,6 +227,48 @@ export function dedupeAlertIssuances<
 		if (a !== null && b !== null ? a < b : row.id < held.id) best.set(key, row);
 	}
 	return [...best.values()];
+}
+
+/**
+ * The trailing hash in an alert post's slug: sha1 of the issuance the post was
+ * generated from. Shared with the daily brief, which uses it to recognise that
+ * a published alert post and an "Active alert" line are the same advisory.
+ *
+ * The two sides cannot be matched on title. The post keeps the EARLIEST
+ * issuance so its slug stays stable across re-issues; the brief shows the
+ * NEWEST so a reader is told the advisory's current end time. Same advisory,
+ * different rows, different titles, so the join has to run through the rows
+ * themselves.
+ */
+export function alertPostSlugHash(row: {
+	external_id: string | null;
+	source_url: string;
+}): string {
+	return createHash("sha1")
+		.update(row.external_id ?? row.source_url)
+		.digest("hex")
+		.slice(0, 8);
+}
+
+/** The slug generateAlerts gives an alert post: `<date>-<title>-alert-<hash>`. */
+export function alertPostSlug(
+	dateForSlug: string,
+	title: string,
+	row: { external_id: string | null; source_url: string },
+): string {
+	return `${dateForSlug}-${slugify(title)}-alert-${alertPostSlugHash(row)}`;
+}
+
+/**
+ * The hash back out of a slug alertPostSlug built, or null for a slug it did
+ * not build. Kept beside the builder so the two halves of the format cannot
+ * drift apart.
+ *
+ * Nixle posts are alert-typed too and end `-nixle-<hash>`, so matching the
+ * `-alert-` marker rather than a bare trailing hash is what keeps them out.
+ */
+export function alertPostSlugHashOf(slug: string): string | null {
+	return /-alert-([0-9a-f]{8})$/.exec(slug)?.[1] ?? null;
 }
 
 // The thing NWS keeps updating, without the end time: an advisory that gets

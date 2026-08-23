@@ -2,17 +2,16 @@
 // meta.ends (the item's own combined ends/expires field, set by
 // nws-alerts.ts) parses to an instant strictly after "now". An alert with no
 // parseable end time is NOT treated as active — Tier A never guesses.
-import { createHash } from "node:crypto";
 import type { Db } from "../db/index.ts";
 import type { NewPost } from "../pipeline/posts.ts";
 import { parseMeta, queryItems } from "./queries.ts";
 import {
+	alertPostSlug,
 	cleanTitle,
 	dedupeAlertIssuances,
 	localMeetingDate,
 	mdEscape,
 	mdLink,
-	slugify,
 } from "./util.ts";
 
 interface GenResult {
@@ -44,10 +43,6 @@ export function generateAlerts(db: Db, now: Date): GenResult {
 			? localMeetingDate(row.occurred_at)
 			: null;
 		const dateForSlug = localDate ?? now.toISOString().slice(0, 10);
-		const hash = createHash("sha1")
-			.update(row.external_id ?? row.source_url)
-			.digest("hex")
-			.slice(0, 8);
 
 		const lines: string[] = [];
 		if (typeof meta.severity === "string")
@@ -68,7 +63,7 @@ export function generateAlerts(db: Db, now: Date): GenResult {
 		);
 
 		posts.push({
-			slug: `${dateForSlug}-${slugify(title)}-alert-${hash}`,
+			slug: alertPostSlug(dateForSlug, title, row),
 			postType: "alert",
 			tier: "A",
 			title: `Weather Alert: ${title}`,
