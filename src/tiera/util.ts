@@ -147,23 +147,48 @@ export function humanDateFromLocal(localDate: string): string {
 	}).format(d);
 }
 
+// The tests assert that unparseable meta is survivable rather than fatal, and
+// a row reading literal "null" or "[]" is parseable but just as fatal: the
+// property reads below would throw on null. Anything that is not a plain
+// object becomes {}.
+function parseAlertMeta(meta: string | null): Record<string, unknown> {
+	if (!meta) return {};
+	try {
+		const parsed: unknown = JSON.parse(meta);
+		if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+			return {};
+		return parsed as Record<string, unknown>;
+	} catch {
+		return {};
+	}
+}
+
+// Compared as instants, never as strings: NWS stamps these with an offset
+// ("-07:00") and the same moment written as "Z" sorts earlier lexicographically
+// than an offset spelling of itself, which would pick the wrong issuance and
+// resurrect exactly the superseded advisory this file exists to suppress.
+// Returns null for absent or unparseable values so callers fall back to id.
+function alertEffectiveMs(row: { meta: string | null }): number | null {
+	const v = parseAlertMeta(row.meta).effective;
+	if (typeof v !== "string") return null;
+	const t = new Date(v).getTime();
+	return Number.isNaN(t) ? null : t;
+}
+
 // NWS re-issues an advisory as a series of Updates: same event, same end
 // time, same area, a new id every time. Both the brief and the alert-post
 // generator keyed on that id, so one Heat Advisory re-issued three times
 // rendered three "Active alert" lines and published three near-identical
-// posts. The advisory itself is (event, ends, areaDesc) — an Update that
-// genuinely extends the end time is a different advisory and should surface.
+// posts. A single issuance-window is (event, ends, areaDesc); this is the key
+// the post generator wants, because it keeps a post's slug stable across
+// re-issues. For what a reader should be told is in force right now, see
+// alertEventKey — an extension is not a second advisory.
 export function alertAdvisoryKey(row: {
 	meta: string | null;
 	external_id: string | null;
 	source_url: string;
 }): string {
-	let meta: Record<string, unknown> = {};
-	try {
-		meta = row.meta ? (JSON.parse(row.meta) as Record<string, unknown>) : {};
-	} catch {
-		meta = {};
-	}
+	const meta = parseAlertMeta(row.meta);
 	const part = (k: string) =>
 		typeof meta[k] === "string" ? (meta[k] as string).trim() : "";
 	const event = part("event");
@@ -195,17 +220,62 @@ export function dedupeAlertIssuances<
 			best.set(key, row);
 			continue;
 		}
-		const effective = (r: T): string => {
-			try {
-				const m = r.meta ? JSON.parse(r.meta) : {};
-				return typeof m.effective === "string" ? m.effective : "";
-			} catch {
-				return "";
-			}
-		};
-		const a = effective(row);
-		const b = effective(held);
-		if (a && b ? a < b : row.id < held.id) best.set(key, row);
+		const a = alertEffectiveMs(row);
+		const b = alertEffectiveMs(held);
+		if (a !== null && b !== null ? a < b : row.id < held.id) best.set(key, row);
+	}
+	return [...best.values()];
+}
+
+// The thing NWS keeps updating, without the end time: an advisory that gets
+// extended arrives as an Update with a later `ends`, which alertAdvisoryKey
+// reads as a second advisory. For a reader that is one advisory whose end time
+// moved, so the brief groups on (event, areaDesc) and keeps the newest
+// issuance. Distinct products stay distinct: an Extreme Heat Watch alongside a
+// Heat Advisory is two different warnings, not a duplicate.
+export function alertEventKey(row: {
+	meta: string | null;
+	external_id: string | null;
+	source_url: string;
+}): string {
+	const meta = parseAlertMeta(row.meta);
+	const part = (k: string) =>
+		typeof meta[k] === "string" ? (meta[k] as string).trim() : "";
+	const event = part("event");
+	const area = part("areaDesc");
+	// No event name is nothing to group on; fall back to the issuance so
+	// unrelated alerts never merge.
+	if (!event) return `id:${row.external_id ?? row.source_url}`;
+	return `${event}|${area}`;
+}
+
+/**
+ * One line per alert a reader should act on: the newest issuance of each
+ * (event, areaDesc). Superseded issuances drop out, so an extended advisory
+ * reads as one advisory with its current end time rather than as the old
+ * window sitting beside the new one.
+ */
+export function dropSupersededAlerts<
+	T extends {
+		id: number;
+		meta: string | null;
+		external_id: string | null;
+		source_url: string;
+	},
+>(rows: T[]): T[] {
+	const best = new Map<string, T>();
+	for (const row of rows) {
+		const key = alertEventKey(row);
+		const held = best.get(key);
+		if (!held) {
+			best.set(key, row);
+			continue;
+		}
+		const a = alertEffectiveMs(row);
+		const b = alertEffectiveMs(held);
+		// Newest issuance wins; without usable timestamps the later row does,
+		// since alerts are inserted in the order the feed lists them.
+		if (a !== null && b !== null ? a > b : row.id > held.id) best.set(key, row);
 	}
 	return [...best.values()];
 }
