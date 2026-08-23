@@ -172,12 +172,23 @@ outside the file:
 
 ## Phase 4: open tasks
 
-### Task 4.5 - Topic taxonomy for new content
+### Task 4.5 - Topic taxonomy for new content (built; one host step remains)
 
-Decide where incidents, sports/events, and headlines file (does `safety` absorb
-fire/EMS? a fifth topic mark?), and move topic classification from site-side
-derivation (`site/src/lib/record.ts`) into the pipeline, which owns the source
-keys and item types.
+Taxonomy settled 2026-08-23 and built: `safety` absorbs fire/EMS incidents
+rather than gaining a mark of its own; `sports` is a fifth mark, fed by the
+Task 4.8 roundup and empty until it lands; calendar events get no mark because
+they are not posts and `/calendar/` already serves them; secondary press gets
+none, because a topic page is the record and another outlet's reporting is
+attribution; daily briefs and news digests get none, because both span every
+subject. Classification moved from `site/src/lib/record.ts` into
+`src/pipeline/topics.ts`, which reads the source keys and item types a post was
+built from instead of guessing at its title, and writes `topics` frontmatter.
+
+**Remaining: run `scripts/backfill-post-topics.ts --write` on the droplet.**
+The repo's `content/published/` holds 13 tracked posts; production holds more,
+including every alert post, because published posts live only on the droplet
+(see Open decisions). Until the backfill runs there, production's Safety mark
+reads zero while its alert posts sit untagged.
 
 ### Task 4.8 - HS sports scores (endpoints verified 2026-08-19; build pending)
 
