@@ -6,6 +6,7 @@ import { describe, test } from "node:test";
 import { type Db, openDb } from "../db/index.ts";
 import { ROOT } from "../store.ts";
 import type { ItemRow } from "../tiera/queries.ts";
+import { alertPostSlug, alertPostSlugHash } from "../tiera/util.ts";
 import {
 	assembleBrief,
 	assertPrerequisitesFresh,
@@ -17,6 +18,7 @@ import {
 	checkHeadlinesFreshness,
 	DAILY_BRIEF_PREREQUISITE_SOURCES,
 	decodeEntities,
+	dropAlertPostsShownAsActive,
 	HEADLINES_SOURCES,
 	isLaWednesday,
 	jaccardSimilarity,
@@ -2469,5 +2471,115 @@ describe("briefAttributionsFromFile", () => {
 			}),
 			[],
 		);
+	});
+});
+
+describe("dropAlertPostsShownAsActive", () => {
+	// The live bug (2026-08-23): "Active alert" and "New on the record" both
+	// carried the same two heat advisories, stamped with different issuance
+	// times, because the brief keeps the newest issuance and the post keeps the
+	// earliest so its slug stays stable across re-issues.
+	const HEAT_META = {
+		event: "Heat Advisory",
+		areaDesc: "San Bernardino County Valleys",
+		ends: "2026-08-25T10:00:00-07:00",
+	};
+
+	function issuance(id: number, over: Record<string, unknown> = {}): ItemRow {
+		return item({
+			source_key: "nws-alerts",
+			item_type: "alert",
+			external_id: `urn:oid:${id}`,
+			source_url: `https://api.weather.gov/alerts/${id}`,
+			title: `Heat Advisory issued August ${id}`,
+			meta: JSON.stringify({ ...HEAT_META, ...over }),
+		});
+	}
+
+	/** The slug the alert generator builds for a given issuance. */
+	function alertPost(row: ItemRow, over: Partial<PostRow> = {}): PostRow {
+		return post({
+			post_type: "alert",
+			slug: alertPostSlug("2026-08-22", "Heat Advisory", row),
+			...over,
+		});
+	}
+
+	test("drops the post for an advisory already shown as an active alert", () => {
+		const earliest = issuance(22);
+		const newest = issuance(23);
+		const out = dropAlertPostsShownAsActive(
+			[alertPost(earliest)],
+			[newest],
+			[earliest, newest],
+		);
+		assert.deepEqual(
+			out,
+			[],
+			"the post is the same advisory as the line above",
+		);
+	});
+
+	test("keeps an alert post whose advisory is no longer active", () => {
+		const expired = issuance(20, { event: "Flood Watch" });
+		const active = issuance(23);
+		const out = dropAlertPostsShownAsActive(
+			[alertPost(expired)],
+			[active],
+			[expired, active],
+		);
+		assert.equal(out.length, 1, "an expired advisory appears nowhere else");
+	});
+
+	test("never touches non-alert posts", () => {
+		const active = issuance(23);
+		const preview = post({ slug: "2026-08-24-chino-preview" });
+		const out = dropAlertPostsShownAsActive([preview], [active], [active]);
+		assert.deepEqual(out, [preview]);
+	});
+
+	test("leaves nixle posts alone even though they are alert-typed", () => {
+		// Nixle slugs end `-nixle-<hash>` and are never rendered above, so the
+		// suffix match has to be specific enough to miss them.
+		const active = issuance(23);
+		const nixle = post({
+			post_type: "alert",
+			slug: `2026-08-17-vehicle-theft-nixle-${alertPostSlugHash(active)}`,
+		});
+		const out = dropAlertPostsShownAsActive([nixle], [active], [active]);
+		assert.deepEqual(out, [nixle]);
+	});
+
+	test("is a no-op when nothing is active", () => {
+		const row = issuance(22);
+		const posts = [alertPost(row)];
+		assert.deepEqual(dropAlertPostsShownAsActive(posts, [], [row]), posts);
+	});
+
+	test("treats an expired same-area advisory as a re-issue and drops it", () => {
+		// Yesterday's Heat Advisory expired and today's is active. `ends` moves
+		// across issuances, so this is indistinguishable from one advisory that
+		// got extended -- the same tradeoff dropSupersededAlerts makes. Pinned
+		// so the suppression is a decision rather than a surprise.
+		const yesterday = issuance(22, { ends: "2026-08-22T20:00:00-07:00" });
+		const today = issuance(23);
+		const out = dropAlertPostsShownAsActive(
+			[alertPost(yesterday)],
+			[today],
+			[yesterday, today],
+		);
+		assert.deepEqual(out, []);
+	});
+
+	test("a different product is not the same advisory", () => {
+		// An Extreme Heat Watch overlapping a Heat Advisory is a second warning.
+		const advisory = issuance(23);
+		const watch = issuance(24, { event: "Extreme Heat Watch" });
+		const out = dropAlertPostsShownAsActive(
+			[alertPost(watch)],
+			[advisory],
+			[advisory, watch],
+		);
+		assert.equal(out.length, 1, "the watch is not the advisory");
 	});
 });

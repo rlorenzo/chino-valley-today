@@ -34,6 +34,9 @@ import {
 } from "../tiera/meeting-previews.ts";
 import { type ItemRow, parseMeta, queryItems } from "../tiera/queries.ts";
 import {
+	alertEventKey,
+	alertPostSlugHash,
+	alertPostSlugHashOf,
 	cleanTitle,
 	dedupeByKey,
 	dropSupersededAlerts,
@@ -732,6 +735,49 @@ export function isLaWednesday(now: Date): boolean {
 
 // --- New on the record -------------------------------------------------------
 
+/**
+ * Drops alert posts whose advisory the brief has already rendered as an
+ * "Active alert" line above.
+ *
+ * Both sections were showing the same two heat advisories, and worse, with
+ * different issuance times: the "Active alert" line carries the NEWEST
+ * issuance so the end time is current, while the post keeps the EARLIEST so
+ * its slug survives a re-issue. A reader saw one advisory twice, stamped two
+ * different ways, and had no way to tell it was one thing.
+ *
+ * The join therefore cannot run on title. It runs on the rows: take every
+ * issuance belonging to a currently-active advisory, hash each the way the
+ * alert generator builds its slug, and drop the posts that match.
+ *
+ * Only alert posts for ACTIVE advisories are suppressed. A post for an
+ * advisory that has since expired is genuinely new on the record and is not
+ * shown anywhere else in the brief, so it stays -- unless an advisory of the
+ * same (event, areaDesc) is active now, which reads as a re-issue and is
+ * suppressed. That is the same tradeoff dropSupersededAlerts makes, and for
+ * the same reason: `ends` moves across issuances, so yesterday's expired Heat
+ * Advisory and today's active one for the same area are not distinguishable
+ * from one advisory that got extended.
+ */
+export function dropAlertPostsShownAsActive(
+	posts: PostRow[],
+	activeAlerts: ItemRow[],
+	allAlerts: ItemRow[],
+): PostRow[] {
+	if (activeAlerts.length === 0) return posts;
+	const activeEvents = new Set(activeAlerts.map(alertEventKey));
+	const shown = new Set(
+		allAlerts
+			.filter((row) => activeEvents.has(alertEventKey(row)))
+			.map(alertPostSlugHash),
+	);
+	if (shown.size === 0) return posts;
+	return posts.filter((p) => {
+		if (p.post_type !== "alert") return true;
+		const hash = alertPostSlugHashOf(p.slug);
+		return hash === null || !shown.has(hash);
+	});
+}
+
 export function selectNewRecordPosts(
 	posts: PostRow[],
 	sinceIso: string,
@@ -1290,7 +1336,11 @@ export function assembleBrief(
 	const sinceIso =
 		inputs.prevBriefPublishedAt ??
 		new Date(now.getTime() - 86400000).toISOString();
-	const newPosts = selectNewRecordPosts(inputs.publishedPosts, sinceIso);
+	const newPosts = dropAlertPostsShownAsActive(
+		selectNewRecordPosts(inputs.publishedPosts, sinceIso),
+		activeAlerts,
+		inputs.nwsAlerts,
+	);
 	const licenses = selectFreshLicenseEvents(inputs.licenseEvents, now);
 	if (newPosts.length > 0 || licenses.length > 0 || isDegraded("record")) {
 		recordLines.push("## New on the record", "");
