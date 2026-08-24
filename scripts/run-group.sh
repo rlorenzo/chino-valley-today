@@ -33,12 +33,21 @@ case "$group" in
 	frequent)
 		keys=(chino-news-rss chinohills-news-rss nws-alerts nws-forecast sbcfire-news cvfd-news sbsheriff-news sbsheriff-nixle-mail)
 		;;
-	# Agenda systems, listings, and event calendars. These change when a clerk
-	# or staff member posts something, which is a daily-at-most event, and the
-	# agenda systems are the sources we least want to hammer. (yanksair.org's
-	# robots.txt asks Crawl-delay: 10 — daily cadence keeps us far inside it.)
+	# Agenda systems, listings, event calendars, and high school athletics.
+	# These change when a clerk or staff member posts something, which is a
+	# daily-at-most event, and the agenda systems are the sources we least want
+	# to hammer. (yanksair.org's robots.txt asks Crawl-delay: 10 — daily cadence
+	# keeps us far inside it.)
+	#
+	# Sports belong here rather than in `frequent` for two reasons. A score is
+	# entered by a coach the evening of the game, so this group's 05:40 slot
+	# picks up last night's results ahead of the 05:50 Tier A run and the 06:00
+	# brief; and each scraper reads a 14-day-back / 21-day-ahead window in one
+	# request, so running it hourly would re-read the same window 24 times for
+	# nothing. Two requests per school per day: the schedule API, plus the nav
+	# page the per-sport citations are resolved from.
 	daily)
-		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses sbclib-events sbparks-events cbwcd-events yanksair-events)
+		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses sbclib-events sbparks-events cbwcd-events yanksair-events chinohigh-sports ayala-sports donlugo-sports)
 		;;
 	# Video and captions. Expensive in time and bandwidth, and captions do not
 	# exist until well after a meeting ends, so this runs the morning after.

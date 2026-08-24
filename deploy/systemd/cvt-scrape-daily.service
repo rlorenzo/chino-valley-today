@@ -1,5 +1,5 @@
 [Unit]
-Description=Chino Valley Today — daily scrapers (agenda systems, board listings, ABC licences)
+Description=Chino Valley Today — daily scrapers (agenda systems, board listings, ABC licences, high school athletics)
 Documentation=https://github.com/rlorenzo/chino-valley-today
 After=network-online.target
 Wants=network-online.target
