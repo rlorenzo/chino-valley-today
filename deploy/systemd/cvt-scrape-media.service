@@ -34,7 +34,13 @@ ProtectHome=true
 ProtectKernelTunables=true
 ProtectControlGroups=true
 RestrictSUIDSGID=true
-ReadWritePaths=/srv/chino-valley-today/data /srv/chino-valley-today/content /srv/chino-valley-today/reports
+# yt-dlp caches YouTube's decrypted signature functions under $HOME/.cache
+# (cvtoday's home IS the app dir). Without this path writable, ProtectSystem=strict
+# made every run fail to save that cache and re-solve the player JS from scratch —
+# more requests at YouTube for identical work, which is both impolite and the surest
+# way to attract the rate limiting this group already fights. deno (the JS runtime
+# yt-dlp now requires for YouTube) caches here too.
+ReadWritePaths=/srv/chino-valley-today/data /srv/chino-valley-today/content /srv/chino-valley-today/reports /srv/chino-valley-today/.cache
 
 # A source being down is routine, not a reason to retry in a tight loop —
 # the next timer tick is the retry.
