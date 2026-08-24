@@ -79,6 +79,29 @@ export interface ScraperContext {
 			stripVolatile?: (body: Buffer) => Buffer;
 		},
 	) => Promise<FetchedDocument>;
+	// Archive + documents row for bytes we ALREADY hold, with no HTTP fetch.
+	//
+	// For sources a person retrieves by hand because automated retrieval is not
+	// permitted (Chino Hills minutes: the Laserfiche portal's robots.txt
+	// disallows every document URL, so a human downloads through a browser and
+	// the pipeline ingests from a drop directory). The bytes take the same
+	// content-addressed path as a fetched document, so re-dropping a file
+	// already ingested is a no-op and the offsite backup picks it up unchanged.
+	//
+	// `url` is the reader-facing link recorded for the document, not something
+	// this ever requests. It must be a real, stable page a reader could open.
+	ingestLocal: (
+		body: Buffer,
+		meta: {
+			url: string;
+			docType: string;
+			ext?: string; // archive extension; defaults to 'pdf'
+			title?: string;
+			meetingDate?: string;
+			location?: string;
+			eventKey?: string;
+		},
+	) => { documentId: number; isNew: boolean };
 	insertItem: (item: NewItemInput) => { id: number; isNew: boolean };
 	// Data-quality observations, failure modes, open questions -> POC report.
 	note: (msg: string) => void;
