@@ -22,6 +22,9 @@
 // exactly where a minor's name would appear.
 import * as cheerio from "cheerio";
 import { errorMessage } from "../utils/errors.ts";
+import { type GameResult, outcomeClause } from "./game-title.ts";
+import { readableSchoolName } from "./school-name.ts";
+import { pacificDay, schoolYearStart } from "./school-year.ts";
 import type { NewItemInput, ScraperContext, ScraperDef } from "./types.ts";
 
 export interface HomeCampusSchool {
@@ -82,24 +85,6 @@ interface ScheduleRow {
 	result?: string;
 	score?: string;
 	opponent_score?: string;
-}
-
-/**
- * The window is a school calendar, so it is anchored to the school's own
- * timezone: `toISOString()` would roll the window a day forward every evening
- * west of UTC, and roll the season year over on the afternoon of June 30.
- */
-const LA_TZ = "America/Los_Angeles";
-const PACIFIC_DAY = new Intl.DateTimeFormat("en-CA", {
-	timeZone: LA_TZ,
-	year: "numeric",
-	month: "2-digit",
-	day: "2-digit",
-});
-
-/** Pacific calendar date as YYYY-MM-DD — the format en-CA already produces. */
-function pacificDay(d: Date): string {
-	return PACIFIC_DAY.format(d);
 }
 
 /**
@@ -184,39 +169,53 @@ export function citationFor(
 }
 
 /**
- * A game counts as played only with all three of score, opponent score and
- * result. A partial score is the source mid-update, not a result — and the run
- * note counts with this same predicate, so a diagnostic can never report a row
- * as played that was stored as unplayed.
+ * A game counts as played only when both scores are present AND the result
+ * letter is one we can name.
+ *
+ * Defined through resultOf so the title and the stored row cannot disagree.
+ * They did: any non-empty letter counted as played, while the title only
+ * rendered W, L and T — so an unrecognised code produced a line reading as an
+ * unplayed fixture beside meta saying played, with a score and a letter whose
+ * meaning we were guessing at. A downstream reader would have taken that for a
+ * final result.
  */
 export function isPlayed(row: ScheduleRow): boolean {
-	return Boolean(
-		(row.score ?? "").trim() &&
-			(row.opponent_score ?? "").trim() &&
-			(row.result ?? "").trim(),
-	);
+	return resultOf(row) !== null;
+}
+
+/**
+ * The row's outcome, or null when it is not a full result.
+ *
+ * A letter outside W/L/T reads as null rather than being forced into one of
+ * the three: the line then says "Chino at Walnut" instead of pinning a verb —
+ * and a score — to a code whose meaning we are guessing at. `meta.result`
+ * still carries the raw letter, so the record loses nothing.
+ */
+export function resultOf(row: ScheduleRow): GameResult | null {
+	if (!(row.score ?? "").trim() || !(row.opponent_score ?? "").trim()) {
+		return null;
+	}
+	const letter = (row.result ?? "").trim().toUpperCase();
+	return letter === "W" || letter === "L" || letter === "T" ? letter : null;
 }
 
 /** Title lines are deterministic and team-level: no player is ever named. */
 export function titleFor(row: ScheduleRow): string | null {
 	const sport = (row.sport ?? "").trim();
 	const school = (row.school ?? "").trim();
-	const opponent = (row.opponent ?? "").trim();
+	const opponent = readableSchoolName(row.opponent ?? "");
 	if (!sport || !school || !opponent) return null;
 	const level = (row.level ?? "").trim();
 	const prefix = level ? `${level} ${sport}` : sport;
 
-	const score = (row.score ?? "").trim();
-	const oppScore = (row.opponent_score ?? "").trim();
-	const result = (row.result ?? "").trim().toUpperCase();
-	if (score && oppScore && result) {
-		const verb = result === "W" ? "def." : result === "L" ? "lost to" : "vs";
-		return result === "L"
-			? `${prefix}: ${school} ${verb} ${opponent}, ${oppScore}-${score}`
-			: `${prefix}: ${school} ${verb} ${opponent}, ${score}-${oppScore}`;
-	}
-	const home = (row.location ?? "").trim().toLowerCase() === "home";
-	return `${prefix}: ${school} ${home ? "vs" : "at"} ${opponent}`;
+	return `${prefix}: ${outcomeClause({
+		school,
+		opponent,
+		result: resultOf(row),
+		score: (row.score ?? "").trim(),
+		opponentScore: (row.opponent_score ?? "").trim(),
+		home: (row.location ?? "").trim().toLowerCase() === "home",
+	})}`;
 }
 
 export function rowToItem(
@@ -237,7 +236,6 @@ export function rowToItem(
 
 	const score = (row.score ?? "").trim();
 	const oppScore = (row.opponent_score ?? "").trim();
-	const result = (row.result ?? "").trim().toUpperCase();
 	const played = isPlayed(row);
 
 	return {
@@ -257,7 +255,7 @@ export function rowToItem(
 			level: (row.level ?? "").trim(),
 			school: (row.school ?? "").trim(),
 			schoolId: row.school_id ?? null,
-			opponent: (row.opponent ?? "").trim(),
+			opponent: readableSchoolName(row.opponent ?? ""),
 			// Cross-country meets and tournaments are posted before an opponent
 			// exists, as a literal "TBA". Kept for the record — it is a real
 			// scheduled event — but flagged, because "Chino at TBA" tells a
@@ -269,7 +267,7 @@ export function rowToItem(
 			facility: (row.facility_name ?? "").trim() || null,
 			timeLabel: (row.formatted_time ?? "").trim() || null,
 			played,
-			result: played ? result : null,
+			result: resultOf(row),
 			score: played ? score : null,
 			opponentScore: played ? oppScore : null,
 		},
@@ -313,14 +311,12 @@ export async function runHomeCampusSports(
 		);
 	}
 
+	// The window is a school calendar, so it is anchored to the school's own
+	// timezone rather than to UTC — see school-year.ts.
 	const today = pacificDay(now);
 	const dateFrom = shiftDay(today, -LOOKBACK_DAYS);
 	const dateTo = shiftDay(today, LOOKAHEAD_DAYS);
-	// The school-year start year: 2026 means the 2026-27 season, which starts in
-	// July. Read off the Pacific date so the rollover lands on the school's
-	// July 1, not on UTC's.
-	const startsThisYear = Number(today.slice(5, 7)) >= 7;
-	const year = String(Number(today.slice(0, 4)) - (startsThisYear ? 0 : 1));
+	const year = schoolYearStart(today);
 
 	const doc = await ctx.fetchDocument(
 		`https://${host}/wp-json/sports/v1/main-teams`,

@@ -150,6 +150,56 @@ describe("titleFor", () => {
 		);
 	});
 
+	it("calls a tie a tie rather than dressing it as a fixture", () => {
+		assert.equal(
+			titleFor({
+				sport: "Soccer, Boys",
+				level: "Varsity",
+				school: "Chino",
+				opponent: "Colony",
+				result: "T",
+				score: "2",
+				opponent_score: "2",
+			}),
+			"Varsity Soccer, Boys: Chino tied Colony, 2-2",
+		);
+	});
+
+	it("does not pin a verb or a score to an unrecognised result letter", () => {
+		// Better a plain fixture line than a confident sentence built on a code
+		// whose meaning we are guessing at. meta.result keeps the raw letter.
+		assert.equal(
+			titleFor({
+				sport: "Baseball",
+				level: "Varsity",
+				school: "Chino",
+				opponent: "Walnut",
+				result: "D",
+				score: "2",
+				opponent_score: "2",
+				location: "Home",
+			}),
+			"Varsity Baseball: Chino vs Walnut",
+		);
+	});
+
+	it("un-inverts an opponent named after a person", () => {
+		// "Chino def. King, Martin Luther, 3-1" reads as though we named a person
+		// and reported their score — which the team-level rule exists to prevent.
+		assert.equal(
+			titleFor({
+				sport: "Water Polo, Boys",
+				level: "Varsity",
+				school: "Chino",
+				opponent: "Ayala, Ruben",
+				result: "W",
+				score: "3",
+				opponent_score: "1",
+			}),
+			"Varsity Water Polo, Boys: Chino def. Ruben Ayala, 3-1",
+		);
+	});
+
 	it("returns null when the row names no opponent or sport", () => {
 		assert.equal(titleFor({ sport: "Baseball", school: "Chino" }), null);
 		assert.equal(titleFor({ school: "Chino", opponent: "Walnut" }), null);
@@ -178,6 +228,41 @@ describe("isPlayed", () => {
 		assert.equal(isPlayed({ ...full, score: "" }), false);
 		assert.equal(isPlayed({ ...full, result: "" }), false);
 		assert.equal(isPlayed({}), false);
+	});
+});
+
+describe("isPlayed and the stored result agree", () => {
+	const base = {
+		id: 1,
+		date: "2026-08-21",
+		sport: "Baseball",
+		level: "Varsity",
+		school: "Chino",
+		opponent: "Walnut",
+		location: "Home",
+		score: "5",
+		opponent_score: "3",
+	};
+
+	it("does not store a result for a letter it cannot name", () => {
+		// Title and meta used to disagree: any non-empty letter counted as
+		// played, while the title only rendered W/L/T. A row with result "D"
+		// produced a line reading as an unplayed fixture beside meta claiming a
+		// final score, which a roundup would have published as a result.
+		const item = rowToItem({ ...base, result: "D" }, 7, "https://x.example/p");
+		const meta = item?.meta as Record<string, unknown>;
+		assert.equal(meta.played, false);
+		assert.equal(meta.result, null);
+		assert.equal(meta.score, null);
+		assert.match(item?.title ?? "", /Chino vs Walnut$/);
+	});
+
+	it("still stores a result it can name", () => {
+		const item = rowToItem({ ...base, result: "W" }, 7, "https://x.example/p");
+		const meta = item?.meta as Record<string, unknown>;
+		assert.equal(meta.played, true);
+		assert.equal(meta.result, "W");
+		assert.equal(meta.score, "5");
 	});
 });
 
@@ -233,6 +318,12 @@ describe("rowToItem", () => {
 		assert.equal(meta.played, false);
 		assert.equal(meta.score, null);
 		assert.equal(meta.result, null);
+	});
+
+	it("stores the readable form of an opponent named after a person", () => {
+		const meta = rowToItem({ ...PLAYED, opponent: "Ayala, Ruben" }, 7, CITE)
+			?.meta as Record<string, unknown>;
+		assert.equal(meta.opponent, "Ruben Ayala");
 	});
 
 	it("flags a TBA opponent so a roundup can skip it", () => {
