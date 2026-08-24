@@ -129,6 +129,29 @@ export function buildContext(
 				finalUrl: res.finalUrl,
 			};
 		},
+		ingestLocal(body, meta) {
+			// Same archive path a fetched document takes: content-addressed, so
+			// dropping a file that was already ingested rewrites nothing and
+			// mints no second row. etag/last_modified stay null because no
+			// server ever served these bytes to us.
+			const { hash, rawPath } = saveRaw(body, meta.ext ?? "pdf");
+			const { id, isNew } = db.insertDocument({
+				source_id: sourceId,
+				url: meta.url,
+				doc_type: meta.docType,
+				title: meta.title ?? null,
+				meeting_date: meta.meetingDate ?? null,
+				content_hash: hash,
+				raw_path: rawPath,
+				etag: null,
+				last_modified: null,
+				location: meta.location ?? null,
+				event_key: meta.eventKey ?? null,
+			});
+			counts.documentsFetched++;
+			if (isNew) counts.documentsNew++;
+			return { documentId: id, isNew };
+		},
 		insertItem(item) {
 			counts.itemsSeen++;
 			const r = db.insertItem(item);

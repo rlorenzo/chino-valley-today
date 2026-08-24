@@ -27,9 +27,12 @@ export interface FakeScraperContext {
 	requested: string[];
 	/** The (url, meta) pair of each fetchDocument call, in order. */
 	documents: { url: string; meta: FetchDocumentMeta }[];
+	/** The (bytes, meta) pair of each ingestLocal call, in order. */
+	ingested: { bytes: Buffer; meta: IngestLocalMeta }[];
 }
 
 type FetchDocumentMeta = Parameters<ScraperContext["fetchDocument"]>[1];
+type IngestLocalMeta = Parameters<ScraperContext["ingestLocal"]>[1];
 
 function toRawResult(url: string, response: FakeResponse): RawResult {
 	if (response instanceof Error) throw response;
@@ -65,6 +68,7 @@ export function fakeScraperContext(
 	const notes: string[] = [];
 	const requested: string[] = [];
 	const documents: { url: string; meta: FetchDocumentMeta }[] = [];
+	const ingested: { bytes: Buffer; meta: IngestLocalMeta }[] = [];
 	let nextDocumentId = 1;
 	let nextItemId = 1;
 
@@ -111,6 +115,10 @@ export function fakeScraperContext(
 				finalUrl: res.finalUrl,
 			};
 		},
+		ingestLocal(bytes: Buffer, meta: IngestLocalMeta) {
+			ingested.push({ bytes, meta });
+			return { documentId: nextDocumentId++, isNew: true };
+		},
 		insertItem(item: NewItemInput) {
 			items.push(item);
 			return { id: nextItemId++, isNew: true };
@@ -120,5 +128,5 @@ export function fakeScraperContext(
 		},
 	} as unknown as ScraperContext;
 
-	return { ctx, items, notes, requested, documents };
+	return { ctx, items, notes, requested, documents, ingested };
 }

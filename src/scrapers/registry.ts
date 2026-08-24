@@ -37,4 +37,7 @@ export const SCRAPERS: Record<string, string> = {
 	"donlugo-sports": "./scrapers/donlugo-sports.ts",
 	// Chino Hills has no Home Campus site; CIF-SS's widget serves it instead.
 	"chinohills-sports": "./scrapers/chinohills-sports.ts",
+	// Minutes are ingested from a hand-dropped directory, not fetched: the
+	// Laserfiche host that publishes them disallows automated retrieval.
+	"chinohills-minutes": "./scrapers/chinohills-minutes.ts",
 };

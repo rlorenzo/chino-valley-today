@@ -14,7 +14,14 @@
 		"site/dist",
 		"content/published", // generated; see above
 		".impeccable", // design-tooling output, not authored docs
-		".claude" // agent worktrees and session state, not part of this checkout
+		".claude", // agent worktrees and session state, not part of this checkout
+		// Uncommitted correspondence drafts. These are email bodies staged in the
+		// repo root for review before sending, not documentation: bare URLs and
+		// bold section labels are correct in an email and would be wrong to
+		// "fix", and the file is never committed. Without this the pre-commit
+		// hook, which lints the working tree rather than the index, blocks every
+		// commit made while a draft is sitting there.
+		"DRAFT-*.md"
 	],
 
 	"config": {
