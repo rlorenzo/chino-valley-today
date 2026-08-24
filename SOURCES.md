@@ -327,14 +327,80 @@ no Home Campus site and is a separate source.
   (same treatment as the SNO student papers) and is tracked in
   `SOURCE_TOS_REGISTRY` for drift.
 
-### chinohills sports — NOT YET INGESTED
+### chinohills-sports — Chino Hills HS athletics (CIF-SS widget)
 
-Chino Hills (school id 104) has no Home Campus site. Two verified options, both
-pending: the CIF-SS widget at `cifsshome.org/widget/schedule-score` (server-
-rendered, citable, one request per sport) or chhuskies.com's PlayOn RSC payload
-(needs a real ToS review). Until one lands, sports coverage is 3 of the 4
-district high schools — which is why nothing sports-related is reader-facing
-yet.
+Chino Hills (school id 104) has no Home Campus site, so it cannot ride the
+scraper the other three share. CIF-SS publishes the same data through the
+schedule-score widget that cifss.org itself embeds.
+
+- `GET /widget/schedule-score?section_id=1&year=<Y>&sport_id=<S>&school_id=104`
+  — server-rendered HTML, plain GET, no session. `<tr id="...">` carries the
+  section's own event id, which is item identity; a row without one is dropped
+  rather than given a derived id that would churn on any reformatting.
+- **One request per sport, all 36, every run.** The widget requires a
+  `sport_id` (blank returns nothing), so most responses are an empty table for
+  an out-of-season sport. The alternative — inferring the in-season set from
+  the three Home Campus schools — was rejected because a wrong inference
+  under-covers Chino Hills *silently*. robots.txt is fully open with no
+  Crawl-delay, and CIF-SS is a section governing body's infrastructure rather
+  than a volunteer host. The sport list is read from the widget's own `<select>`
+  so it cannot go stale.
+- **Both teams are named, so our side has to be located.** Matched exactly:
+  a substring test would also match "Chino Hills Christian" and report their
+  result as ours.
+- Unlike Home Campus, the widget is not date-windowed, so this carries the
+  whole school year (~266 rows) against ~50 per Home Campus school. Harmless —
+  selection filters by date either way — but the asymmetry is deliberate and
+  worth knowing.
+- **A row counts as played only with two whole-number scores.** One alone is
+  the section mid-entry, and a non-numeric cell — a forfeit letter, a dash —
+  compares as `NaN`, which would be published as a tie. Either way the row is
+  still carried, as a fixture rather than a result.
+- The **Notes** column is free text and is NOT ingested, exactly as
+  `result_remark` is left out of the Home Campus rows.
+- Items cite the widget URL for that school and sport: a real page a reader can
+  open and re-filter.
+- robots.txt: `User-agent: *` with an empty `Disallow:`. No reader-facing terms
+  page, so robots.txt is the binding access document, tracked in
+  `SOURCE_TOS_REGISTRY`.
+- **The response is volatile and uncacheable.** `cache-control: no-cache,
+  private`, no `etag`, no `last-modified`, and the markup embeds a fresh
+  Laravel `_token` per request — the *only* line that differs between two
+  fetches of an unchanged page. Documents are content-addressed, so without
+  intervention every sport hashes anew on every run: 36 document rows and 36
+  raw-archive files a day, ~2MB, for pages that have not changed. The scraper
+  passes `stripVolatile` to `fetchDocument`, which blanks the token before the
+  body is hashed and archived; measured across two live runs, the second stores
+  zero new documents. `stripVolatile` is general — `chino-news-rss`'s live
+  `<lastBuildDate>` has the same problem at one document per run.
+- **Sports cannot be batched.** `sport_id=1,13` and `sport_id[]=1&sport_id[]=13`
+  both return Football only, silently ignoring the rest. Verified before
+  settling on one request per sport: a batched query that quietly drops 34
+  sports would have been invisible under-coverage.
+
+### School names printed surname-first
+
+Both athletics sources render a school named after a person as
+`"Ayala, Ruben"`, `"King, Martin Luther"`, `"Roosevelt, Eleanor"`. Left alone,
+a roundup line reads "Chino Hills def. King, Martin Luther, 3-1" — which looks
+like we named a person and reported their score, undoing on its face the
+team-level rule that exists so no student is named.
+
+`src/scrapers/school-name.ts` un-inverts these for both sources. Deliberately
+narrow: only a tail that looks like a forename (letters, one to three words, no
+digits or parentheses) is inverted, because a wrong inversion invents a school
+that does not exist — worse than an awkward name left alone. "El Camino (San
+Diego Section)" and "Vista Del Lago/Moreno Valley" pass through untouched.
+
+### One sentence for all four schools
+
+`src/scrapers/game-title.ts` builds the clause after the sport, so both sources
+say the same thing the same way. Two rules live there rather than in two
+copies: the **winner's score leads** even when the loss is ours ("Chino lost to
+Colony, 10-8", not 8-10), and a **tie is reported as a result** rather than
+dressed up as an upcoming fixture. A row with no recognisable outcome — not yet
+played, half-entered, or carrying a result letter outside W/L/T — reads as a
+plain "vs"/"at" fixture with no score attached.
 
 ## Open questions from PLAN — answers so far
 
