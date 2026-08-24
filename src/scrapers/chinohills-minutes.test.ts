@@ -89,7 +89,10 @@ describe("parseFilename", () => {
 		assert.equal(p.bodySlug, "city-council");
 		assert.equal(p.bodyName, "City Council");
 		assert.equal(p.date, "2026-08-11");
-		assert.match(p.minutesUrl, /startid=66925/);
+		assert.equal(
+			p.minutesUrl,
+			"https://publicportal.chinohills.org/WebLink/Browse.aspx?startid=66925",
+		);
 	});
 
 	it("gives each body its own minutes folder url", () => {
@@ -101,8 +104,14 @@ describe("parseFilename", () => {
 		);
 		assert.ok(typeof a !== "string" && typeof b !== "string");
 		assert.notEqual(a.minutesUrl, b.minutesUrl);
-		assert.match(a.minutesUrl, /id=3943/);
-		assert.match(b.minutesUrl, /id=348679/);
+		assert.equal(
+			a.minutesUrl,
+			"https://publicportal.chinohills.org/WebLink/Browse.aspx?id=3943&dbid=0&repo=CoCH",
+		);
+		assert.equal(
+			b.minutesUrl,
+			"https://publicportal.chinohills.org/WebLink/Browse.aspx?id=348679&dbid=0&repo=CoCH",
+		);
 	});
 
 	it("rejects an unknown body rather than inventing a url for it", () => {
@@ -223,7 +232,12 @@ describe("chinohills-minutes run", () => {
 		const doc = fake.ingested[0].meta;
 		assert.equal(doc.docType, "minutes");
 		assert.equal(doc.meetingDate, "2026-08-11");
-		assert.match(doc.url, /publicportal\.chinohills\.org/);
+		// Exact, not a substring match: the reader-facing link is the whole
+		// point of the record, and a partial match would pass on a wrong folder.
+		assert.equal(
+			doc.url,
+			"https://publicportal.chinohills.org/WebLink/Browse.aspx?startid=66925",
+		);
 		assert.match(doc.title as string, /City Council/);
 		// The archived bytes are the PDF itself, not extracted text.
 		assert.equal(fake.ingested[0].bytes.subarray(0, 5).toString(), "%PDF-");
@@ -232,7 +246,10 @@ describe("chinohills-minutes run", () => {
 		assert.equal(fake.items[0].item_type, "agenda_item");
 		assert.equal(fake.items[0].external_id, "city-council-2026-08-11-1");
 		assert.equal(fake.items[0].occurred_at, "2026-08-11");
-		assert.match(fake.items[0].source_url, /startid=66925/);
+		assert.equal(
+			fake.items[0].source_url,
+			"https://publicportal.chinohills.org/WebLink/Browse.aspx?startid=66925",
+		);
 	});
 
 	it("never requests anything over the network", async () => {
