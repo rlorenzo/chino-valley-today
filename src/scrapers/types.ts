@@ -66,6 +66,17 @@ export interface ScraperContext {
 			// Asserts the POST body has no side effects, so a 5xx or a transport
 			// error may be retried. Omit it and the POST is tried exactly once.
 			bodyIsIdempotent?: boolean;
+			// Removes per-request noise before the body is hashed and archived.
+			//
+			// Documents are content-addressed, so a source that embeds a fresh
+			// CSRF token or a live build timestamp in otherwise identical markup
+			// mints a new document row and a new raw-archive file on EVERY run.
+			// One feed doing that is a footnote; a source fetched once per sport
+			// is 36 a day, forever.
+			//
+			// What survives is what gets archived, so a stripper must remove only
+			// what carries no information — a token, not content.
+			stripVolatile?: (body: Buffer) => Buffer;
 		},
 	) => Promise<FetchedDocument>;
 	insertItem: (item: NewItemInput) => { id: number; isNew: boolean };

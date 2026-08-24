@@ -218,3 +218,90 @@ test("context fetchDefaults non-relaxable invariants", async (t) => {
 		},
 	);
 });
+
+test("fetchDocument stripVolatile", async (t) => {
+	// Documents are content-addressed. A source that mints a fresh CSRF token
+	// or a live build timestamp in otherwise identical markup therefore hashes
+	// differently on every run, minting a document row and a raw-archive file
+	// each time. The CIF-SS widget does exactly that, once per sport.
+	const def: ScraperDef = {
+		key: "strip-test",
+		name: "strip test",
+		baseUrl: "https://strip.example",
+		method: "html",
+		run: async () => {},
+	};
+
+	await t.test(
+		"a volatile page dedupes once the noise is stripped",
+		async () => {
+			const db = openDb(dbPath);
+			const { ctx } = buildContext(db, def);
+			let token = "AAAA";
+			const original = globalThis.fetch;
+			globalThis.fetch = (async (input: string | URL) => {
+				const url = String(input);
+				if (url.endsWith("/robots.txt")) return new Response(ALLOW_ALL);
+				return new Response(
+					`<p>same</p><input name="_token" value="${token}">`,
+				);
+			}) as typeof globalThis.fetch;
+			try {
+				const strip = (body: Buffer): Buffer =>
+					Buffer.from(
+						body.toString("utf8").replace(/value="[^"]*"/, 'value="X"'),
+						"utf8",
+					);
+				const first = await ctx.fetchDocument("https://strip.example/a", {
+					docType: "listing",
+					stripVolatile: strip,
+				});
+				token = "BBBB";
+				const second = await ctx.fetchDocument("https://strip.example/a", {
+					docType: "listing",
+					stripVolatile: strip,
+				});
+				assert.equal(
+					second.documentId,
+					first.documentId,
+					"the same page must not mint a second document row",
+				);
+				assert.equal(ctx.counts.documentsNew, 1);
+				// The archive stores what was hashed, so the two can never describe
+				// different things.
+				assert.doesNotMatch(second.body.toString("utf8"), /AAAA|BBBB/);
+			} finally {
+				globalThis.fetch = original;
+				db.raw.close();
+			}
+		},
+	);
+
+	await t.test("without the hook the same page churns", async () => {
+		// The behaviour the hook exists to change, asserted so the hook cannot
+		// be quietly removed.
+		const db = openDb(dbPath);
+		const { ctx } = buildContext(db, { ...def, key: "churn-test" });
+		let token = "CCCC";
+		const original = globalThis.fetch;
+		globalThis.fetch = (async (input: string | URL) => {
+			const url = String(input);
+			if (url.endsWith("/robots.txt")) return new Response(ALLOW_ALL);
+			return new Response(`<p>same</p><input name="_token" value="${token}">`);
+		}) as typeof globalThis.fetch;
+		try {
+			const first = await ctx.fetchDocument("https://churn.example/a", {
+				docType: "listing",
+			});
+			token = "DDDD";
+			const second = await ctx.fetchDocument("https://churn.example/a", {
+				docType: "listing",
+			});
+			assert.notEqual(second.documentId, first.documentId);
+			assert.equal(ctx.counts.documentsNew, 2);
+		} finally {
+			globalThis.fetch = original;
+			db.raw.close();
+		}
+	});
+});
