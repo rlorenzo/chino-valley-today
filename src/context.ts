@@ -100,7 +100,13 @@ export function buildContext(
 				};
 			}
 			if (!res.ok) throw new Error(`HTTP ${res.status} fetching ${url}`);
-			const { hash, rawPath } = saveRaw(res.body, extFor(res.contentType, url));
+			// Hash and archive what the scraper says is the stable part. The
+			// stripped bytes are what gets stored, so the archive and the hash
+			// never describe different things.
+			const stored = meta.stripVolatile
+				? meta.stripVolatile(res.body)
+				: res.body;
+			const { hash, rawPath } = saveRaw(stored, extFor(res.contentType, url));
 			const { id, isNew } = db.insertDocument({
 				source_id: sourceId,
 				url,
@@ -117,7 +123,7 @@ export function buildContext(
 			if (isNew) counts.documentsNew++;
 			return {
 				documentId: id,
-				body: res.body,
+				body: stored,
 				fromCache: !isNew,
 				contentType: res.contentType,
 				finalUrl: res.finalUrl,

@@ -9,6 +9,17 @@ export interface SourceTosConfig {
 }
 
 export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
+	"chinohills-sports": {
+		source_key: "chinohills-sports",
+		status: "enabled",
+		terms_url: "https://www.cifsshome.org/robots.txt",
+		reviewed_hash:
+			"e5c4b84484ee4216e9373be99380320c25dd94805f99f0a805846f087636553f",
+		reviewed_at: "2026-08-23",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"CIF-SS publishes no reader-facing terms page, so robots.txt is the binding access document — same treatment as the SNO student papers and the Home Campus sites. Fully open: 'User-agent: *' with an empty 'Disallow:' and no Crawl-delay. The /widget/* paths are the public embed surface cifss.org itself iframes. Items cite the widget URL, which is a real page a reader can open and filter.",
+	},
 	"chinohigh-sports": {
 		source_key: "chinohigh-sports",
 		status: "enabled",

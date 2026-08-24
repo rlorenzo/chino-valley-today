@@ -72,6 +72,7 @@ const TOPIC_BY_SOURCE_KEY: Record<string, TopicSlug> = {
 	"chinohigh-sports": "sports",
 	"ayala-sports": "sports",
 	"donlugo-sports": "sports",
+	"chinohills-sports": "sports",
 };
 
 /** Item types that identify a topic regardless of where they came from. */

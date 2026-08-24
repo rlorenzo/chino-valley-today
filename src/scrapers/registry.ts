@@ -35,4 +35,6 @@ export const SCRAPERS: Record<string, string> = {
 	"chinohigh-sports": "./scrapers/chinohigh-sports.ts",
 	"ayala-sports": "./scrapers/ayala-sports.ts",
 	"donlugo-sports": "./scrapers/donlugo-sports.ts",
+	// Chino Hills has no Home Campus site; CIF-SS's widget serves it instead.
+	"chinohills-sports": "./scrapers/chinohills-sports.ts",
 };
