@@ -2256,6 +2256,78 @@ describe("active weather alerts", () => {
 		});
 	}
 
+	// The 2026-08-25 defect, reproduced from the shape the live feed sent.
+	function cancelRow(id: number, effective: string, areaDesc: string): ItemRow {
+		return item({
+			source_key: "nws-alerts",
+			item_type: "alert",
+			external_id: `urn:oid:${id}`,
+			source_url: `https://api.weather.gov/alerts/${id}`,
+			title: "The Heat Advisory has been cancelled.",
+			occurred_at: effective,
+			meta: JSON.stringify({
+				event: "Heat Advisory",
+				// A cancellation carries the CANCELLED alert's end time, which is
+				// why `ends > now` keeps it.
+				ends: HEAT.ends,
+				areaDesc,
+				messageType: "Cancel",
+				effective,
+			}),
+		});
+	}
+
+	test("a cancellation is never an active alert, and takes its advisory with it", () => {
+		// What the live brief published: "Active alert: The Heat Advisory has
+		// been cancelled." beside the warning that replaced it. The advisory had
+		// not been lifted, it had been upgraded, and a reader skimming that could
+		// conclude the heat was over on a day forecast above 100F.
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			nwsAlerts: [
+				alertRow(1, "2026-08-17T11:56:00-07:00"),
+				cancelRow(2, "2026-08-18T03:47:00-07:00", HEAT.areaDesc),
+			],
+		};
+		const { post } = assembleBrief(inputs, NOW);
+		assert.doesNotMatch(post.bodyMd, /cancelled/i);
+		assert.doesNotMatch(post.bodyMd, /Active alert:.*Heat Advisory/);
+	});
+
+	test("a cancellation listing many zones still cancels the one-zone advisory", () => {
+		// NWS cancels name every zone the product covered, so an (event, area)
+		// key would fail to match the alert being cancelled.
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			nwsAlerts: [
+				alertRow(1, "2026-08-17T11:56:00-07:00"),
+				cancelRow(
+					2,
+					"2026-08-18T03:47:00-07:00",
+					`${HEAT.areaDesc}; San Diego County Inland Valleys; Orange County Inland`,
+				),
+			],
+		};
+		const { post } = assembleBrief(inputs, NOW);
+		assert.doesNotMatch(post.bodyMd, /Heat Advisory/);
+	});
+
+	test("a cancellation does not hide a fresh advisory issued after it", () => {
+		// Hiding a live heat advisory is the same class of harm as inventing a
+		// cancelled one, so only issuances older than the cancel are removed.
+		const inputs: BriefInputs = {
+			...emptyInputs(),
+			nwsAlerts: [
+				alertRow(1, "2026-08-17T11:56:00-07:00"),
+				cancelRow(2, "2026-08-18T03:47:00-07:00", HEAT.areaDesc),
+				alertRow(3, "2026-08-18T09:15:00-07:00"),
+			],
+		};
+		const { post } = assembleBrief(inputs, NOW);
+		assert.match(post.bodyMd, /Active alert:.*Heat Advisory/);
+		assert.doesNotMatch(post.bodyMd, /cancelled/i);
+	});
+
 	test("one advisory re-issued three times renders one alert", () => {
 		const inputs: BriefInputs = {
 			...emptyInputs(),

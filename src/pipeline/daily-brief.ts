@@ -39,6 +39,7 @@ import {
 	alertPostSlugHashOf,
 	cleanTitle,
 	dedupeByKey,
+	dropCancelledAlerts,
 	dropSupersededAlerts,
 	humanDateFromLocal,
 	localMeetingDate,
@@ -528,8 +529,15 @@ export function selectActiveAlerts(
 	// with the newest issuance kept: an advisory NWS extends is still one
 	// advisory, and showing the superseded window beside its replacement tells
 	// a reader the heat ends a day earlier than it does.
+	// Cancellations come out FIRST. They carry the cancelled alert's own end
+	// time, so they survive the `ends > now` filter below and would otherwise
+	// render as "Active alert: The Heat Advisory has been cancelled." — and,
+	// being the newest issuance of their event, they would also win
+	// supersession and displace the real alert.
 	const deduped = dropSupersededAlerts(
-		dedupeByKey(alertItems, (r) => r.external_id ?? r.source_url),
+		dropCancelledAlerts(
+			dedupeByKey(alertItems, (r) => r.external_id ?? r.source_url),
+		),
 	);
 	return deduped.filter((row) => {
 		if (!cleanTitle(row.title)) return false;

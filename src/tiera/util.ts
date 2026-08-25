@@ -294,6 +294,78 @@ export function alertEventKey(row: {
 }
 
 /**
+ * A cancellation is not an alert. It is the statement that one has ended.
+ *
+ * NWS sends the end of an alert as a CAP message with messageType "Cancel"
+ * (or "Expire"), carrying the CANCELLED alert's end time in `ends`. Selecting
+ * active alerts on `ends > now` therefore keeps it, and on 2026-08-25 the live
+ * brief led with "Active alert: The Heat Advisory has been cancelled." beside
+ * "Active alert: Extreme Heat Warning issued ... until August 28". Both lines
+ * came from the same feed and only one of them was true: the advisory had not
+ * been lifted, it had been UPGRADED to the warning. A reader skimming that
+ * could reasonably conclude the heat was over on a day forecast above 100F.
+ *
+ * So a cancellation removes its event and then itself. Two details matter:
+ *
+ * Grouped by EVENT ALONE, not (event, areaDesc). A cancel routinely lists
+ * every zone the original product covered — the Extreme Heat Watch cancel that
+ * morning named six areas where the watch itself named one — so an areaDesc
+ * key would fail to match the very alert being cancelled. Everything in this
+ * feed is already filtered to our forecast zone, so the event name is enough.
+ *
+ * Only issuances OLDER than the cancel are removed. NWS can cancel an advisory
+ * and issue a fresh one of the same name minutes later; suppressing by name
+ * alone would hide the new one, and hiding a live heat advisory is the same
+ * class of harm as inventing a cancelled one.
+ */
+export function dropCancelledAlerts<
+	T extends {
+		id: number;
+		meta: string | null;
+		external_id: string | null;
+		source_url: string;
+	},
+>(rows: T[]): T[] {
+	const isCancellation = (row: T): boolean => {
+		const type = parseAlertMeta(row.meta).messageType;
+		return type === "Cancel" || type === "Expire";
+	};
+	const eventName = (row: T): string => {
+		const event = parseAlertMeta(row.meta).event;
+		return typeof event === "string" ? event.trim() : "";
+	};
+
+	// Newest cancellation per event. Rows with no usable timestamp fall back to
+	// insertion order, the same way dropSupersededAlerts breaks that tie.
+	const cancelled = new Map<string, T>();
+	for (const row of rows) {
+		if (!isCancellation(row)) continue;
+		const event = eventName(row);
+		if (!event) continue;
+		const held = cancelled.get(event);
+		if (!held) {
+			cancelled.set(event, row);
+			continue;
+		}
+		const a = alertEffectiveMs(row);
+		const b = alertEffectiveMs(held);
+		if (a !== null && b !== null ? a > b : row.id > held.id) {
+			cancelled.set(event, row);
+		}
+	}
+
+	return rows.filter((row) => {
+		if (isCancellation(row)) return false;
+		const cancel = cancelled.get(eventName(row));
+		if (!cancel) return true;
+		const rowMs = alertEffectiveMs(row);
+		const cancelMs = alertEffectiveMs(cancel);
+		if (rowMs !== null && cancelMs !== null) return rowMs > cancelMs;
+		return row.id > cancel.id;
+	});
+}
+
+/**
  * One line per alert a reader should act on: the newest issuance of each
  * (event, areaDesc). Superseded issuances drop out, so an extended advisory
  * reads as one advisory with its current end time rather than as the old
