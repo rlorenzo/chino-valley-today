@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Deploy to the droplet. Run from a developer machine, not on the droplet.
+# Deploy to the droplet. Run from a developer machine, except the two host-side
+# subcommands (local, host-update) below, which run on the droplet itself.
 #
 #   scripts/deploy.sh code     update the pipeline checkout + deps + units
 #   scripts/deploy.sh all      that, then rebuild the site ON the host
 #   scripts/deploy.sh site     build HERE and publish — guarded, see below
 #
-# `all` is the one to reach for. The site is always built on the droplet,
+# `all` is the one to reach for. The site should always be built on the droplet,
 # because the droplet holds content this checkout does not: queued, held and
 # rejected posts are gitignored, published briefs are too, and
 # content/published/ is written on the host when a post is approved. `site`
