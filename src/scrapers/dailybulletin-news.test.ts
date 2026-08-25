@@ -111,20 +111,24 @@ test("dailybulletin-news run orchestration", async (t) => {
 		},
 	);
 
-	await t.test(
-		"fetches no articles when both hubs come back empty",
-		async () => {
-			const { ctx, items, requested } = fakeScraperContext({
-				[CHINO_HUB]: { status: 404 },
-				[CHINO_HILLS_HUB]: "<html>no articles yet</html>",
-			});
+	await t.test("fails the run when both hubs come back empty", async () => {
+		// A location hub is a paginated archive, not a live feed: it carries
+		// older stories on a slow news day. Both coming back empty is the
+		// markup having moved, and noting it would record a `success` run
+		// with 0 items.
+		const { ctx, items, requested } = fakeScraperContext({
+			[CHINO_HUB]: { status: 404 },
+			[CHINO_HILLS_HUB]: "<html>no articles yet</html>",
+		});
 
-			await dailyBulletinNewsScraper.run(ctx);
+		await assert.rejects(
+			() => dailyBulletinNewsScraper.run(ctx),
+			/No candidate articles found/,
+		);
 
-			assert.equal(items.length, 0);
-			assert.deepEqual(requested, [CHINO_HUB, CHINO_HILLS_HUB]);
-		},
-	);
+		assert.equal(items.length, 0);
+		assert.deepEqual(requested, [CHINO_HUB, CHINO_HILLS_HUB]);
+	});
 
 	await t.test("caps a busy news day at 15 articles per run", async () => {
 		const urls = Array.from(

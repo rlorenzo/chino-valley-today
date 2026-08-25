@@ -474,21 +474,19 @@ describe("runChinoHillsSports", () => {
 		);
 	});
 
-	it("stops with a note when the sport select is gone", async () => {
-		// An empty ingest and changed markup look identical from the outside, so
-		// say which one it was.
-		const { ctx, items, notes, requested } = fakeScraperContext({
+	it("fails the run when the sport select is gone", async () => {
+		// An empty ingest and changed markup look identical from the outside, and
+		// between seasons the empty one is normal. The sport list is the widget's
+		// own navigation and lists all 36 year-round, so an empty one is broken
+		// markup — which has to fail the run, not just note it.
+		const { ctx, items, requested } = fakeScraperContext({
 			[FOOTBALL]: "<html><body><p>nothing here</p></body></html>",
 		});
 
-		await runChinoHillsSports(ctx, NOW);
+		await assert.rejects(() => runChinoHillsSports(ctx, NOW), /no sport list/);
 
 		assert.deepEqual(items, []);
 		assert.equal(requested.length, 1, "must not sweep 36 sports blind");
-		assert.ok(
-			notes.some((n) => /no sport list/.test(n)),
-			`expected a markup-change note, got: ${notes.join(" | ")}`,
-		);
 	});
 
 	it("cites the widget URL for the sport the row came from", async () => {

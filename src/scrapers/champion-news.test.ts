@@ -187,15 +187,21 @@ test("champion-news run orchestration", async (t) => {
 	});
 
 	await t.test(
-		"ingests nothing, and complains, when discovery comes back empty",
+		"fails the run when the sitemap and both category indexes come back empty",
 		async () => {
+			// Three independent ways of listing a weekly paper's articles, all
+			// silent, is a broken discovery path rather than a quiet week — and a
+			// note would be recorded as a `success` run with 0 items.
 			const { ctx, items, notes } = fakeScraperContext({
 				[SITEMAP_INDEX]: { status: 404 },
 				"https://www.championnewspapers.com/news/": "<html>no links</html>",
 				"https://www.championnewspapers.com/community_news/": "<html></html>",
 			});
 
-			await championNewsScraper.run(ctx);
+			await assert.rejects(
+				() => championNewsScraper.run(ctx),
+				/no candidate article URLs at all/,
+			);
 
 			assert.equal(items.length, 0);
 			assert.ok(notes.some((n) => n.includes("Discovered 0 candidate")));

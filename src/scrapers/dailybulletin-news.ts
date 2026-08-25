@@ -103,7 +103,22 @@ const dailyBulletinNewsScraper: ScraperDef = {
 		ctx.note(
 			`Discovered ${candidates.length} candidate Daily Bulletin articles`,
 		);
-		if (candidates.length === 0) return;
+		// A location hub is a paginated archive, not a live feed — it carries
+		// older stories on a slow news day. Every hub coming back with nothing is
+		// the outlet being unreachable or its markup having moved, and reporting
+		// either as a `success` run with 0 items is what hid chinohills-swagit's
+		// six-day outage.
+		//
+		// Which of the two it was is NOT asserted here. Both end the same way: a
+		// hub that 404s and a hub whose markup changed both leave `candidates`
+		// empty, because each hub's fetch failure is caught and noted above. The
+		// notes carry the evidence; this only has to fail.
+		if (candidates.length === 0) {
+			throw new Error(
+				`No candidate articles found across any of the ${LOCATION_HUBS.length} location hub(s) — ` +
+					"the hubs were unreachable, or their markup has changed. See this run's notes for which.",
+			);
+		}
 
 		await ingestArticles(
 			ctx,

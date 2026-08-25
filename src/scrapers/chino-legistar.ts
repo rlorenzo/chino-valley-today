@@ -418,11 +418,17 @@ const scraper: ScraperDef = {
 		}
 
 		if (!targetMeeting) {
-			ctx.note(
-				"No past City Council meeting with both a published agenda status AND populated event items was found in the " +
-					"top-30 events window. Acceptance criterion (one full recent Council meeting) NOT met — widen the window.",
+			// The window holds the 30 most recent events across every body, so it
+			// reaches back weeks. Council meets twice a month and its agendas are
+			// published: finding none that qualifies means the window is too narrow
+			// or the API's shape has moved, and either way this run ingested
+			// nothing. Noting it and returning would record `success` with 0 items,
+			// which is how chinohills-swagit hid a six-day outage.
+			throw new Error(
+				`No past City Council meeting with both a published agenda status AND populated event items was found ` +
+					`among the ${councilCandidates.length} candidate(s) in the top-30 events window — widen the window, or ` +
+					"check whether the events API has changed.",
 			);
-			return;
 		}
 
 		ctx.note(

@@ -526,29 +526,31 @@ describe("runHomeCampusSports", () => {
 		);
 	});
 
-	it("says so loudly when the envelope shape moves, instead of ingesting nothing quietly", async () => {
-		// An empty ingest and a renamed field look identical from the outside.
-		const { ctx, items, notes } = fakeScraperContext({
+	it("fails the run when the envelope shape moves, instead of ingesting nothing quietly", async () => {
+		// An empty ingest and a renamed field look identical from the outside —
+		// and out of season, an empty ingest is normal. Only a throw separates
+		// them, because run-one.ts reads a run's status from whether run() threw.
+		const { ctx } = fakeScraperContext({
 			[HOME]: NAV,
 			[API]: JSON.stringify({ success: true, data: { rows: [] } }),
 		});
 
-		await runHomeCampusSports(ctx, SCHOOL, NOW);
-
-		assert.equal(items.length, 0);
-		assert.ok(notes.some((n) => /the API shape may have changed/.test(n)));
+		await assert.rejects(
+			() => runHomeCampusSports(ctx, SCHOOL, NOW),
+			/did not contain data\.data\.schedules/,
+		);
 	});
 
-	it("notes a non-JSON response rather than throwing the run away", async () => {
-		const { ctx, items, notes } = fakeScraperContext({
+	it("fails the run on a non-JSON response", async () => {
+		const { ctx } = fakeScraperContext({
 			[HOME]: NAV,
 			[API]: "<html>maintenance</html>",
 		});
 
-		await runHomeCampusSports(ctx, SCHOOL, NOW);
-
-		assert.equal(items.length, 0);
-		assert.ok(notes.some((n) => /was not JSON/.test(n)));
+		await assert.rejects(
+			() => runHomeCampusSports(ctx, SCHOOL, NOW),
+			/not JSON/,
+		);
 	});
 });
 
