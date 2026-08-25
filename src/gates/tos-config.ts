@@ -1,3 +1,5 @@
+import type { TermsScope } from "./terms-scope.ts";
+
 export interface SourceTosConfig {
 	source_key: string;
 	status: "enabled" | "held";
@@ -6,7 +8,33 @@ export interface SourceTosConfig {
 	reviewed_at: string;
 	reviewer: string;
 	notes?: string;
+	/**
+	 * Present only where a publisher renders changing content into the same
+	 * document as its terms. It does NOT change what is hashed — the gate is
+	 * still the raw bytes — it lets a drift be reported as "the terms read the
+	 * same once this region is removed" instead of as an unexplained change.
+	 *
+	 * Note the limit of that claim: what is established is that the two REDUCED
+	 * readings match, not that the raw documents differ only inside the region.
+	 * See terms-scope.ts.
+	 */
+	scope?: TermsScope;
 }
+
+/**
+ * How many times in a row a drift may be cleared by attestation — the short
+ * form, where the tool has already established that the terms read the same
+ * once the volatile region is removed — before the next one demands a full
+ * re-read.
+ *
+ * A one-command clearance offered every week becomes a reflex by about month
+ * four, and a reflex is not a review. The lease is what stops a source drifting
+ * indefinitely on a series of individually-reasonable clearances, and it is why
+ * ATTEST_LEASE_DAYS exists alongside the count: a quiet source could otherwise
+ * go years on seven attestations.
+ */
+export const MAX_CONSECUTIVE_ATTESTATIONS = 8;
+export const ATTEST_LEASE_DAYS = 90;
 
 export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 	"chinohills-sports": {
@@ -63,6 +91,24 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 		reviewer: "rexl",
 		notes:
 			"TownNews Blox CMS Terms of Use reviewed. Permits automated title and short teaser link-back under EDITORIAL.md.",
+		// This page carries the paper's own most-read and most-commented lists,
+		// so its bytes change whenever the Champion publishes. Verified against
+		// the 2026-03-11 archived copy: with the tncms widget regions removed,
+		// the remaining 26,604 characters are identical to today, five months on.
+		//
+		// The regions are removed rather than the terms selected, because Blox
+		// nests the sidebar INSIDE article#staticpage — selecting the article
+		// alone still picks up every headline.
+		scope: {
+			select: "article#staticpage",
+			volatile: "[id^=tncms-region]",
+			anchor: "These Terms of Service govern your use of",
+			// Measured at 26,604 characters on both the 2026-03-11 archived copy
+			// and the live page. The floor sits well under that: it is there to
+			// catch a scope that has started stripping the terms, not to notice
+			// an edited sentence.
+			minLength: 20_000,
+		},
 	},
 	"dailybulletin-news": {
 		source_key: "dailybulletin-news",

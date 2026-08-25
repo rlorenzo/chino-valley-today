@@ -17,6 +17,11 @@ export interface SourceTosStatus {
 	reviewedHash: string;
 	lastObservedHash?: string | null;
 	lastCheckedAt?: string | null;
+	/** The last version a human read in full; drift is classified against it. */
+	anchorHash?: string | null;
+	/** Consecutive attestations since that full read. */
+	attestCount: number;
+	lastRebaselinedAt?: string | null;
 }
 
 interface DocumentRow {
@@ -85,6 +90,21 @@ export function openDb(path: string = DB_PATH) {
 	).map((c) => c.name);
 	if (!postCols.includes("published_via"))
 		db.exec("ALTER TABLE posts ADD COLUMN published_via TEXT");
+	const tosCols = (
+		db.prepare("PRAGMA table_info(source_tos_status)").all() as Array<{
+			name: string;
+		}>
+	).map((c) => c.name);
+	if (!tosCols.includes("anchor_hash"))
+		db.exec("ALTER TABLE source_tos_status ADD COLUMN anchor_hash TEXT");
+	if (!tosCols.includes("attest_count"))
+		db.exec(
+			"ALTER TABLE source_tos_status ADD COLUMN attest_count INTEGER NOT NULL DEFAULT 0",
+		);
+	if (!tosCols.includes("last_rebaselined_at"))
+		db.exec(
+			"ALTER TABLE source_tos_status ADD COLUMN last_rebaselined_at TEXT",
+		);
 
 	// Seed the ToS baseline for every registered secondary source, so the gate
 	// has a row to read on the very first run — before the scraper itself has
@@ -107,6 +127,21 @@ export function openDb(path: string = DB_PATH) {
 			cfg.reviewed_hash,
 			cfg.status === "held" ? "baseline_held" : null,
 		);
+		// Anchor any row that has never had one — every row predating the
+		// attestation columns, which on the live host is all of them.
+		//
+		// reviewed_hash IS a human-approved baseline: it is a constant in
+		// tos-config.ts with a reviewer and a date beside it. So the anchor is
+		// that version, and the lease starts from the day it was actually read
+		// rather than from whenever this migration happened to run — stamping
+		// "now" would silently hand every source a fresh 90 days it had not
+		// earned. Nothing is overwritten: the guard is `anchor_hash IS NULL`.
+		db.prepare(
+			`UPDATE source_tos_status
+			 SET anchor_hash = reviewed_hash,
+			     last_rebaselined_at = COALESCE(last_rebaselined_at, ?)
+			 WHERE source_key = ? AND anchor_hash IS NULL`,
+		).run(`${cfg.reviewed_at}T00:00:00.000Z`, key);
 	}
 
 	function upsertSource(s: {
@@ -337,6 +372,7 @@ export function openDb(path: string = DB_PATH) {
 			status: "held",
 			heldReason: "unreviewed_source",
 			reviewedHash: "",
+			attestCount: 0,
 		};
 		// Object.hasOwn, not `in`: `in` walks the prototype chain, so a key
 		// like "constructor" would read as registered.
@@ -344,7 +380,9 @@ export function openDb(path: string = DB_PATH) {
 
 		const row = db
 			.prepare(
-				"SELECT status, reviewed_hash, last_observed_hash, last_checked_at, held_reason FROM source_tos_status WHERE source_key = ?",
+				`SELECT status, reviewed_hash, last_observed_hash, last_checked_at, held_reason,
+				        anchor_hash, attest_count, last_rebaselined_at
+				 FROM source_tos_status WHERE source_key = ?`,
 			)
 			.get(sourceKey) as
 			| {
@@ -353,6 +391,9 @@ export function openDb(path: string = DB_PATH) {
 					last_observed_hash: string | null;
 					last_checked_at: string | null;
 					held_reason: string | null;
+					anchor_hash: string | null;
+					attest_count: number | null;
+					last_rebaselined_at: string | null;
 			  }
 			| undefined;
 
@@ -364,6 +405,9 @@ export function openDb(path: string = DB_PATH) {
 			reviewedHash: row.reviewed_hash,
 			lastObservedHash: row.last_observed_hash,
 			lastCheckedAt: row.last_checked_at,
+			anchorHash: row.anchor_hash,
+			attestCount: row.attest_count ?? 0,
+			lastRebaselinedAt: row.last_rebaselined_at,
 		};
 	}
 
@@ -439,25 +483,206 @@ export function openDb(path: string = DB_PATH) {
 				`Cannot reset ToS hold: observed hash (${opts.observedHash}) does not match baseline reviewed hash (${registryConfig.reviewed_hash})`,
 			);
 		}
-		db.prepare(
-			`INSERT INTO source_tos_status (source_key, status, reviewed_hash, last_observed_hash, last_checked_at, held_reason)
-			 VALUES (?, 'enabled', ?, ?, ?, NULL)
+		// A reset IS a full read: an operator changed the approved hash in
+		// tos-config.ts, which nobody does without looking at the terms. So it
+		// anchors the version and starts the lease, exactly as rebaseline does —
+		// otherwise the next drift would find no anchor, --attest would refuse
+		// with "no anchor version recorded", and a source cleared this way could
+		// never use the short path at all.
+		atomically(() => {
+			db.prepare(
+				`INSERT INTO tos_attestations (source_key, kind, from_hash, to_hash, anchor_hash, evidence, attested_at)
+				 VALUES (?, 'rebaseline', ?, ?, ?, ?, ?)`,
+			).run(
+				sourceKey,
+				getSourceTosStatus(sourceKey).reviewedHash,
+				registryConfig.reviewed_hash,
+				registryConfig.reviewed_hash,
+				`operator adopted the reviewed_hash constant in tos-config.ts (reviewed ${registryConfig.reviewed_at} by ${registryConfig.reviewer})`,
+				opts.checkedAt,
+			);
+			db.prepare(
+				`INSERT INTO source_tos_status
+				   (source_key, status, reviewed_hash, last_observed_hash, last_checked_at,
+				    held_reason, anchor_hash, attest_count, last_rebaselined_at)
+				 VALUES (?, 'enabled', ?, ?, ?, NULL, ?, 0, ?)
+				 ON CONFLICT(source_key) DO UPDATE SET
+				   status = 'enabled',
+				   -- The reset is what re-baselines the row against the registry: the
+				   -- operator reviewed the new terms and updated tos-config. Leaving
+				   -- the stale hash here would make the next weekly check read its own
+				   -- approved hash as drift and re-hold the source immediately.
+				   reviewed_hash = excluded.reviewed_hash,
+				   held_reason = NULL,
+				   last_observed_hash = excluded.last_observed_hash,
+				   last_checked_at = excluded.last_checked_at,
+				   anchor_hash = excluded.anchor_hash,
+				   attest_count = 0,
+				   last_rebaselined_at = excluded.last_rebaselined_at`,
+			).run(
+				sourceKey,
+				registryConfig.reviewed_hash,
+				opts.observedHash,
+				opts.checkedAt,
+				registryConfig.reviewed_hash,
+				opts.checkedAt,
+			);
+		});
+	}
+
+	// Runs `fn` atomically, in the same shape insertItem uses: an outer
+	// transaction is respected, because BEGIN inside one is an error.
+	//
+	// Both clearances below write twice — the attestation record, then the
+	// status — and an interruption between them would leave the log and the
+	// state disagreeing. The direction is safe (the source stays held), but
+	// attest_count would under-count, and that count is a hard limit.
+	function atomically<T>(fn: () => T): T {
+		if (db.isTransaction) return fn();
+		db.exec("BEGIN IMMEDIATE");
+		try {
+			const result = fn();
+			db.exec("COMMIT");
+			return result;
+		} catch (err) {
+			db.exec("ROLLBACK");
+			throw err;
+		}
+	}
+
+	// Clearing a hold, in two strengths.
+	//
+	// `attest` is the short form: the caller has already established that the
+	// terms read the same once the declared volatile region is removed, and
+	// passes that evidence in — this layer never re-derives it. It is
+	// leased — see MAX_CONSECUTIVE_ATTESTATIONS and ATTEST_LEASE_DAYS — because
+	// a one-command clearance offered every week stops being a review.
+	//
+	// `rebaseline` is the full form: a human read the terms. It re-anchors the
+	// version future drift is compared against and resets the lease.
+	//
+	// Both write to tos_attestations. A clearance with no record of what it
+	// rested on is indistinguishable from someone silencing an alarm.
+	function attestSourceTos(
+		sourceKey: string,
+		opts: {
+			observedHash: string;
+			evidence: string;
+			attestedAt?: string;
+			maxAttestations: number;
+			leaseDays: number;
+		},
+	): void {
+		const current = getSourceTosStatus(sourceKey);
+		const attestedAt = opts.attestedAt ?? nowIso();
+
+		const anchorHash = current.anchorHash;
+		if (!anchorHash) {
+			throw new Error(
+				`Cannot attest ${sourceKey}: no anchor version recorded. Use rebaseline, which is what establishes one.`,
+			);
+		}
+		if (current.attestCount >= opts.maxAttestations) {
+			throw new Error(
+				`Cannot attest ${sourceKey}: ${current.attestCount} consecutive attestations since the last full read ` +
+					`(limit ${opts.maxAttestations}). Read the terms and use rebaseline.`,
+			);
+		}
+		// An anchor with no lease start cannot be time-checked, and `if (start)`
+		// would skip the check rather than fail it — switching the day limit off
+		// for exactly the rows that never went through a clearance path. The
+		// seeding above stamps every row, so reaching this means something else
+		// cleared the column.
+		const leaseStart = current.lastRebaselinedAt;
+		if (!leaseStart) {
+			throw new Error(
+				`Cannot attest ${sourceKey}: no record of when the terms were last read in full, ` +
+					"so the lease cannot be checked. Read them and use rebaseline.",
+			);
+		}
+		{
+			const days =
+				(new Date(attestedAt).getTime() - new Date(leaseStart).getTime()) /
+				86_400_000;
+			// An unparseable stamp yields NaN, and `NaN > leaseDays` is false — so
+			// a comparison alone would quietly switch the day limit off for that
+			// source while the count limit kept working. A guard whose failure mode
+			// is to allow is the wrong failure mode; this one expires instead.
+			if (!Number.isFinite(days)) {
+				throw new Error(
+					`Cannot attest ${sourceKey}: last_rebaselined_at (${leaseStart}) is not a readable date, ` +
+						"so the lease cannot be checked. Read the terms and use rebaseline.",
+				);
+			}
+			if (days > opts.leaseDays) {
+				throw new Error(
+					`Cannot attest ${sourceKey}: the terms were last read in full ${Math.floor(days)} days ago ` +
+						`(limit ${opts.leaseDays}). Read them and use rebaseline.`,
+				);
+			}
+		}
+
+		atomically(() => {
+			db.prepare(
+				`INSERT INTO tos_attestations (source_key, kind, from_hash, to_hash, anchor_hash, evidence, attested_at)
+				 VALUES (?, 'attest', ?, ?, ?, ?, ?)`,
+			).run(
+				sourceKey,
+				current.reviewedHash,
+				opts.observedHash,
+				anchorHash,
+				opts.evidence,
+				attestedAt,
+			);
+			db.prepare(
+				`UPDATE source_tos_status
+				 SET status = 'enabled', held_reason = NULL, reviewed_hash = ?,
+				     last_observed_hash = ?, last_checked_at = ?, attest_count = attest_count + 1
+				 WHERE source_key = ?`,
+			).run(opts.observedHash, opts.observedHash, attestedAt, sourceKey);
+		});
+	}
+
+	function rebaselineSourceTos(
+		sourceKey: string,
+		opts: { observedHash: string; evidence: string; attestedAt?: string },
+	): void {
+		const current = getSourceTosStatus(sourceKey);
+		const attestedAt = opts.attestedAt ?? nowIso();
+		atomically(() => {
+			db.prepare(
+				`INSERT INTO tos_attestations (source_key, kind, from_hash, to_hash, anchor_hash, evidence, attested_at)
+				 VALUES (?, 'rebaseline', ?, ?, ?, ?, ?)`,
+			).run(
+				sourceKey,
+				current.reviewedHash,
+				opts.observedHash,
+				opts.observedHash,
+				opts.evidence,
+				attestedAt,
+			);
+			db.prepare(
+				`INSERT INTO source_tos_status
+			   (source_key, status, reviewed_hash, last_observed_hash, last_checked_at,
+			    held_reason, anchor_hash, attest_count, last_rebaselined_at)
+			 VALUES (?, 'enabled', ?, ?, ?, NULL, ?, 0, ?)
 			 ON CONFLICT(source_key) DO UPDATE SET
-			   status = 'enabled',
-			   -- The reset is what re-baselines the row against the registry: the
-			   -- operator reviewed the new terms and updated tos-config. Leaving
-			   -- the stale hash here would make the next weekly check read its own
-			   -- approved hash as drift and re-hold the source immediately.
+			   status = 'enabled', held_reason = NULL,
 			   reviewed_hash = excluded.reviewed_hash,
-			   held_reason = NULL,
 			   last_observed_hash = excluded.last_observed_hash,
-			   last_checked_at = excluded.last_checked_at`,
-		).run(
-			sourceKey,
-			registryConfig.reviewed_hash,
-			opts.observedHash,
-			opts.checkedAt,
-		);
+			   last_checked_at = excluded.last_checked_at,
+			   anchor_hash = excluded.anchor_hash,
+			   attest_count = 0,
+			   last_rebaselined_at = excluded.last_rebaselined_at`,
+			).run(
+				sourceKey,
+				opts.observedHash,
+				opts.observedHash,
+				attestedAt,
+				opts.observedHash,
+				attestedAt,
+			);
+		});
 	}
 
 	return {
@@ -471,6 +696,8 @@ export function openDb(path: string = DB_PATH) {
 		startScrapeRun,
 		finishScrapeRun,
 		getSourceTosStatus,
+		attestSourceTos,
+		rebaselineSourceTos,
 		setSourceTosHold,
 		recordSourceTosCheck,
 		resetSourceTosHold,

@@ -1,10 +1,35 @@
-// Weekly automated terms-of-service drift detection & operator reset utility.
-// Checks publisher terms pages under fail-closed robots and redirect-safe HTTPS policies.
-// Run weekly via systemd (Sun 04:00 PT) or manually via `node scripts/check-tos-drift.ts [--reset <source_key>]`.
+// Weekly terms-of-service drift detection, and the operator commands that
+// clear a hold. Terms pages are fetched under the same fail-closed robots and
+// redirect-safe HTTPS policy the scrapers use. Runs Sun 04:00 PT via systemd.
+//
+//   node scripts/check-tos-drift.ts
+//       check every tracked source; hold any whose bytes changed
+//   node scripts/check-tos-drift.ts --diff <source>
+//       show what changed, as text rather than as two hashes
+//   node scripts/check-tos-drift.ts --attest <source>
+//       clear a hold the short way, where the tool has established that the
+//       terms read the same once the source's declared volatile region is
+//       removed — which is not the same as proving the raw documents differ
+//       only there. Leased: see MAX_CONSECUTIVE_ATTESTATIONS and
+//       ATTEST_LEASE_DAYS in tos-config.ts.
+//   node scripts/check-tos-drift.ts --rebaseline <source> [--i-have-read-the-terms]
+//       print the terms, then record that a human read them. This re-anchors
+//       the version drift is measured from and resets the attestation lease.
+//   node scripts/check-tos-drift.ts --reset <source>
+//       adopt the registry's reviewed_hash constant after editing tos-config.ts
+//       by hand. Predates the two above; still the path when the baseline
+//       changes in code rather than from an observation.
 
 import { openDb, type SourceTosStatus } from "../src/db/index.ts";
 import { politeFetch } from "../src/fetch.ts";
 import {
+	classifyDrift,
+	type DriftVerdict,
+	readNonVolatile,
+} from "../src/gates/terms-scope.ts";
+import {
+	ATTEST_LEASE_DAYS,
+	MAX_CONSECUTIVE_ATTESTATIONS,
 	SOURCE_TOS_REGISTRY,
 	type SourceTosConfig,
 } from "../src/gates/tos-config.ts";
@@ -223,6 +248,74 @@ export function diffTerms(
 	};
 }
 
+/**
+ * For a source whose bytes have drifted, says whether its TERMS drifted.
+ *
+ * Returns null where the question does not apply or cannot be answered, and
+ * the caller then leaves the ordinary drift hold in place. Every path here is
+ * advisory: nothing in this function can clear a hold or keep one from being
+ * set, so a bug in it costs an operator a wrong sentence, never a scrape we
+ * were not allowed to make.
+ */
+export function classifyKnownDrift(
+	db: ReturnType<typeof openDb>,
+	sourceKey: string,
+	observedHash: string,
+): { verdict: DriftVerdict["verdict"]; detail: string } | null {
+	const scope = SOURCE_TOS_REGISTRY[sourceKey]?.scope;
+	if (!scope) return null;
+
+	const status = db.getSourceTosStatus(sourceKey);
+	// The anchor is the version a human read in full. Falling back to
+	// reviewed_hash covers the first drift after this shipped, when nothing has
+	// been re-baselined yet but the reviewed version may well be archived.
+	const anchorHash = status.anchorHash ?? status.reviewedHash;
+	const anchorPath = anchorHash ? findRaw(anchorHash) : null;
+	const observedPath = findRaw(observedHash);
+	if (!anchorPath || !observedPath) return null;
+
+	try {
+		const verdict = classifyDrift(
+			readRaw(anchorPath).toString("utf8"),
+			readRaw(observedPath).toString("utf8"),
+			scope,
+		);
+		if (verdict.verdict === "volatile-only") {
+			// Precise about what was actually established, because this string
+			// becomes the attestation evidence someone reads back later. What is
+			// known is that the REDUCED readings match — not that the raw bytes
+			// differ only inside the volatile region.
+			// Name only what was actually removed. A scope with no `volatile`
+			// selector strips nothing but script and style, and saying otherwise
+			// would put a subtree that does not exist into the stored evidence.
+			const removed = scope.volatile
+				? `${scope.volatile}, script and style are`
+				: "script and style are";
+			return {
+				verdict: "volatile-only",
+				detail:
+					`the terms text and link targets within ${scope.select} are identical to the approved ` +
+					`version, once ${removed} removed`,
+			};
+		}
+		if (verdict.verdict === "terms-changed") {
+			// Link targets are part of the canonical form, so "the text differs"
+			// would misdescribe a retargeted link — the case where the wording is
+			// identical and the destination is not.
+			return {
+				verdict: "terms-changed",
+				detail: "the terms text or its link targets differ",
+			};
+		}
+		return { verdict: "indeterminate", detail: verdict.reason };
+	} catch (err) {
+		return {
+			verdict: "indeterminate",
+			detail: `classification failed: ${errorMessage(err)}`,
+		};
+	}
+}
+
 export async function checkSingleSourceTos(
 	sourceKey: string,
 	opts: {
@@ -257,6 +350,39 @@ export async function checkSingleSourceTos(
 		// drift hold, and an earlier hold survives a matching hash by design.
 		const current = opts.db.getSourceTosStatus(sourceKey);
 		if (current.status === "held") {
+			// Say which KIND of drift this is, if the source is one that carries a
+			// scope. The source stays held either way — this only decides whether
+			// the operator faces a one-command clearance or an afternoon.
+			// Prefix, not equality. The first classified run rewrites this reason
+			// into its annotated form, so an exact match would never reclassify —
+			// freezing a "volatile-only" label over a later real edit and pointing
+			// the operator at --attest for something that is not attestable.
+			if (current.heldReason?.startsWith("terms_hash_drift")) {
+				const classified = classifyKnownDrift(opts.db, sourceKey, res.hash);
+				// Only a CONCLUSIVE verdict is written into the hold reason. An
+				// indeterminate one tells an operator nothing they can act on, and
+				// stamping a parser complaint over "terms_hash_drift" would bury the
+				// fact that matters — that the terms drifted. It still gets said out
+				// loud, because a scope that has quietly stopped working would
+				// otherwise make every future drift unclassifiable in silence.
+				if (classified && classified.verdict === "indeterminate") {
+					console.error(
+						`  NOTE: ${sourceKey}'s terms scope could not classify this drift: ${classified.detail}`,
+					);
+				}
+				if (classified && classified.verdict !== "indeterminate") {
+					const reason =
+						classified.verdict === "volatile-only"
+							? `terms_hash_drift (volatile-only: ${classified.detail})`
+							: `terms_hash_drift (${classified.detail})`;
+					opts.db.setSourceTosHold(sourceKey, {
+						reason,
+						observedHash: res.hash,
+						checkedAt,
+					});
+					return { ok: false, status: "held", reason, hash: res.hash };
+				}
+			}
 			return {
 				ok: false,
 				status: "held",
@@ -304,6 +430,182 @@ export async function resetSingleSourceTos(
 	return { ok: true, hash: res.hash };
 }
 
+/**
+ * Clears a drift hold in the short form: the tool has established that the
+ * terms read the same once the declared volatile region is removed, so the
+ * operator signs that finding rather than re-reading the terms. What is signed
+ * is exactly that — the reduced readings match — and not the stronger claim
+ * that the raw documents differ only inside the region.
+ *
+ * Leased, so this cannot become the only form of review a source ever gets.
+ */
+export function attestSource(
+	db: ReturnType<typeof openDb>,
+	sourceKey: string,
+	now?: string,
+): { ok: boolean; message: string } {
+	requireConfig(sourceKey);
+	const status = db.getSourceTosStatus(sourceKey);
+	const observed = status.lastObservedHash;
+	if (!observed) {
+		return {
+			ok: false,
+			message: `${sourceKey}: nothing to attest — no observed terms recorded.`,
+		};
+	}
+	if (status.status === "enabled" && observed === status.reviewedHash) {
+		return { ok: true, message: `${sourceKey}: already enabled and matching.` };
+	}
+
+	// Attestation answers exactly one question — "did this drift change only the
+	// volatile region?" — so it may only clear a hold that asked it. A
+	// fetch_error hold means the terms were never retrieved, and the archived
+	// versions it would compare are both stale; a baseline_held or
+	// unreviewed_source hold is not about drift at all. Clearing any of those on
+	// the strength of comparing two old copies would be answering a question
+	// nobody asked.
+	if (
+		status.status !== "held" ||
+		!status.heldReason?.startsWith("terms_hash_drift")
+	) {
+		return {
+			ok: false,
+			message:
+				`${sourceKey}: refusing to attest — this is not a terms-drift hold ` +
+				`(status ${status.status}, reason ${status.heldReason ?? "none"}).\n` +
+				"  Attestation only clears a drift whose scope comparison it can make.",
+		};
+	}
+
+	const classified = classifyKnownDrift(db, sourceKey, observed);
+	if (!classified) {
+		return {
+			ok: false,
+			message:
+				`${sourceKey}: cannot attest — this source has no terms scope, or the versions to\n` +
+				"  compare are not both archived. Read the terms and use --rebaseline.",
+		};
+	}
+	if (classified.verdict !== "volatile-only") {
+		return {
+			ok: false,
+			message:
+				`${sourceKey}: refusing to attest — ${classified.detail}.\n` +
+				`  Read them: node scripts/check-tos-drift.ts --diff ${sourceKey}`,
+		};
+	}
+
+	try {
+		db.attestSourceTos(sourceKey, {
+			observedHash: observed,
+			evidence: classified.detail,
+			attestedAt: now,
+			maxAttestations: MAX_CONSECUTIVE_ATTESTATIONS,
+			leaseDays: ATTEST_LEASE_DAYS,
+		});
+	} catch (err) {
+		return { ok: false, message: `${sourceKey}: ${errorMessage(err)}` };
+	}
+	const after = db.getSourceTosStatus(sourceKey);
+	return {
+		ok: true,
+		message:
+			`${sourceKey}: attested and re-enabled (${classified.detail}).\n` +
+			`  ${after.attestCount} of ${MAX_CONSECUTIVE_ATTESTATIONS} attestations used since the last full read.`,
+	};
+}
+
+/**
+ * Clears a hold the long way: print the terms, then record that a human read
+ * them. This is what re-anchors the version drift is measured from, and the
+ * only thing that resets the attestation lease.
+ */
+export function rebaselineSource(
+	db: ReturnType<typeof openDb>,
+	sourceKey: string,
+	opts: { confirmed: boolean; now?: string },
+): { ok: boolean; message: string } {
+	const config = requireConfig(sourceKey);
+	const status = db.getSourceTosStatus(sourceKey);
+	const observed = status.lastObservedHash;
+	if (!observed) {
+		return {
+			ok: false,
+			message: `${sourceKey}: nothing to re-baseline — no observed terms recorded.`,
+		};
+	}
+	const path = findRaw(observed);
+	if (!path) {
+		return {
+			ok: false,
+			message:
+				`${sourceKey}: the observed version (${observed.slice(0, 10)}) is not in the archive,\n` +
+				"  so there is nothing to show you. Run a check first.",
+		};
+	}
+
+	const body = readRaw(path).toString("utf8");
+	const scope = config.scope;
+	const reading = scope ? readNonVolatile(body, scope) : null;
+	// Link targets are compared but invisible in the text, so an operator asked
+	// to certify they read the terms has to be shown them too. A retargeted
+	// link under unchanged wording is one of the drifts this catches, and it
+	// would otherwise be the one change they could not review.
+	const links =
+		reading?.ok && reading.hrefs.length > 0
+			? `\n\nLink targets (compared, and not visible above):\n${reading.hrefs
+					.map((h) => `  ${h}`)
+					.join("\n")}`
+			: "";
+	const text =
+		(reading?.ok ? reading.text : termsLines(body, path).join("\n")) + links;
+
+	// A scope that could not be applied must be said out loud. Otherwise the
+	// operator re-baselines believing they read the scoped terms, anchor_hash is
+	// set to a version whose scope cannot be read, and every later drift
+	// classifies as indeterminate with no explanation at the point of confusion.
+	const scopeWarning =
+		scope && !reading?.ok
+			? `  NOTE: this source's terms scope did not apply (${reading?.ok === false ? reading.reason : "unknown"}),\n` +
+				"  so what follows is the whole page, not the scoped terms.\n\n"
+			: "";
+
+	// Printed on BOTH paths. Recording a re-read in a run that displayed nothing
+	// would be a signature on an unopened document, and --rebaseline is the
+	// forcing function the attestation lease escalates to.
+	const shown =
+		`${sourceKey} — terms as currently served (${observed.slice(0, 10)}):\n\n` +
+		`${scopeWarning}${text}\n`;
+
+	if (!opts.confirmed) {
+		return {
+			ok: false,
+			message: `${shown}\n  Read the above. If you accept it, re-run with --i-have-read-the-terms.`,
+		};
+	}
+
+	// The scoped reading is what the operator was shown, so its digest is what
+	// the record should be able to reconstruct. to_hash covers the raw document.
+	//
+	// The count comes from the READING, not from `text`: `text` has the link
+	// block and any warning appended for display, so counting it would record a
+	// number that measures this function's formatting rather than the terms.
+	const evidence = reading?.ok
+		? `operator re-read the terms (${reading.length} chars, non-volatile digest ${reading.digest.slice(0, 12)})`
+		: `operator re-read the whole page (${text.length} chars; scope did not apply)`;
+	db.rebaselineSourceTos(sourceKey, {
+		observedHash: observed,
+		evidence,
+		attestedAt: opts.now,
+	});
+	return {
+		ok: true,
+		message:
+			`${shown}\n${sourceKey}: re-baselined and re-enabled. Future drift is measured from this\n` +
+			`  version, and the attestation lease is reset.`,
+	};
+}
+
 async function main() {
 	const args = process.argv.slice(2);
 	const db = openDb();
@@ -325,6 +627,32 @@ async function main() {
 			process.exit(res.ok ? 0 : 1);
 		} catch (err) {
 			console.error(`Diff failed: ${errorMessage(err)}`);
+			console.error(
+				`  known sources: ${Object.keys(SOURCE_TOS_REGISTRY).join(", ")}`,
+			);
+			process.exit(1);
+		}
+	}
+
+	if (args[0] === "--attest" || args[0] === "--rebaseline") {
+		const targetKey = args[1];
+		if (!targetKey) {
+			console.error(
+				`Usage: node scripts/check-tos-drift.ts ${args[0]} <source_key>`,
+			);
+			process.exit(1);
+		}
+		try {
+			const res =
+				args[0] === "--attest"
+					? attestSource(db, targetKey)
+					: rebaselineSource(db, targetKey, {
+							confirmed: args.includes("--i-have-read-the-terms"),
+						});
+			console.log(res.message);
+			process.exit(res.ok ? 0 : 1);
+		} catch (err) {
+			console.error(`Failed: ${errorMessage(err)}`);
 			console.error(
 				`  known sources: ${Object.keys(SOURCE_TOS_REGISTRY).join(", ")}`,
 			);
