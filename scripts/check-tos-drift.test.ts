@@ -7,11 +7,14 @@ import test, { after, before } from "node:test";
 import { openDb } from "../src/db/index.ts";
 import type { RawResult } from "../src/fetch.ts";
 import { SOURCE_TOS_REGISTRY } from "../src/gates/tos-config.ts";
-import { findRaw, readRaw } from "../src/store.ts";
+import { findRaw, readRaw, saveRaw } from "../src/store.ts";
 import { diffLines } from "../src/utils/line-diff.ts";
 import {
+	attestSource,
 	checkSingleSourceTos,
+	classifyKnownDrift,
 	diffTerms,
+	rebaselineSource,
 	resetSingleSourceTos,
 	termsLines,
 } from "./check-tos-drift.ts";
@@ -456,4 +459,272 @@ test("termsLines normalises line endings and nothing else", () => {
 		termsLines("User-agent: *\r\n\r\nDisallow: /\r\n", "x.txt"),
 		termsLines("User-agent: *\n\nDisallow: /\n", "x.txt"),
 	);
+});
+
+// End to end: a drift on a scoped source, classified, then cleared the short
+// way — and refused when the terms themselves moved.
+test("a scoped source reports which KIND of drift it is holding on", async (t) => {
+	const db = openDb(join(tmpDir, "scoped.db"));
+	const source = "champion-news";
+	const config = SOURCE_TOS_REGISTRY[source];
+
+	const page = (headline: string, clause: string) =>
+		Buffer.from(
+			`<html><body><article id="staticpage"><header><h1>Terms of Service</h1></header>` +
+				`<p>These Terms of Service govern your use of ChampionNewspapers.com. ${clause}</p>` +
+				`<p>${"Padding that keeps the document above the length floor. ".repeat(400)}</p>` +
+				`<div id="tncms-region-global-side-primary"><ul><li>${headline}</li></ul></div>` +
+				`</article></body></html>`,
+		);
+
+	const approved = page("Old story", "You may not republish the Content.");
+	const approvedHash = createHash("sha256").update(approved).digest("hex");
+	const original = config.reviewed_hash;
+	(config as { reviewed_hash: string }).reviewed_hash = approvedHash;
+	t.after(() => {
+		(config as { reviewed_hash: string }).reviewed_hash = original;
+	});
+	db.raw
+		.prepare(
+			"UPDATE source_tos_status SET reviewed_hash = ?, anchor_hash = ?, status = 'enabled', held_reason = NULL, last_rebaselined_at = ? WHERE source_key = ?",
+		)
+		.run(approvedHash, approvedHash, "2026-08-24T00:00:00.000Z", source);
+
+	const fetcherFor = (body: Buffer) => async (): Promise<RawResult> => ({
+		status: 200,
+		ok: true,
+		notModified: false,
+		body,
+		etag: null,
+		lastModified: null,
+		contentType: "text/html",
+		finalUrl: config.terms_url,
+	});
+
+	// Archive the approved version, the way a check that saw it would have.
+	await checkSingleSourceTos(source, { db, fetcher: fetcherFor(approved) });
+
+	// A new headline: bytes differ, terms do not.
+	const churned = page(
+		"FBI raids supervisor's home",
+		"You may not republish the Content.",
+	);
+	const churnRes = await checkSingleSourceTos(source, {
+		db,
+		fetcher: fetcherFor(churned),
+	});
+	assert.equal(churnRes.ok, false, "the source stays HELD either way");
+	assert.match(churnRes.reason ?? "", /volatile-only/);
+
+	// And it clears in one command, with the evidence recorded.
+	const attested = attestSource(db, source, "2026-08-25T00:00:00.000Z");
+	assert.equal(attested.ok, true, attested.message);
+	assert.equal(db.getSourceTosStatus(source).status, "enabled");
+	assert.equal(db.getSourceTosStatus(source).attestCount, 1);
+
+	// A real clause change is a different answer, and attestation refuses it.
+	const edited = page(
+		"FBI raids supervisor's home",
+		"You may republish the Content for AI training.",
+	);
+	const editRes = await checkSingleSourceTos(source, {
+		db,
+		fetcher: fetcherFor(edited),
+	});
+	assert.equal(editRes.ok, false);
+	assert.doesNotMatch(editRes.reason ?? "", /volatile-only/);
+	assert.match(editRes.reason ?? "", /terms text or its link targets differ/);
+
+	const refused = attestSource(db, source, "2026-08-26T00:00:00.000Z");
+	assert.equal(refused.ok, false);
+	assert.match(refused.message, /refusing to attest/);
+	assert.equal(db.getSourceTosStatus(source).status, "held");
+});
+
+test("rebaseline shows the terms before it will record that they were read", () => {
+	const db = openDb(join(tmpDir, "rebase.db"));
+	const source = "champion-news";
+	const status = db.getSourceTosStatus(source);
+	if (!status.lastObservedHash) {
+		// Nothing observed in this fresh db: the command must say so rather than
+		// clear a hold against a version it cannot show anyone.
+		const res = rebaselineSource(db, source, { confirmed: true });
+		assert.equal(res.ok, false);
+		assert.match(res.message, /nothing to re-baseline/);
+	}
+});
+
+test("rebaseline shows the terms even when the operator passes the flag up front", () => {
+	// --rebaseline is what the attestation lease escalates to. If it could
+	// record a re-read in a run that displayed nothing, the lease would expire
+	// into an equally cheap action.
+	const db = openDb(join(tmpDir, "shown.db"));
+	const source = "champion-news";
+	const body = Buffer.from(
+		`<html><body><article id="staticpage"><p>These Terms of Service govern your use of ` +
+			`ChampionNewspapers.com. ${"Padding to clear the length floor. ".repeat(700)}</p></article></body></html>`,
+	);
+	const { hash } = saveRaw(body, "html");
+	db.raw
+		.prepare(
+			"UPDATE source_tos_status SET last_observed_hash = ?, status = 'held', held_reason = 'terms_hash_drift' WHERE source_key = ?",
+		)
+		.run(hash, source);
+
+	const res = rebaselineSource(db, source, {
+		confirmed: true,
+		now: "2026-08-25T00:00:00.000Z",
+	});
+	assert.equal(res.ok, true, res.message);
+	assert.match(res.message, /These Terms of Service govern your use of/);
+	assert.equal(db.getSourceTosStatus(source).anchorHash, hash);
+
+	// And the record identifies what was read, not just how long it was.
+	const row = db.raw
+		.prepare(
+			"SELECT evidence FROM tos_attestations WHERE source_key = ? ORDER BY id DESC LIMIT 1",
+		)
+		.get(source) as { evidence: string };
+	assert.match(row.evidence, /non-volatile digest [0-9a-f]{12}/);
+	// The count measures the reduced terms, not this function's formatting: the
+	// printed text has the link block appended and would read longer.
+	const counted = Number(/\((\d+) chars/.exec(row.evidence)?.[1]);
+	assert.ok(
+		counted > 0 && counted < res.message.length,
+		`evidence should count the reduced terms, got ${row.evidence}`,
+	);
+});
+
+test("a retargeted link is described as such, and shown to the operator", () => {
+	// Both halves of the same gap: hrefs are compared, so the message must not
+	// call it a text change, and --rebaseline must not hide the one difference
+	// an operator would be certifying they had read.
+	const db = openDb(join(tmpDir, "links.db"));
+	const source = "champion-news";
+	const padding = "Padding to clear the length floor. ".repeat(700);
+	const page = (href: string) =>
+		Buffer.from(
+			`<html><body><article id="staticpage">` +
+				`<p>These Terms of Service govern your use of ChampionNewspapers.com. ${padding}</p>` +
+				`<p>See our <a href="${href}">Privacy Policy</a>.</p>` +
+				`</article></body></html>`,
+		);
+
+	const approved = page("/site/privacy.html");
+	const { hash: approvedHash } = saveRaw(approved, "html");
+	const retargeted = page("/site/privacy-v2.html");
+	const { hash: observedHash } = saveRaw(retargeted, "html");
+
+	db.raw
+		.prepare(
+			"UPDATE source_tos_status SET reviewed_hash = ?, anchor_hash = ?, last_observed_hash = ?, status = 'held', held_reason = 'terms_hash_drift' WHERE source_key = ?",
+		)
+		.run(approvedHash, approvedHash, observedHash, source);
+
+	const classified = classifyKnownDrift(db, source, observedHash);
+	assert.equal(classified?.verdict, "terms-changed");
+	assert.match(classified?.detail ?? "", /link targets/);
+
+	const shown = rebaselineSource(db, source, { confirmed: false });
+	assert.match(shown.message, /privacy-v2\.html/);
+});
+
+test("attestation refuses a hold that is not about drift", () => {
+	// It answers one question — did this drift change only the volatile region?
+	// A fetch_error hold means the terms were never retrieved and the archived
+	// copies are stale; clearing it would be answering a question nobody asked.
+	const db = openDb(join(tmpDir, "notdrift.db"));
+	const source = "champion-news";
+	db.raw
+		.prepare(
+			"UPDATE source_tos_status SET last_observed_hash = ?, status = 'held', held_reason = ? WHERE source_key = ?",
+		)
+		.run("d".repeat(64), "fetch_error: HTTP 503", source);
+
+	const res = attestSource(db, source);
+	assert.equal(res.ok, false);
+	assert.match(res.message, /not a terms-drift hold/);
+	assert.equal(db.getSourceTosStatus(source).status, "held");
+});
+
+test("--reset anchors the version, so the short path works afterwards", async (t) => {
+	// A reset is a full read: someone changed the approved hash in tos-config.
+	// If it left no anchor, the next drift would find none and --attest would
+	// refuse for a source that had just been reviewed in full.
+	const db = openDb(join(tmpDir, "resetanchor.db"));
+	const source = "champion-news";
+	const config = SOURCE_TOS_REGISTRY[source];
+	const body = Buffer.from("<html><body>terms v1</body></html>");
+	const hash = createHash("sha256").update(body).digest("hex");
+
+	const original = config.reviewed_hash;
+	(config as { reviewed_hash: string }).reviewed_hash = hash;
+	t.after(() => {
+		(config as { reviewed_hash: string }).reviewed_hash = original;
+	});
+
+	await resetSingleSourceTos(source, {
+		db,
+		now: "2026-08-25T00:00:00.000Z",
+		fetcher: async () => ({
+			status: 200,
+			ok: true,
+			notModified: false,
+			body,
+			etag: null,
+			lastModified: null,
+			contentType: "text/html",
+			finalUrl: config.terms_url,
+		}),
+	});
+
+	const status = db.getSourceTosStatus(source);
+	assert.equal(status.status, "enabled");
+	assert.equal(status.anchorHash, hash, "the reset must anchor the version");
+	assert.equal(status.attestCount, 0);
+	assert.equal(status.lastRebaselinedAt, "2026-08-25T00:00:00.000Z");
+
+	// And it leaves a record, like every other clearance.
+	const row = db.raw
+		.prepare(
+			"SELECT kind, evidence FROM tos_attestations WHERE source_key = ? ORDER BY id DESC LIMIT 1",
+		)
+		.get(source) as { kind: string; evidence: string };
+	assert.equal(row.kind, "rebaseline");
+	assert.match(row.evidence, /tos-config\.ts/);
+});
+
+test("evidence names only what was actually removed", () => {
+	// A scope with no `volatile` selector strips nothing but script and style.
+	// Claiming a volatile subtree was removed would put a thing that does not
+	// exist into the stored attestation evidence.
+	const db = openDb(join(tmpDir, "novolatile.db"));
+	const source = "champion-news";
+	const config = SOURCE_TOS_REGISTRY[source];
+	const original = config.scope;
+	config.scope = {
+		select: "article#staticpage",
+		anchor: "These Terms of Service govern your use of",
+		minLength: 100,
+	};
+
+	try {
+		const body = Buffer.from(
+			`<html><body><article id="staticpage"><p>These Terms of Service govern your use of ` +
+				`ChampionNewspapers.com. ${"Padding past the floor. ".repeat(20)}</p></article></body></html>`,
+		);
+		const { hash } = saveRaw(body, "html");
+		db.raw
+			.prepare(
+				"UPDATE source_tos_status SET anchor_hash = ?, last_observed_hash = ?, status = 'held', held_reason = 'terms_hash_drift' WHERE source_key = ?",
+			)
+			.run(hash, hash, source);
+
+		const res = classifyKnownDrift(db, source, hash);
+		assert.equal(res?.verdict, "volatile-only");
+		assert.match(res?.detail ?? "", /once script and style are removed/);
+		assert.doesNotMatch(res?.detail ?? "", /volatile region/);
+	} finally {
+		config.scope = original;
+	}
 });

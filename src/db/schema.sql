@@ -90,9 +90,36 @@ CREATE INDEX IF NOT EXISTS idx_scrape_runs_source_id ON scrape_runs(source_key, 
 CREATE TABLE IF NOT EXISTS source_tos_status (
   source_key TEXT PRIMARY KEY REFERENCES sources(key),
   status TEXT NOT NULL CHECK (status IN ('enabled', 'held')),
+  -- What the weekly check compares against: the last version cleared, whether
+  -- by a full re-baseline or by an attestation.
   reviewed_hash TEXT NOT NULL,
   last_observed_hash TEXT,
   last_checked_at TEXT,
-  held_reason TEXT
+  held_reason TEXT,
+  -- The last version a human read IN FULL. Drift is classified against this,
+  -- never against last week: a redesign that migrates a clause into a widget
+  -- over several deploys passes every week-on-week step and fails this one.
+  anchor_hash TEXT,
+  -- Consecutive attestations since that full read, and when it happened.
+  -- Together they enforce the attestation lease, whose limits are set in
+  -- tos-config.ts (MAX_CONSECUTIVE_ATTESTATIONS and ATTEST_LEASE_DAYS).
+  attest_count INTEGER NOT NULL DEFAULT 0,
+  last_rebaselined_at TEXT
 );
+
+-- Every clearance of a ToS hold, and what it rested on. Separate from
+-- audit_log, which is post-scoped (audit_log.post_id is NOT NULL).
+CREATE TABLE IF NOT EXISTS tos_attestations (
+  id INTEGER PRIMARY KEY,
+  source_key TEXT NOT NULL REFERENCES sources(key),
+  kind TEXT NOT NULL CHECK (kind IN ('attest', 'rebaseline')),
+  from_hash TEXT,
+  to_hash TEXT NOT NULL,
+  anchor_hash TEXT,
+  evidence TEXT NOT NULL,
+  attested_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tos_attestations_source
+  ON tos_attestations(source_key, id DESC);
 

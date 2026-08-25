@@ -32,6 +32,8 @@ describe("getSourceTosStatus fails closed", () => {
 			status: "held",
 			heldReason: "unreviewed_source",
 			reviewedHash: "",
+			// No attestations, because nothing has ever been reviewed here.
+			attestCount: 0,
 		});
 	});
 
@@ -58,6 +60,8 @@ describe("getSourceTosStatus fails closed", () => {
 			status: "held",
 			heldReason: "unreviewed_source",
 			reviewedHash: "",
+			// No attestations, because nothing has ever been reviewed here.
+			attestCount: 0,
 		});
 	});
 

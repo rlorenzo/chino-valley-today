@@ -21,7 +21,14 @@
 		// "fix", and the file is never committed. Without this the pre-commit
 		// hook, which lints the working tree rather than the index, blocks every
 		// commit made while a draft is sitting there.
-		"DRAFT-*.md"
+		"DRAFT-*.md",
+		// The staged-changes review report. Generated, never committed, and its
+		// shape is fixed by the reviewer contract — the verdict line has to be
+		// the literal string "**Verdict: good to go**" for automation to detect
+		// it, which MD036 reads as emphasis standing in for a heading. Same
+		// reason as the drafts above: the hook lints the working tree, so an
+		// unfixable report would block every commit made after a review.
+		"agent-code-review.md"
 	],
 
 	"config": {

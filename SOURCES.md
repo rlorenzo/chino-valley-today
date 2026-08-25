@@ -209,14 +209,17 @@ whenever a source changes behavior.
 - **Quirks & Policy (see reports/notes/champion-news.md):**
   - Fail-closed robots compliance (`failClosedRobots: true`) and redirect protection.
   - Terms of service tracked in `source_tos_status` with weekly drift checks (`scripts/check-tos-drift.ts`). Each check archives the page it hashes, so a drift can be read as a diff: `node scripts/check-tos-drift.ts --diff champion-news`.
-  - **This terms page is not stable.** Blox renders the paper's current
-    most-read and most-commented lists into the same page, so its hash changes
-    whenever the Champion publishes — the 2026-08-23 hold was those sidebars
-    and one new nav link, with no change to a word of the terms (verified
-    against the 2026-03-11 archived copy). Re-approving it re-holds it the next
-    time the paper posts. Deciding what to do about that is an open question;
-    hashing the extracted text rather than the bytes would fix it for every
-    source but re-baselines every `reviewed_hash`, which is a re-approval.
+  - **This terms page is not stable, and is scoped because of it.** Blox
+    renders the paper's current most-read and most-commented lists into the
+    same page, so its bytes change whenever the Champion publishes; the
+    2026-08-23 hold was those sidebars and one new nav link, with no change to
+    a word of the terms. The gate still hashes the raw bytes, but the source
+    carries a `scope` (`article#staticpage`, minus `[id^=tncms-region]`, with
+    an anchor phrase and a 20,000-character floor) so a drift can be reported
+    as volatile-only and cleared with `--attest` instead of a re-read. Verified
+    against the 2026-03-11 archived copy: 26,604 characters of non-volatile
+    text, identical five months later. Attestation is leased — 8 in a row or 90
+    days, then `--rebaseline` makes you read them.
   - Summaries are sentence-bounded teasers ($\le 280$ chars, $\le 40$ words) for attribution. Secondary press links wear crate styling (`.stamp--attribution`), never violet.
   - Silent-drift alarm: three consecutive failed runs, or three consecutive runs that succeed while extracting 0 items, fail the brief watchdog unit (`checkDegradedSources`).
 - **Link-back depth:** item-level (`/community_news/article_<uuid>.html`).
