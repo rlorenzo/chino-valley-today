@@ -197,9 +197,8 @@ until a successful reload, so a failed validate costs nothing.
 From a developer machine:
 
 ```bash
-scripts/deploy.sh site    # build and publish the static site
 scripts/deploy.sh code    # update the checkout, deps, and systemd units
-scripts/deploy.sh all
+scripts/deploy.sh all     # that, then rebuild the site ON the droplet
 ```
 
 Two subcommands run **on the droplet** instead: `local` rebuilds the site from
@@ -208,6 +207,22 @@ the host's own checkout, and `host-update` brings that checkout to
 service account. Installing systemd units is the one step that needs root, so
 it stays in `code` — units change far less often than pipeline code, which is
 what makes that split affordable.
+
+**The site is always built on the droplet.** `scripts/deploy.sh site` builds it
+on the machine you run it from and publishes the result, which is almost always
+the wrong content: `content/queue/`, `content/held/` and `content/rejected/`
+are gitignored, published briefs are too, and `content/published/` is written
+on the host when a post is approved. It refuses unless
+`CVT_ALLOW_LOCAL_BUILD=1` is set, and there is no default subcommand any more —
+a bare `scripts/deploy.sh` used to mean `site`.
+
+On 2026-08-24 the live site served a laptop's build for about 90 seconds: 18
+posts instead of 35, `/brief/2026-08-24/` a 404, and the front page missing
+everything from 08-20 onward. Nothing malfunctioned — `check-code-drift.sh`
+printed its standard `deploy.sh all` remediation for a cosmetic unit drift, and
+`all` reached `deploy_site` without the operator thinking about it. The fix was
+forward, not backward: `deploy.sh host-update` on the droplet, rebuilding from
+the host's own content. `all` now does that itself.
 
 **CI's forced-command key runs `host-update`.** The entry in
 `/srv/chino-valley-today/.ssh/authorized_keys` is:
