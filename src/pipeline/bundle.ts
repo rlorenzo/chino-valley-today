@@ -4,6 +4,7 @@
 // generator may draw from, and its URL set is the only citable set.
 import type { Db } from "../db/index.ts";
 import { isoWeekOf } from "../tiera/util.ts";
+import { archiveUrl, licenseRowAnchor } from "./site-url.ts";
 
 export interface BundleItem {
 	title: string | null;
@@ -11,6 +12,15 @@ export interface BundleItem {
 	sourceUrl: string;
 	meta: Record<string, unknown>;
 	occurredAt: string | null;
+	/**
+	 * sha256 of the archived bytes this item was read from — the address of the
+	 * archive page that serves them (/source/<hash>/).
+	 *
+	 * Carried for every item, used where the source's own URL is not citable.
+	 * Meeting items keep their Legistar permalinks, which are perfectly good
+	 * human pages; ABC licence events do not have one at all.
+	 */
+	contentHash: string;
 }
 
 export interface MeetingBundle {
@@ -32,6 +42,7 @@ interface RawItemRow {
 	source_url: string;
 	meta: string | null;
 	occurred_at: string | null;
+	content_hash: string;
 }
 
 function toBundleItem(r: RawItemRow): BundleItem {
@@ -49,6 +60,7 @@ function toBundleItem(r: RawItemRow): BundleItem {
 		sourceUrl: r.source_url,
 		meta,
 		occurredAt: r.occurred_at,
+		contentHash: r.content_hash,
 	};
 }
 
@@ -60,7 +72,8 @@ function itemsFor(
 ): BundleItem[] {
 	const rows = db.raw
 		.prepare(
-			`SELECT i.item_type, i.title, i.body, i.source_url, i.meta, i.occurred_at
+			`SELECT i.item_type, i.title, i.body, i.source_url, i.meta, i.occurred_at,
+              d.content_hash
        FROM items i JOIN documents d ON i.document_id = d.id JOIN sources s ON d.source_id = s.id
        WHERE s.key = ? AND i.item_type = ? AND substr(COALESCE(i.occurred_at, d.meeting_date, ''), 1, 10) = ?
        ORDER BY i.id`,
@@ -333,7 +346,8 @@ function weekItemsFor(
 ): BundleItem[] {
 	const rows = db.raw
 		.prepare(
-			`SELECT i.item_type, i.title, i.body, i.source_url, i.meta, i.occurred_at
+			`SELECT i.item_type, i.title, i.body, i.source_url, i.meta, i.occurred_at,
+              d.content_hash
        FROM items i JOIN documents d ON i.document_id = d.id JOIN sources s ON d.source_id = s.id
        WHERE s.key = ? AND i.item_type = ? ORDER BY i.occurred_at, i.id`,
 		)
@@ -441,12 +455,33 @@ export function assembleBusinessBundle(
 	db: Db,
 	isoWeek: string,
 ): BusinessBundle | null {
+	// THE CITABLE URL FOR A LICENCE EVENT IS THE ARCHIVE PAGE.
+	//
+	// Its source_url is the daily report page, which is not date-stable: fetched
+	// with no query string it renders whatever report abc.ca.gov currently
+	// treats as current, and any query string is 301-stripped at the edge, so
+	// there is no per-report and no per-licence URL. A narrative published on
+	// Tuesday cited a page that by Wednesday showed a different day entirely.
+	//
+	// Substituted here rather than in toBundleItem because the meeting bundles
+	// share that function and their Legistar permalinks are good human pages
+	// that should keep being cited. This also puts the archive URL into
+	// allowedUrls below, which is what the citation gate checks a draft against,
+	// so the generator can only cite what resolves.
 	const licenseEvents = weekItemsFor(
 		db,
 		BUSINESS_SOURCES.licenses.key,
 		BUSINESS_SOURCES.licenses.type,
 		isoWeek,
-	).map((it) => (it.body ? it : { ...it, body: licenseEventDetail(it.meta) }));
+	)
+		.map((it) => (it.body ? it : { ...it, body: licenseEventDetail(it.meta) }))
+		.map((it) => ({
+			...it,
+			sourceUrl: archiveUrl(
+				it.contentHash,
+				licenseRowAnchor(it.meta.row_index),
+			),
+		}));
 	const planningItems = weekItemsFor(
 		db,
 		BUSINESS_SOURCES.planning.key,

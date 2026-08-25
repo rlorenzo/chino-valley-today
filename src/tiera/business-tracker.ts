@@ -3,6 +3,7 @@
 // entry linking its own source_url.
 import type { Db } from "../db/index.ts";
 import type { NewPost } from "../pipeline/posts.ts";
+import { archiveUrl, licenseRowAnchor } from "../pipeline/site-url.ts";
 import { type ItemRow, parseMeta, queryItems } from "./queries.ts";
 import { isoWeekForNow, mdEscape, mdLink, withinLastDays } from "./util.ts";
 
@@ -15,6 +16,24 @@ const WINDOW_DAYS = 14;
 
 function str(v: unknown): string | null {
 	return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/**
+ * THE CITATION IS THE ARCHIVE PAGE, not row.source_url.
+ *
+ * row.source_url is the daily report page, which is not date-stable: fetched
+ * with no query string it renders whatever report abc.ca.gov currently treats
+ * as current, and any query string is 301-stripped at the edge, so there is no
+ * per-report and no per-licence URL to point at. A tracker published on Tuesday
+ * cited a page that by Wednesday showed a different day entirely — the records
+ * it described were simply gone.
+ *
+ * /source/<sha256>/#row-<n> serves the archived report this entry was read
+ * from, extracted to the local rows and rendered for a person, with the live
+ * abc.ca.gov page linked from it as the authority.
+ */
+function citationFor(row: ItemRow, meta: Record<string, unknown>): string {
+	return archiveUrl(row.doc_content_hash, licenseRowAnchor(meta.row_index));
 }
 
 function fmtLicenseLine(row: ItemRow): string {
@@ -36,7 +55,7 @@ function fmtLicenseLine(row: ItemRow): string {
 	if (status) parts.push(mdEscape(status));
 	if (address) parts.push(mdEscape(address));
 
-	return `- ${parts.join(" — ")} — ${mdLink("source", row.source_url)}`;
+	return `- ${parts.join(" — ")} — ${mdLink("source", citationFor(row, meta))}`;
 }
 
 export function generateBusinessTracker(db: Db, now: Date): GenResult {
@@ -71,7 +90,12 @@ export function generateBusinessTracker(db: Db, now: Date): GenResult {
 			"\n",
 		),
 	);
-	const sources = [...new Set(inWindow.map((r) => r.source_url))];
+	// One entry per archived report, not per row: a source is a document, and
+	// listing the same report once per licence would inflate the source count
+	// the inspection record shows.
+	const sources = [
+		...new Set(inWindow.map((r) => archiveUrl(r.doc_content_hash))),
+	];
 
 	posts.push({
 		slug: `${week}-business-tracker`,

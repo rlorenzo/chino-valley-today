@@ -224,7 +224,19 @@ Borders are `1.5px` on stamps and chips, `2px` on section rules and crate seams,
   was built from, rendered for a person. Crate header like any record page, an
   oxide stale-copy notice above everything, then the document itself, then a
   violet provenance block carrying the fetch time and the sha256 that names the
-  bytes. The contents list is crate: navigation is not provenance.
+  bytes. The contents list is crate: navigation is not provenance. The page
+  owns that chrome; one component per document type owns what a document says.
+- **`.entry`** — one record inside an archive page: a weather alert, an ABC
+  licence row. Ruled top, title, a `.mark` byline, then an oxide copy notice
+  repeated per entry — a citation lands on a fragment and scrolls past the
+  page-level notice, so the warning has to live where the reader arrives. Facts
+  render as `.facts`; a placard band carries the one line that matters most
+  (the NWS plain-words headline, the licensee's name).
+- **Extract notice** — crate, not oxide, and the distinction is load-bearing:
+  oxide says "this copy may be out of date", crate says "this is part of a
+  larger document and here is how much". An ABC report is statewide and the
+  page shows only the local rows, so it states how many of how many and links
+  the full report.
 - **Focus ring** — `3px` solid, `2px` offset, stencil black on light grounds and
   placard yellow on crate fields. Deliberately not violet; see Do's and Don'ts.
 

@@ -256,6 +256,13 @@ async function ingestNewApplications(
 			meta: {
 				report_type: "new_applications",
 				report_date: reportDate,
+				// This row's 1-based position in the report table, which is the
+				// anchor a citation to /source/<sha256>/ uses to land on THIS row.
+				// Not the licence number: a licence can appear more than once in one
+				// report (78 of 410 rows in the 2026-08-12 status-changes report
+				// repeat a number), so a number-based anchor would quietly send a
+				// reader to a different status change for the same licence.
+				row_index: total,
 				license_no: common.licenseNo,
 				license_type: common.licenseType,
 				license_type_dup: common.licenseDup,
@@ -328,6 +335,8 @@ async function ingestStatusChanges(
 			meta: {
 				report_type: "status_changes",
 				report_date: reportDate,
+				// See the note on row_index in ingestNewApplications above.
+				row_index: total,
 				license_no: common.licenseNo,
 				license_type: common.licenseType,
 				license_type_dup: common.licenseDup,

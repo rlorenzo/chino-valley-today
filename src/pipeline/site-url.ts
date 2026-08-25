@@ -45,3 +45,26 @@ export function archiveUrl(
 	const base = `${SITE_ORIGIN}${archivePath(contentHash)}`;
 	return anchor ? `${base}#${anchor}` : base;
 }
+
+/**
+ * The anchor for one row of an archived ABC licence report.
+ *
+ * The row's 1-based position in the report table, which the scraper records as
+ * meta.row_index and the archive page renders as the section id. Position
+ * rather than licence number because a licence can appear more than once in a
+ * single report — 78 of 410 rows in the 2026-08-12 status-changes report repeat
+ * a number — and a number-based anchor would send a citation about one status
+ * change to a different one.
+ *
+ * Null when the item predates row_index, so the citation degrades to the
+ * document page rather than to a fragment that matches nothing.
+ * site/src/components/ArchivedLicenseReport.astro is the other half of this
+ * agreement; src/site/abc-render.test.ts asserts the two agree.
+ */
+export function licenseRowAnchor(rowIndex: unknown): string | null {
+	return typeof rowIndex === "number" &&
+		Number.isInteger(rowIndex) &&
+		rowIndex > 0
+		? `row-${rowIndex}`
+		: null;
+}
