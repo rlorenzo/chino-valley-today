@@ -338,10 +338,13 @@ export async function runChinoHillsSports(
 
 	const sports = parseSports(probeHtml);
 	if (sports.length === 0) {
-		ctx.note(
-			"Chino Hills: the widget served no sport list — its markup may have changed. Nothing ingested.",
+		// The sport list is the widget's own navigation, not a season's fixtures:
+		// it lists all 36 sports year-round. An empty list is broken markup, and
+		// a note about it would be recorded as a `success` run with 0 items —
+		// exactly how chinohills-swagit hid a six-day outage.
+		throw new Error(
+			`Chino Hills: the widget at ${probeUrl} served no sport list — its markup has probably changed.`,
 		);
-		return;
 	}
 
 	let stored = 0;

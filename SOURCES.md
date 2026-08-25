@@ -247,8 +247,8 @@ whenever a source changes behavior.
   one feed fetch per run stays inside it).
 - **Quirks:** school-calendar dormancy is the steady state (Quest quiet
   since 2026-04-16, Bulldog Times since 2026-05-21, Breeze gaps ~7 weeks over
-  summer) — `zeroItemsIsHealthy` in the brief policy keeps the drift watchdog
-  quiet; the papers light up when the school year restarts (~September).
+  summer) — the source's entry in `src/scrapers/quiet-policy.ts` keeps the
+  drift watchdog quiet; the papers light up when the school year restarts (~September).
 - **Link-back depth:** item-level (WordPress permalinks).
 - **Reliability guess:** medium (small-org WordPress, platform-stable; content
   cadence follows the school year).
@@ -260,7 +260,8 @@ whenever a source changes behavior.
   robots-Allowed feed URL (`/?rss=y&most_recent=y` — the plain `?rss=y`
   variant is not the allowed form), filtered at ingest to items matching
   `\bchino(\s+hills)?\b` in title/description. Rolling same-day window,
-  ~25 items/fetch, most runs insert 0 — normal (`zeroItemsIsHealthy`).
+  ~25 items/fetch, most runs insert 0 — normal (declared in
+  `src/scrapers/quiet-policy.ts`).
 - **ToS:** NBCUniversal general terms reviewed 2026-08-19 (tracked in
   `source_tos_status`): no clause restricts automated access, scraping, RSS
   use, or headline link-back.

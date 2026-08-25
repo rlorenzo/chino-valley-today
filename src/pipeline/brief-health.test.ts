@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { openDb } from "../db/index.ts";
+import { SCRAPERS } from "../scrapers/registry.ts";
 import {
 	checkBriefDatabase,
 	checkBriefHttp,
@@ -160,6 +161,14 @@ describe("checkDegradedSources", () => {
 		itemsCount: number,
 		finishedAt = "2026-08-17T06:00:00.000Z",
 	) {
+		// scrape_runs.source_key is a foreign key, and only the ToS-registry
+		// sources are seeded on open. Everything else needs its parent row.
+		db.raw
+			.prepare(
+				`INSERT OR IGNORE INTO sources (key, name, base_url, method)
+         VALUES (?, ?, 'https://example.test', 'html')`,
+			)
+			.run(sourceKey, sourceKey);
 		db.raw
 			.prepare(
 				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
@@ -222,21 +231,41 @@ describe("checkDegradedSources", () => {
 		assert.equal(res.degraded, false);
 	});
 
-	test("defaults to HEADLINES_SOURCES and reports each source key", () => {
+	test("defaults to every registered source, not just the press outlets", () => {
 		const db = openDb(":memory:");
 		const results = checkDegradedSources(db);
-		assert.deepEqual(results.map((r) => r.sourceKey).sort(), [
-			"breeze-news",
-			"bulldogtimes-news",
-			"champion-news",
-			"dailybulletin-news",
-			"nbc4-news",
-			"quest-news",
-		]);
+		assert.deepEqual(
+			results.map((r) => r.sourceKey).sort(),
+			Object.keys(SCRAPERS).sort(),
+		);
+		// The source whose six-day outage no watchdog could see, because nothing
+		// was looking at it.
+		assert.ok(results.some((r) => r.sourceKey === "chinohills-swagit"));
 		assert.ok(results.every((r) => r.degraded === false));
 	});
 
-	test("a zeroItemsIsHealthy source with 3 clean 0-item runs is not degraded", () => {
+	test("a transcript source with 3 clean 0-item runs is degraded", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "chinohills-swagit", "success", 0);
+		insertRun(db, "chinohills-swagit", "success", 0);
+		insertRun(db, "chinohills-swagit", "success", 0);
+
+		const [res] = checkDegradedSources(db, ["chinohills-swagit"]);
+		assert.equal(res.degraded, true);
+		assert.match(res.reason, /0 items/);
+	});
+
+	test("a source not declared in QUIET_IS_HEALTHY must produce items", () => {
+		const db = openDb(":memory:");
+		insertRun(db, "not-a-registered-source", "success", 0);
+		insertRun(db, "not-a-registered-source", "success", 0);
+		insertRun(db, "not-a-registered-source", "success", 0);
+
+		const [res] = checkDegradedSources(db, ["not-a-registered-source"]);
+		assert.equal(res.degraded, true);
+	});
+
+	test("a quiet-is-healthy source with 3 clean 0-item runs is not degraded", () => {
 		const db = openDb(":memory:");
 		insertRun(db, "quest-news", "success", 0);
 		insertRun(db, "quest-news", "success", 0);
@@ -244,7 +273,9 @@ describe("checkDegradedSources", () => {
 
 		const [res] = checkDegradedSources(db, ["quest-news"]);
 		assert.equal(res.degraded, false);
-		assert.match(res.reason, /quiet-is-expected/);
+		// The declared reason travels with the verdict, so an operator reading the
+		// watchdog output does not have to go looking for why it was excused.
+		assert.match(res.reason, /dormant between issues/);
 	});
 
 	test("champion-news with 3 clean 0-item runs is still degraded (no flag)", () => {
@@ -258,7 +289,7 @@ describe("checkDegradedSources", () => {
 		assert.match(res.reason, /0 items/);
 	});
 
-	test("a zeroItemsIsHealthy source with 3 failures is still degraded", () => {
+	test("a quiet-is-healthy source with 3 failures is still degraded", () => {
 		const db = openDb(":memory:");
 		insertRun(db, "nbc4-news", "failure", 0);
 		insertRun(db, "nbc4-news", "failure", 0);

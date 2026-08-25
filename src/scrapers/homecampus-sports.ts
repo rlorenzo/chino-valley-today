@@ -344,23 +344,28 @@ export async function runHomeCampusSports(
 		},
 	);
 
+	// Both paths below throw rather than note-and-return. An out-of-season
+	// school legitimately returns an empty schedule array, and that is the only
+	// shape of "nothing ingested" this scraper is allowed to call healthy; a
+	// response that is not JSON, or JSON in a shape we cannot read, is the API
+	// having moved out from under us. Returning normally would record the run
+	// as `success` with 0 items — indistinguishable from a quiet summer, which
+	// is how chinohills-swagit hid a six-day outage.
 	let payload: unknown;
 	try {
 		payload = JSON.parse(doc.body.toString("utf8"));
 	} catch {
-		ctx.note(`${label}: response was not JSON; nothing ingested this run.`);
-		return;
+		throw new Error(
+			`${label}: POST https://${host}/wp-json/sports/v1/main-teams returned a body that is not JSON.`,
+		);
 	}
 
 	const rows = schedulesFrom(payload);
 	if (rows === null) {
-		// The envelope is {success, data:{data:{schedules:[...]}}}. If that shape
-		// ever changes, say so loudly: an empty ingest and a moved field look
-		// identical from the outside, and the quiet one is the dangerous one.
-		ctx.note(
-			`${label}: response JSON did not contain data.data.schedules — the API shape may have changed. Nothing ingested.`,
+		// The envelope is {success, data:{data:{schedules:[...]}}}.
+		throw new Error(
+			`${label}: response JSON did not contain data.data.schedules — the API shape has probably changed.`,
 		);
-		return;
 	}
 
 	// The response is a platform-wide table filtered by request, and the loop

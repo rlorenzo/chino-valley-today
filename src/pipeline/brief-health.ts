@@ -17,12 +17,9 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
+import { QUIET_IS_HEALTHY } from "../scrapers/quiet-policy.ts";
 import { errorMessage } from "../utils/errors.ts";
-import {
-	HEADLINES_SOURCES,
-	laDateOf,
-	ZERO_ITEMS_HEALTHY_SOURCES,
-} from "./daily-brief.ts";
+import { laDateOf } from "./daily-brief.ts";
 
 const FRESH = "pipeline=fresh";
 const STALE = "pipeline=stale";
@@ -148,25 +145,27 @@ export interface SourceDegradedResult {
 	runs: ScrapeRunSummary[];
 }
 
-// A secondary-press source can keep "succeeding" while a publisher's HTML
-// silently drifts out from under the scraper, extracting 0 items run after
-// run — invisible to a check that only looks at the latest run's status.
-// This looks at the last 3 recorded runs per source and flags degraded only
-// on two unambiguous patterns: 3 straight failures, or 3 straight successes
-// with 0 items. Anything mixed is left alone — a single bad run, or a
-// success/failure mix, isn't proof of drift. Fewer than 3 recorded runs is
-// insufficient evidence either way, so it is never reported as degraded.
+// Any source can keep "succeeding" while the site it reads silently drifts out
+// from under the scraper, extracting 0 items run after run — invisible to a
+// check that only looks at the latest run's status. This looks at the last 3
+// recorded runs per source and flags degraded only on two unambiguous patterns:
+// 3 straight failures, or 3 straight successes with 0 items. Anything mixed is
+// left alone — a single bad run, or a success/failure mix, isn't proof of
+// drift. Fewer than 3 recorded runs is insufficient evidence either way, so it
+// is never reported as degraded.
 //
 // The 3-failures rule applies to every source unconditionally — a source that
 // cannot even be fetched is broken regardless of how quiet it normally is.
-// The 3-zero-items rule is different: for outlets in
-// ZERO_ITEMS_HEALTHY_SOURCES (the three student papers between issues,
-// NBC4's keyword filter matching nothing most days) a clean run of 0-item
-// successes is the expected, healthy state, not drift, so that rule is
-// skipped for them.
+// The 3-zero-items rule needs to know whether quiet is this source's normal
+// state, which QUIET_IS_HEALTHY declares per source and a test holds to the
+// registry.
+//
+// This watches EVERY source, not just the six press outlets it originally
+// covered. chinohills-swagit ingested nothing for six days and no watchdog
+// could see it, because a transcript source was not in anything's list.
 export function checkDegradedSources(
 	db: Db,
-	sourceKeys: readonly string[] = HEADLINES_SOURCES,
+	sourceKeys: readonly string[] = Object.keys(QUIET_IS_HEALTHY),
 ): SourceDegradedResult[] {
 	return sourceKeys.map((sourceKey) => {
 		const runs = db.raw
@@ -198,12 +197,12 @@ export function checkDegradedSources(
 		}
 
 		if (runs.every((r) => r.status === "success" && r.items_count === 0)) {
-			return ZERO_ITEMS_HEALTHY_SOURCES.has(sourceKey)
+			const quietIsHealthy = QUIET_IS_HEALTHY[sourceKey] ?? null;
+			return quietIsHealthy
 				? {
 						sourceKey,
 						degraded: false,
-						reason:
-							"last 3 runs all succeeded with 0 items; quiet-is-expected for this source",
+						reason: `last 3 runs all succeeded with 0 items; expected here — ${quietIsHealthy}`,
 						runs,
 					}
 				: {
@@ -233,12 +232,12 @@ async function main(): Promise<void> {
 		baseUrl: process.env.CVT_BASE_URL ?? "https://chinovalley.today",
 	});
 
-	// Headlines-elsewhere is non-blocking supplementary content — a degraded
-	// secondary-press source never touches the health file or the brief
-	// itself, which has already published by the time this watchdog runs.
-	// It only needs to reach an operator, so it uses the same exit-code
-	// idiom as the rest of this watchdog: fail the unit so
-	// `systemctl --failed` surfaces it alongside any other alert.
+	// A degraded source never touches the health file or the brief itself, which
+	// has already published by the time this watchdog runs — the brief names its
+	// own missing sections, and only `nws-forecast` and `nws-alerts` can block
+	// it. This only needs to reach an operator, so it uses the same exit-code
+	// idiom as the rest of this watchdog: fail the unit so `systemctl --failed`
+	// surfaces it alongside any other alert.
 	const degradedSources = checkDegradedSources(db).filter((s) => s.degraded);
 	for (const source of degradedSources) {
 		console.error(`DEGRADED SOURCE: ${source.sourceKey} — ${source.reason}`);

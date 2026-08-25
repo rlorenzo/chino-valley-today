@@ -155,7 +155,16 @@ const championNewsScraper: ScraperDef = {
 		const candidateUrls = await discoverCandidateUrls(ctx);
 
 		ctx.note(`Discovered ${candidateUrls.length} candidate article URLs`);
-		if (candidateUrls.length === 0) return;
+		// Zero candidates means the edition sitemap AND both category-index
+		// fallbacks came back empty — three independent ways of listing a weekly
+		// paper's articles, all silent. That is a broken discovery path, not a
+		// quiet week, and it must not record a `success` run with 0 items.
+		if (candidateUrls.length === 0) {
+			throw new Error(
+				`Discovery found no candidate article URLs at all (${SITEMAP_INDEX_URL} and both category indexes) — ` +
+					"the sitemap or the category markup has probably changed.",
+			);
+		}
 
 		const candidates: ArticleCandidate[] = candidateUrls
 			.slice(0, MAX_ARTICLES_PER_RUN)

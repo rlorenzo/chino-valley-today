@@ -228,12 +228,16 @@ const scraper: ScraperDef = {
 		// through a "/views/..." path — the exact pattern PLAN.md said to watch for.
 		const listing = await ctx.fetchRaw(LISTING_URL);
 		if (!listing.ok) {
-			ctx.note(
+			// Throwing, not returning. This scraper ingested nothing for six days
+			// (2026-08-19 onward, Swagit 403ing the droplet's IP) while recording
+			// `success` with 0 items every run, because run-one.ts reads a run's
+			// status from whether run() threw. A note nobody reads is not a
+			// signal; every failure path below therefore throws.
+			throw new Error(
 				`Listing probe FAILED: GET ${LISTING_URL} returned HTTP ${listing.status}. The public SPA entry point at ` +
 					`${HOST}/city-council-meeting/ returns 200 but its video table is empty in raw HTML with no XHR calls ` +
-					"(confirmed via browser devtools network panel) — no usable listing endpoint found. Stopping.",
+					"(confirmed via browser devtools network panel) — no usable listing endpoint found.",
 			);
-			return;
 		}
 		const allRows = parseListing(listing.body.toString("utf8"));
 		ctx.note(
@@ -243,10 +247,13 @@ const scraper: ScraperDef = {
 		);
 		const rows = sortByDateDesc(allRows);
 		if (rows.length === 0) {
-			ctx.note(
-				"No parsable/dated video rows found in the listing — nothing to ingest.",
+			// The listing is an archive: it has never been empty, and it cannot
+			// become empty by a City Council meeting not happening. Zero rows means
+			// the markup moved or the response is not the listing at all.
+			throw new Error(
+				`No parsable/dated video rows found in the listing at ${listing.finalUrl} ` +
+					`(${allRows.length} raw row(s) parsed) — the table markup has probably changed.`,
 			);
-			return;
 		}
 
 		// --- 2. Walk newest-first until one has a real transcript. ---
@@ -285,14 +292,17 @@ const scraper: ScraperDef = {
 		}
 
 		if (!target || !videoDoc || !$video) {
-			ctx.note(
-				`Tried ${tried} most-recent meeting(s) in the listing and none had a machine transcript — nothing to ingest. ` +
+			// A single meeting without a transcript yet is ordinary — that is what
+			// the walk above is for. All five in a row is not: they span months of
+			// meetings, so either the transcript markup moved or the pages are not
+			// reaching us. Both are failures, and both look exactly like this.
+			throw new Error(
+				`Tried ${tried} most-recent meeting(s) in the listing and none had a machine transcript. ` +
 					`Meetings checked: ${rows
 						.slice(0, tried)
 						.map((r) => `${r.id} (${r.dateText})`)
 						.join(", ")}.`,
 			);
-			return;
 		}
 
 		// Prefer the date embedded in the video page's own <title> (server

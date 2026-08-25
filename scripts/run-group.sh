@@ -59,7 +59,7 @@ case "$group" in
 	# (05:00, 11:00, 17:00, 23:00 PT), fail-closed robots.txt, ToS tracking,
 	# and redirect validation. The student papers and NBC4 go quiet or empty
 	# on most runs by design (dormant between issues / no Chino match) — see
-	# zeroItemsIsHealthy in daily-brief.ts.
+	# src/scrapers/quiet-policy.ts, which declares that per source.
 	press)
 		keys=(champion-news dailybulletin-news quest-news bulldogtimes-news breeze-news nbc4-news)
 		;;
