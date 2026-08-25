@@ -3,8 +3,12 @@
 
 import { errorMessage } from "./utils/errors.ts";
 
+// Sent to every host we fetch, and this repo is public, so the address here is
+// the project's rather than the operator's. A contact address in the UA is the
+// point — a publisher who wants us to stop should have somewhere to write — but
+// that is a role, not a person.
 const USER_AGENT =
-	"ChinoValleyTodayBot/0.1 (local news POC; contact: rexlorenzo@gmail.com)";
+	"ChinoValleyTodayBot/0.1 (local news; contact: chinovalleytoday@gmail.com)";
 
 const MIN_DELAY_MS = 2000;
 
