@@ -5,9 +5,16 @@ interface Props {
 	title: string;
 	description: string;
 	current?: "record" | "topics" | "about";
+	/**
+	 * Keep the page out of search indexes while leaving its links followable.
+	 * Set on the archive mirrors under /source/: they reproduce another body's
+	 * document so a citation can be read, and the issuing agency's own page is
+	 * the one that should rank for it.
+	 */
+	noindex?: boolean;
 }
 
-const { title, description, current } = Astro.props;
+const { title, description, current, noindex } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
 
 const TOPICS = [
@@ -26,6 +33,7 @@ const TOPICS = [
 		<title>{title}</title>
 		<meta name="description" content={description} />
 		<link rel="canonical" href={canonical} />
+		{noindex && <meta name="robots" content="noindex, follow" />}
 		<link
 			rel="alternate"
 			type="application/rss+xml"

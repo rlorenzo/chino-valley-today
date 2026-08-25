@@ -96,6 +96,7 @@ whenever a source changes behavior.
 - **Method:** api.weather.gov JSON API. **Zone CAZ048 covers BOTH Chino and Chino Hills** (PLAN open question 7 answered: the plan's CAZ560 guess was wrong; verified via `/points/33.99,-117.69` and `/points/33.95,-117.73`). County zone CAC071, fire zone CAZ248.
 - **Quirks:** requires User-Agent header; robots.txt is a blanket crawler Disallow — documented public API, fetched with explicit skipRobots + justification. Supports ETag.
 - **Link-back depth:** item-level (alert `@id` API permalink).
+- **Citation points at our archive, not at the API (decided 2026-08-25).** The alert `@id` is permanent and machine-checkable and completely unreadable by a person — it serves raw CAP JSON — and there is no per-alert human page at NWS to point at instead: CAP's own `web` field is just `http://www.weather.gov`, and `alerts.weather.gov` no longer resolves (both checked 2026-08-25). Alert posts and the daily brief now cite `/source/<sha256>/#<CAP id>`, which renders the archived feed this post was built from, with the live NWS alert linked from it as the authority. `forecast.weather.gov/MapClick.php?zoneid=CAZ048` was the other candidate and is wrong for the same reason the ABC report page is: it shows whatever is active today, so a post dated August 24 would later cite unrelated weather.
 - **Reliability guess:** high.
 
 ### abc-licenses — CA ABC license activity
@@ -106,6 +107,7 @@ whenever a source changes behavior.
   - Independently, a Cloudflare edge rule 301-strips ANY query string on any abc.ca.gov URL, killing both `?RPTDATE=` selection and per-license detail links.
   - Net: only the current day's report is fetchable → poll daily (fits the Phase 2 systemd-timer design); no historical backfill; per-license deep links broken (intended URL preserved in `meta.attempted_detail_url`).
 - **Provenance caveat:** source_url = the report page, which is NOT date-stable (tomorrow it shows a different day). Flagged against PLAN's citation constraint — Phase 1 should cite the archived raw document alongside the live link.
+- **The fix now exists and is not yet wired here (2026-08-25).** `/source/<sha256>/` serves the archived bytes a post was built from and is live for alerts. Wiring ABC to it needs an HTML renderer (alerts were done first: one document type, and the data was already JSON), and it needs the correction treatment — changing a PUBLISHED post's `sources` is a content edit, which EDITORIAL.md forbids doing silently. New tracker posts can cite the new route the day the renderer lands; the backfill is a separate, visible decision.
 - **Link-back depth:** document-level, date-unstable (weakest source in the registry on this axis).
 - **Reliability guess:** medium (data is clean; access is adversarial-edge-dependent).
 

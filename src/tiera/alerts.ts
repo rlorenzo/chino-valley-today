@@ -4,6 +4,7 @@
 // parseable end time is NOT treated as active — Tier A never guesses.
 import type { Db } from "../db/index.ts";
 import type { NewPost } from "../pipeline/posts.ts";
+import { archiveUrl } from "../pipeline/site-url.ts";
 import { parseMeta, queryItems } from "./queries.ts";
 import {
 	alertPostSlug,
@@ -62,13 +63,26 @@ export function generateAlerts(db: Db, now: Date): GenResult {
 			mdLink("Official alert data (National Weather Service)", row.source_url),
 		);
 
+		// THE CITATION IS THE ARCHIVE PAGE, not row.source_url.
+		//
+		// row.source_url is the alert's permanent API URL, and it is permanently
+		// unreadable: raw CAP JSON, with no per-alert human page at NWS to point
+		// at instead. /source/<sha256>/ serves the archived bytes this post was
+		// built from, rendered for a person, with the live NWS alert linked from
+		// it as the authority — and it keeps working after NWS drops the alert.
+		//
+		// The fragment is the alert's own CAP id, which is also external_id, so
+		// the citation lands on this alert rather than on the feed that carried
+		// it. Both are still one click from the reader: the body line above goes
+		// straight to NWS.
+		const anchor = row.external_id ?? null;
 		posts.push({
 			slug: alertPostSlug(dateForSlug, title, row),
 			postType: "alert",
 			tier: "A",
 			title: `Weather Alert: ${title}`,
 			bodyMd: lines.join("\n"),
-			sources: [row.source_url],
+			sources: [archiveUrl(row.doc_content_hash, anchor)],
 			sourceKeys: [row.source_key],
 			itemTypes: [row.item_type],
 		});

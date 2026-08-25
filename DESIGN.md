@@ -116,7 +116,12 @@ reading column sits on galvanised zinc.
 - **Placard yellow** `#f2b705` is wayfinding only: the rule under every crate
   field, nav underlines, counts, and focus rings on dark grounds.
 - **Oxide** `#9c2a1e` marks Tier C — content a human cleared by hand — and
-  unresolved placeholders. Never ambient.
+  unresolved placeholders. Never ambient. **Extended 2026-08-25** to the
+  stale-copy notice on an archive page (`/source/<sha256>/`): those pages
+  reproduce another body's document, including live safety text, and the notice
+  saying so is the same claim on a reader as a Tier C mark — do not trust this
+  without looking. It is the palette's only warning ink and this is a warning;
+  the alternative was under-weighting it in crate.
 
 ### The one rule with teeth
 
@@ -210,7 +215,16 @@ Borders are `1.5px` on stamps and chips, `2px` on section rules and crate seams,
 - **Inspection record** — a native `<details>` holding the full source list as a
   numbered register with ledger rules. Zero JS, keyboard operable, and in-page
   searchable when open. This is the "deep on demand" half of the provenance model;
-  the prose above it stays clean.
+  the prose above it stays clean. A row whose citation points at an archive page
+  keeps the ISSUING BODY on its stamp face and carries a muted "archived copy"
+  marker beside it — a stamp reading `chinovalley.today` would say we are our
+  own authority, which is the provenance inflation this component exists to
+  prevent.
+- **Archive page** (`/source/<sha256>/`, added 2026-08-25) — the document a post
+  was built from, rendered for a person. Crate header like any record page, an
+  oxide stale-copy notice above everything, then the document itself, then a
+  violet provenance block carrying the fetch time and the sha256 that names the
+  bytes. The contents list is crate: navigation is not provenance.
 - **Focus ring** — `3px` solid, `2px` offset, stencil black on light grounds and
   placard yellow on crate fields. Deliberately not violet; see Do's and Don'ts.
 

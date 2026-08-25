@@ -1,0 +1,642 @@
+---
+/**
+ * ARCHIVE-BACKED CITATION PAGE — /source/<sha256>/
+ *
+ * The document a post was built from, as it stood when the pipeline fetched it,
+ * served from our own content-addressed archive.
+ *
+ * Two defects made this necessary, and they are the same defect. NWS alerts
+ * cited raw CAP JSON at api.weather.gov: permanent, machine-checkable, and
+ * unreadable by a person, with no per-alert human page at NWS to point at
+ * instead. ABC licence reports cited a mutable index page that serves whatever
+ * report is newest, so the records a post described were already gone by the
+ * time a reader followed the link. One was unreadable, the other unstable. A
+ * URL that names the exact bytes fixes both, and it is the only fix that
+ * survives the source deleting its page.
+ *
+ * THIS PAGE IS A MIRROR AND SAYS SO. It carries the issuance time and links the
+ * live original as the authority, because a stale copy of safety text presented
+ * as current is the cancelled-alert-rendered-as-active failure one layer down.
+ *
+ * Alerts only for now — one document type, and the data is already JSON. HTML
+ * and PDF are harder and wait; a post citing one fails the build below rather
+ * than shipping a dead citation.
+ */
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import {
+	type ArchiveDocument,
+	archiveDocuments,
+	archiveHashFromUrl,
+	formatBytes,
+	readArchiveText,
+} from "../../lib/archive.ts";
+import {
+	type CapAlert,
+	capAlertTitle,
+	capBlocks,
+	formatCapInstant,
+	parseCapFeed,
+} from "../../lib/cap.ts";
+
+export async function getStaticPaths() {
+	// Declared INSIDE the function on purpose: Astro extracts getStaticPaths into
+	// its own module, so a const in the component frontmatter is not in scope
+	// here and the build fails with a bare "RENDERABLE is not defined".
+	/** Document types this page knows how to render. Widened one renderer at a time. */
+	const RENDERABLE = ["alert"];
+
+	const docs = archiveDocuments(RENDERABLE);
+	const built = new Set(docs.map((d) => d.hash));
+
+	// A published post's citation is baked into its frontmatter and never
+	// revisited, so a cited hash with no page here is a dead link on the live
+	// site — the exact failure this route exists to end. Fail the build instead.
+	//
+	// This is also what catches a build running where data/ is absent. A
+	// checkout with no archive and no archive citations builds a fine site; the
+	// moment one post cites an archive page, a build that cannot produce it
+	// stops rather than publishing 404s over the real thing.
+	const missing = new Map<string, string[]>();
+	for (const post of await getCollection("posts")) {
+		for (const src of post.data.sources) {
+			const hash = archiveHashFromUrl(src);
+			if (!hash || built.has(hash)) continue;
+			const citing = missing.get(hash) ?? [];
+			citing.push(post.id);
+			missing.set(hash, citing);
+		}
+	}
+	if (missing.size > 0) {
+		const detail = [...missing]
+			.map(([hash, slugs]) => `  ${hash}\n    cited by ${slugs.join(", ")}`)
+			.join("\n");
+		throw new Error(
+			`published posts cite ${missing.size} archive page(s) this build cannot produce:\n${detail}\n` +
+				"One of three things is true:\n" +
+				"  - the archive and database are missing from this checkout — build " +
+				"on the host, which holds them (scripts/deploy.sh all);\n" +
+				"  - the document is of a type /source/ does not render yet (today it " +
+				`renders: ${RENDERABLE.join(", ")});\n` +
+				"  - the database was rebuilt and these documents are gone with it — " +
+				"restore data/ from backup, because those citations cannot be " +
+				"re-derived from a fresh scrape.\n" +
+				"This build stops rather than publishing dead citations, which is the " +
+				"failure /source/ exists to end.",
+		);
+	}
+
+	return docs.map((doc) => ({ params: { hash: doc.hash }, props: { doc } }));
+}
+
+interface Props {
+	doc: ArchiveDocument;
+}
+
+const { doc } = Astro.props as Props;
+
+const text = readArchiveText(doc.rawPath);
+// null means "not a CAP feed"; [] means "a CAP feed with nothing in effect",
+// which is a real state a quiet day produces and is worth reporting as itself.
+const alerts: CapAlert[] | null = text === null ? null : parseCapFeed(text);
+
+const fetchedAt = formatCapInstant(doc.fetchedAt) ?? doc.fetchedAt;
+const size = formatBytes(doc.bytes);
+let sourceHost = "the source";
+try {
+	sourceHost = new URL(doc.url).hostname.replace(/^www\./, "");
+} catch {
+	// A malformed URL in the archive is not a reason to fail the page; the full
+	// URL still prints in the provenance block below.
+}
+
+const title = doc.title ?? `Archived ${doc.docType}`;
+---
+
+<Base
+	title={`${title} — archived copy · Chino Valley Today`}
+	description={`Chino Valley Today's archived copy of ${title}, issued by ${doc.sourceName} and fetched ${doc.fetchedAt.slice(0, 10)}.`}
+	noindex
+>
+	<article>
+		<header class="archhead">
+			<div class="shell archhead__inner">
+				<p class="archhead__kicker mark">Archived document</p>
+				<h1 class="archhead__title">{title}</h1>
+				<p class="archhead__by">
+					Issued by {doc.sourceName}. Fetched and archived by Chino Valley
+					Today on {fetchedAt}.
+				</p>
+			</div>
+		</header>
+
+		<div class="reading body">
+			{/*
+			  THE MIRROR NOTICE, first and unmissable.
+
+			  Reproducing an NWS alert in full is fine — US government work, not
+			  copyrightable — but it makes us the publisher of safety text rather
+			  than a pointer to it. What keeps that honest is saying plainly that
+			  this is a copy, when it was taken, and where the live version is.
+			*/}
+			<aside class="mirror" aria-labelledby="mirror-heading">
+				<h2 class="mirror__heading mark" id="mirror-heading">
+					This is a copy, not the authority
+				</h2>
+				<p>
+					Chino Valley Today archived these bytes on {fetchedAt} and has not
+					changed them since. What they describe may have been superseded,
+					extended or cancelled in the meantime. {sourceHost} is the authority
+					on what is in effect right now.
+				</p>
+				<p class="mirror__go">
+					<a class="stamp" href={doc.url} rel="noopener noreferrer">
+						{sourceHost}
+					</a>
+					<a class="mirror__url" href={doc.url} rel="noopener noreferrer">
+						Open the live original &rarr;
+					</a>
+				</p>
+			</aside>
+
+			{
+				alerts === null && (
+					<p class="archnote">
+						These archived bytes are not readable as a weather alert feed, so
+						there is nothing to lay out here. Follow the original above to read
+						the document at its source; its exact address is recorded below.
+					</p>
+				)
+			}
+
+			{
+				alerts !== null && alerts.length === 0 && (
+					<p class="archnote">
+						No alerts were in effect for this area when this document was
+						fetched. That is the record, not a gap.
+					</p>
+				)
+			}
+
+			{
+				alerts !== null && alerts.length > 1 && (
+					<nav class="archtoc" aria-labelledby="contents-heading">
+						<h2 class="archtoc__heading mark" id="contents-heading">
+							{alerts.length} alerts in this document
+						</h2>
+						<ol class="archtoc__list">
+							{alerts.map((a) => (
+								<li>
+									<a href={`#${a.id}`}>{capAlertTitle(a)}</a>
+									{a.areaDesc && (
+										<span class="archtoc__area">{a.areaDesc.split(";")[0]}</span>
+									)}
+								</li>
+							))}
+						</ol>
+					</nav>
+				)
+			}
+
+			{
+				(alerts ?? []).map((alert) => {
+					// Every value below is copied out of the record verbatim. Nothing
+					// here is derived, ranked, or characterised.
+					const times: Array<[string, string | null]> = [
+						["Issued", formatCapInstant(alert.sent)],
+						["Effective", formatCapInstant(alert.effective ?? alert.onset)],
+						["Ends", formatCapInstant(alert.ends ?? alert.expires)],
+					];
+					const facts: Array<[string, string | null]> = [
+						["Severity", alert.severity],
+						["Urgency", alert.urgency],
+						["Certainty", alert.certainty],
+						["Status", alert.status],
+						["Message type", alert.messageType],
+					];
+					const description = capBlocks(alert.description);
+					const instruction = capBlocks(alert.instruction);
+					return (
+						<section class="alert" id={alert.id}>
+							<h2 class="alert__title">{capAlertTitle(alert)}</h2>
+							{alert.senderName && (
+								<p class="alert__sender mark">{alert.senderName}</p>
+							)}
+
+							{/*
+							  THE COPY NOTICE, REPEATED PER ALERT.
+
+							  The page-level notice at the top is not enough. Citations land
+							  on a fragment, so the browser scrolls straight past it to this
+							  section — measured: arriving at #<CAP id> puts this heading at
+							  the top of the viewport and the notice 300px above it, unseen.
+							  A reader who never learns this is a dated copy is the failure
+							  the notice exists to prevent, so it also lives where they
+							  actually arrive.
+							*/}
+							<p class="alert__copy">
+								Archived copy, taken {fetchedAt}.{" "}
+								{alert.originalUrl ? (
+									<a href={alert.originalUrl} rel="noopener noreferrer">
+										Read this alert at the National Weather Service &rarr;
+									</a>
+								) : (
+									<a href={doc.url} rel="noopener noreferrer">
+										Read the live original at {sourceHost} &rarr;
+									</a>
+								)}
+							</p>
+
+							{/*
+							  parameters.NWSheadline states an upgrade, extension or expiry
+							  in plain words ("HEAT ADVISORY WILL EXPIRE AT 8 PM PDT THIS
+							  EVENING"). It is routinely the most useful sentence in the
+							  whole record and it sits four levels deep in the JSON, so it
+							  leads here.
+							*/}
+							{alert.nwsHeadline && (
+								<p class="alert__nwshead">{alert.nwsHeadline}</p>
+							)}
+							{alert.headline && <p class="alert__headline">{alert.headline}</p>}
+
+							<dl class="facts">
+								{[...times, ...facts]
+									.filter(([, v]) => v)
+									.map(([k, v]) => (
+										<div class="facts__pair">
+											<dt class="mark">{k}</dt>
+											<dd>{v}</dd>
+										</div>
+									))}
+							</dl>
+
+							{alert.areaDesc && (
+								<p class="alert__area">
+									<span class="mark">Area</span>
+									{alert.areaDesc}
+								</p>
+							)}
+
+							{description.length > 0 && (
+								<div class="capbody">
+									{description.map((block) =>
+										block.kind === "list" ? (
+											<ul>
+												{block.items.map((item) => (
+													<li>{item}</li>
+												))}
+											</ul>
+										) : (
+											<p>{block.text}</p>
+										),
+									)}
+								</div>
+							)}
+
+							{instruction.length > 0 && (
+								<div class="capbody capbody--instruction">
+									<h3 class="mark">What the Weather Service says to do</h3>
+									{instruction.map((block) =>
+										block.kind === "list" ? (
+											<ul>
+												{block.items.map((item) => (
+													<li>{item}</li>
+												))}
+											</ul>
+										) : (
+											<p>{block.text}</p>
+										),
+									)}
+								</div>
+							)}
+
+						</section>
+					);
+				})
+			}
+
+			{/*
+			  THE ADDRESS OF THE BYTES. The sha256 is not decoration: it is what
+			  makes this URL unable to drift onto different content, and anyone
+			  holding their own copy of the document can check it against this.
+			*/}
+			<section class="prov" aria-labelledby="prov-heading">
+				<h2 class="prov__heading mark" id="prov-heading">Provenance</h2>
+				<dl class="facts">
+					<div class="facts__pair">
+						<dt class="mark">Issued by</dt>
+						<dd>{doc.sourceName}</dd>
+					</div>
+					<div class="facts__pair">
+						<dt class="mark">Fetched from</dt>
+						<dd class="prov__url">{doc.url}</dd>
+					</div>
+					<div class="facts__pair">
+						<dt class="mark">Fetched at</dt>
+						<dd>{fetchedAt}</dd>
+					</div>
+					<div class="facts__pair">
+						<dt class="mark">sha256</dt>
+						<dd class="prov__hash">{doc.hash}</dd>
+					</div>
+					{
+						size && (
+							<div class="facts__pair">
+								<dt class="mark">Size</dt>
+								<dd>{size}</dd>
+							</div>
+						)
+					}
+				</dl>
+			</section>
+
+			<nav class="postnav mark" aria-label="Record">
+				<a href="/">
+					<svg
+						viewBox="0 0 12 12"
+						width="11"
+						height="11"
+						aria-hidden="true"
+						focusable="false"
+					>
+						<path
+							d="M9 1.5 L3 6 L9 10.5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"></path>
+					</svg>
+					All entries
+				</a>
+			</nav>
+		</div>
+	</article>
+</Base>
+
+<style>
+	/* Crate masthead, as a post gets: this IS a record page, not a utility view. */
+	.archhead {
+		background: var(--crate);
+		color: #fff;
+		border-bottom: 6px solid var(--placard);
+	}
+	.archhead__inner {
+		padding-block: 1.9rem 2.1rem;
+		max-width: 46rem;
+	}
+	.archhead__kicker {
+		margin: 0 0 0.7rem;
+		font-size: 0.72rem;
+		letter-spacing: 0.13em;
+		color: var(--placard);
+	}
+	.archhead__title {
+		margin: 0;
+		font-size: clamp(1.4rem, 1.1rem + 1.8vw, 2.2rem);
+		line-height: 1.16;
+		font-weight: 600;
+		letter-spacing: -0.006em;
+	}
+	.archhead__by {
+		margin: 0.9rem 0 0;
+		font-size: 0.86rem;
+		color: #cdd8ec;
+	}
+
+	.body {
+		padding-block: 2.2rem 1rem;
+	}
+
+	/* The mirror notice wears oxide, the palette's warning ink. A reader who
+	   reads nothing else here has to come away knowing the live alert may say
+	   something different. */
+	.mirror {
+		border-left: 4px solid var(--oxide);
+		background: var(--galv-sunk);
+		padding: 1rem 1.1rem;
+		margin-bottom: 2.2rem;
+	}
+	.mirror__heading {
+		margin: 0 0 0.5rem;
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--oxide);
+	}
+	.mirror p {
+		margin: 0 0 0.7rem;
+		font-size: 0.92rem;
+		line-height: 1.55;
+	}
+	.mirror__go {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		flex-wrap: wrap;
+		margin-bottom: 0;
+	}
+	.mirror__url {
+		font-size: 0.86rem;
+	}
+
+	.archnote {
+		margin: 0 0 2rem;
+		color: var(--muted);
+		font-size: 0.95rem;
+		line-height: 1.55;
+	}
+
+	/* Crate, not violet. A contents list is navigation, not provenance, and the
+	   one rule with teeth says violet marks a sourced claim and nothing else.
+	   The provenance block at the foot of the page is the part that earns it. */
+	.archtoc {
+		border-top: 2px solid var(--crate);
+		border-bottom: 1px solid var(--galv-edge);
+		padding-block: 0.9rem 1rem;
+		margin-bottom: 2.2rem;
+	}
+	.archtoc__heading {
+		margin: 0 0 0.6rem;
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--crate);
+	}
+	.archtoc__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		counter-reset: alert;
+	}
+	.archtoc__list li {
+		counter-increment: alert;
+		display: grid;
+		grid-template-columns: 1.6rem 1fr;
+		gap: 0.1rem 0.6rem;
+		padding-block: 0.4rem;
+	}
+	.archtoc__list li::before {
+		content: counter(alert, decimal-leading-zero);
+		grid-row: 1 / span 2;
+		font-family: "Archivo Narrow", "Arial Narrow", sans-serif;
+		font-weight: 700;
+		font-size: 0.72rem;
+		color: var(--muted);
+		padding-top: 0.2rem;
+	}
+	.archtoc__area {
+		font-size: 0.76rem;
+		color: var(--muted);
+	}
+
+	.alert {
+		border-top: 1px solid var(--galv-edge);
+		padding-block: 1.8rem 0.6rem;
+		/* Arrived at from a citation's fragment, so the heading must not land
+		   flush against the top edge of the viewport. */
+		scroll-margin-top: 1.5rem;
+	}
+	.alert__title {
+		margin: 0;
+		font-size: 1.3rem;
+		line-height: 1.2;
+		font-weight: 600;
+	}
+	.alert__sender {
+		margin: 0.35rem 0 0;
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+	/* Oxide, like the page-level notice: same warning, same ink, so a reader
+	   arriving mid-page reads the same thing as one arriving at the top. */
+	.alert__copy {
+		margin: 0.6rem 0 0;
+		padding-left: 0.7rem;
+		border-left: 3px solid var(--oxide);
+		font-size: 0.8rem;
+		line-height: 1.5;
+		color: var(--muted);
+	}
+
+	.alert__nwshead {
+		margin: 1rem 0 0;
+		padding: 0.6rem 0.8rem;
+		background: var(--placard);
+		color: var(--stencil);
+		font-weight: 600;
+		font-size: 0.95rem;
+		line-height: 1.4;
+	}
+	.alert__headline {
+		margin: 0.9rem 0 0;
+		font-size: 0.92rem;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+
+	.facts {
+		margin: 1.2rem 0 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+		gap: 0.7rem 1.2rem;
+		border-top: 1px solid var(--galv-edge);
+		border-bottom: 1px solid var(--galv-edge);
+		padding-block: 0.9rem;
+	}
+	.facts__pair {
+		min-width: 0;
+	}
+	.facts dt {
+		font-size: 0.68rem;
+		letter-spacing: 0.11em;
+		color: var(--muted);
+	}
+	.facts dd {
+		margin: 0.15rem 0 0;
+		font-size: 0.88rem;
+		line-height: 1.4;
+		overflow-wrap: anywhere;
+	}
+
+	.alert__area {
+		margin: 1rem 0 0;
+		font-size: 0.86rem;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+	.alert__area .mark {
+		display: block;
+		font-size: 0.68rem;
+		letter-spacing: 0.11em;
+		margin-bottom: 0.15rem;
+	}
+
+	.capbody {
+		margin-top: 1.3rem;
+	}
+	.capbody p,
+	.capbody li {
+		line-height: 1.6;
+	}
+	.capbody p {
+		margin: 0 0 0.9rem;
+	}
+	.capbody ul {
+		margin: 0 0 0.9rem;
+		padding-left: 1.1rem;
+	}
+	.capbody li + li {
+		margin-top: 0.35rem;
+	}
+	.capbody--instruction {
+		border-left: 3px solid var(--crate-line);
+		padding-left: 0.9rem;
+	}
+	.capbody--instruction h3 {
+		margin: 0 0 0.6rem;
+		font-size: 0.72rem;
+		letter-spacing: 0.11em;
+		color: var(--crate);
+		font-weight: 700;
+	}
+
+	.prov {
+		margin-top: 3rem;
+		border-top: 2px solid var(--stamp);
+		padding-top: 0.9rem;
+	}
+	.prov__heading {
+		margin: 0;
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--stamp);
+	}
+	.prov .facts {
+		border-bottom: none;
+	}
+	.prov__url,
+	.prov__hash {
+		font-size: 0.76rem;
+		color: var(--muted);
+		overflow-wrap: anywhere;
+	}
+	.prov__hash {
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	}
+
+	.postnav {
+		margin-top: 2.4rem;
+		padding-top: 1.2rem;
+		border-top: 1px solid var(--galv-edge);
+		font-size: 0.76rem;
+		letter-spacing: 0.08em;
+	}
+	.postnav a {
+		text-decoration: none;
+		color: var(--crate);
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+	.postnav a:hover {
+		text-decoration: underline;
+	}
+</style>

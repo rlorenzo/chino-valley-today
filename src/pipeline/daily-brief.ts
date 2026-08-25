@@ -52,6 +52,7 @@ import {
 	type PostRow,
 	transitionPost,
 } from "./posts.ts";
+import { archiveUrl } from "./site-url.ts";
 
 const LA_TZ = "America/Los_Angeles";
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
@@ -1237,8 +1238,13 @@ export function assembleBrief(
 		// links in prose render as a nowrap badge, so putting a 90-character
 		// advisory title inside one produced a badge too wide to wrap that
 		// overflowed the column and crossed into the calendar rail.
+		// Cites the archive page, not alert.source_url — the same link the alert
+		// POST carries (src/tiera/alerts.ts), so the brief and the post send a
+		// reader to the same readable record instead of one of them landing on
+		// raw CAP JSON. The label stays "NWS": the page is a mirror of the
+		// Weather Service's own document and says so at the top.
 		alertLines.push(
-			`**Active alert:** ${mdEscape((alert.title ?? "").trim())} (${mdLink("NWS", cite(alert.source_url))})`,
+			`**Active alert:** ${mdEscape((alert.title ?? "").trim())} (${mdLink("NWS", cite(archiveUrl(alert.doc_content_hash, alert.external_id)))})`,
 			"",
 		);
 	}
