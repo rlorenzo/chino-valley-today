@@ -13,7 +13,8 @@ findings ported.
 ## Probe log (URL -> result)
 
 All probes made with UA `ChinoValleyTodayBot/0.1 (local news POC; contact:
-rexlorenzo@gmail.com)`, 2026-08-11/12.
+<operator address>)`, 2026-08-11/12. The UA now carries the project address,
+`chinovalleytoday@gmail.com`; the probes predate that change.
 
 | URL | Result |
 |---|---|
