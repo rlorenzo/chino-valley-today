@@ -211,6 +211,13 @@ fi
 # an alert that outlives its fault is worse than none, because it teaches you
 # to ignore it. (CI's host-update path rebuilds too, so pure code drift
 # self-clears; unit drift cannot, because installing units is root — see top.)
+#
+# This advice was itself half the trap on 2026-08-24. It was correct about the
+# markers and dangerous about the content: `all` then meant `deploy_code;
+# deploy_site`, and deploy_site built the site on the developer machine running
+# it and published that over 43 pages of host-only content. `all` now rebuilds
+# on the host, so the remediation and the safe path are finally the same
+# command.
 echo "  fix with: scripts/deploy.sh all   (from a developer machine)" >&2
 
 # Flip the LIVE health file, the way brief-health.ts does for a missing brief.

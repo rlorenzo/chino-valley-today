@@ -1,9 +1,17 @@
 #!/usr/bin/env bash
-# Deploy to the droplet. Run from a developer machine, not on the droplet.
+# Deploy to the droplet. Run from a developer machine, except the two host-side
+# subcommands (local, host-update) below, which run on the droplet itself.
 #
-#   scripts/deploy.sh site     build and publish the static site (default)
 #   scripts/deploy.sh code     update the pipeline checkout + deps + units
-#   scripts/deploy.sh all      both
+#   scripts/deploy.sh all      that, then rebuild the site ON the host
+#   scripts/deploy.sh site     build HERE and publish — guarded, see below
+#
+# `all` is the one to reach for. The site should always be built on the droplet,
+# because the droplet holds content this checkout does not: queued, held and
+# rejected posts are gitignored, published briefs are too, and
+# content/published/ is written on the host when a post is approved. `site`
+# builds from whatever this machine has and publishes that over the real thing,
+# so it refuses unless CVT_ALLOW_LOCAL_BUILD is set.
 #
 # Two more run ON the droplet rather than from a developer machine, and are
 # what a forced-command SSH key invokes:
@@ -36,17 +44,40 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-if [ -f "$ROOT/deploy/deploy.env" ]; then
+# No default subcommand. It used to be `site`, so a bare `scripts/deploy.sh`
+# published a local build; whatever the default is, it should not be the one
+# thing here that can overwrite the live site with the wrong content.
+what="${1:-}"
+
+# Validated before ANY configuration is read, so a typo says so rather than
+# failing on a missing CVT_DEPLOY_HOST it never needed — or on a deploy.env
+# that cannot be sourced.
+case "$what" in
+	site | code | all | local | host-update) ;;
+	*)
+		echo "usage: $0 <code|all|site|local|host-update>" >&2
+		echo "  code  update the checkout, deps and systemd units (needs root on the host)" >&2
+		echo "  all   that, then rebuild the site on the host" >&2
+		echo "  site  build HERE and publish; guarded, see CVT_ALLOW_LOCAL_BUILD" >&2
+		echo "  local / host-update  run ON the droplet" >&2
+		exit 64
+		;;
+esac
+
+# CVT_DEPLOY_ENV overrides which file this reads, and exists so the guard tests
+# can point it at /dev/null. A per-operator deploy.env holds the real droplet
+# address, and a test that let one leak in would aim its fixtures at production.
+ENV_FILE="${CVT_DEPLOY_ENV:-$ROOT/deploy/deploy.env}"
+if [ -f "$ENV_FILE" ]; then
 	set -a
-	# shellcheck disable=SC1091  # gitignored, per-operator, not checkable here
-	. "$ROOT/deploy/deploy.env"
+	# shellcheck disable=SC1090,SC1091  # gitignored, per-operator, not checkable here
+	. "$ENV_FILE"
 	set +a
 fi
 
 HOST="${CVT_DEPLOY_HOST:-}"
 WEB="${CVT_DEPLOY_WEB:-/var/www/chinovalley.today}"
 APP="${CVT_DEPLOY_APP:-/srv/chino-valley-today}"
-what="${1:-site}"
 
 # `local` runs ON the target and needs no ssh target; every other mode reaches
 # out over ssh and cannot proceed without one.
@@ -104,8 +135,56 @@ case "$what" in
 		;;
 esac
 
+# Rebuild the site ON the droplet, from the droplet's own checkout and content.
+#
+# This is what `all` uses now, in place of deploy_site. The host is a source of
+# truth for content that git does not have — content/queue/, content/held/ and
+# content/rejected/ are gitignored, published briefs are too, and
+# content/published/ is written on the host when a post is approved — so the
+# host is the only machine that can build the real site.
+#
+# Runs as the service account, so the release lands with the right ownership
+# and the root guard in deploy_local has nothing to refuse.
+rebuild_on_host() {
+	echo "==> rebuilding the site on the host"
+	# Both paths are forwarded, not just the one that changes behaviour.
+	# deploy_local builds from the script's own checkout, so invoking
+	# $APP/scripts/deploy.sh already lands in the right tree — but the remote
+	# run's own root-refusal message names $APP, and a diagnostic that names a
+	# path nobody configured is how an operator ends up fixing the wrong host.
+	ssh "$HOST" "sudo -u cvtoday env CVT_DEPLOY_WEB='$WEB' CVT_DEPLOY_APP='$APP' '$APP/scripts/deploy.sh' local"
+}
+
+# BUILDS LOCALLY AND PUBLISHES THE RESULT, which is almost always the wrong
+# content. Guarded, and left in place only for an emergency where the host
+# cannot build at all.
+#
+# On 2026-08-24 the live site served a laptop's build for about 90 seconds: 18
+# posts instead of 35, /brief/2026-08-24/ a 404, and the front page missing
+# everything from 08-20 onward. Nothing malfunctioned. `check-code-drift.sh`
+# printed its standard remediation, `deploy.sh all`, `all` was `deploy_code;
+# deploy_site`, and deploy_site did exactly what it says — built 26 pages from a
+# developer checkout and rsynced them over 43 pages of real content. The deploy
+# reported success throughout; the post-deploy check caught it.
+#
+# deploy/README.md already warned that a laptop-built release lands with the
+# wrong uid. The uid was never the sharp end: the content is.
 deploy_site() {
-	echo "==> building the site"
+	if [ -z "${CVT_ALLOW_LOCAL_BUILD:-}" ]; then
+		echo "deploy: refusing to build the site on this machine." >&2
+		echo "  The droplet holds content this checkout does not have: the queued," >&2
+		echo "  held and rejected posts are gitignored, published briefs are too," >&2
+		echo "  and content/published/ is written on the host at approval time. A" >&2
+		echo "  build from here publishes a smaller, older site over the real one." >&2
+		echo "  Rebuild on the host instead:" >&2
+		echo "    $0 all              code + units, then a rebuild on the host" >&2
+		echo "    ssh \$CVT_DEPLOY_HOST  and run: scripts/deploy.sh host-update" >&2
+		echo "  (set CVT_ALLOW_LOCAL_BUILD=1 only if the host cannot build at all," >&2
+		echo "   and expect to lose every post that exists only there.)" >&2
+		exit 79
+	fi
+	echo "==> building the site LOCALLY (CVT_ALLOW_LOCAL_BUILD is set)"
+	echo "    any post that exists only on the host will be published over." >&2
 	# No CVT_SITE_ORIGIN override: astro.config.mjs already defaults to
 	# https://chinovalley.today, which is what this host serves.
 	(cd site && npm ci && npm run build)
@@ -396,8 +475,13 @@ deploy_host_update() {
 case "$what" in
 	site) deploy_site ;;
 	code) deploy_code ;;
-	all) deploy_code; deploy_site ;;
+	# Code and units from here, the rebuild on the host. `all` used to call
+	# deploy_site, which is how a laptop's build reached the live site.
+	all) deploy_code; rebuild_on_host ;;
 	local) deploy_local ;;
 	host-update) deploy_host_update ;;
-	*) echo "usage: $0 <site|code|all|local|host-update>" >&2; exit 64 ;;
+	# Unreachable: the subcommand was validated at the top, before anything
+	# that could need configuration. Kept so this dispatch cannot silently do
+	# nothing if the two lists ever fall out of step.
+	*) echo "usage: $0 <code|all|site|local|host-update>" >&2; exit 64 ;;
 esac
