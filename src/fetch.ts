@@ -154,6 +154,7 @@ async function getRobots(
 	if (robotsCache.has(origin)) return robotsCache.get(origin) ?? null;
 	let groups: RobotGroup[] | null = null;
 	try {
+		assertOnlineAllowed(`${origin}/robots.txt`);
 		const res = await fetch(`${origin}/robots.txt`, {
 			headers: { "user-agent": USER_AGENT },
 			signal: AbortSignal.timeout(15000),
@@ -166,6 +167,9 @@ async function getRobots(
 			);
 		}
 	} catch (err) {
+		// Offline is not "robots.txt happened to be unreachable, proceed". Failing
+		// open here would turn a deliberate block into a silent pass.
+		if (err instanceof OfflineError) throw err;
 		if (failClosed) {
 			throw new Error(
 				`robots.txt check failed (fail-closed): ${errorMessage(err)}`,
@@ -178,6 +182,38 @@ async function getRobots(
 }
 
 // ---- fetch ----
+
+/**
+ * The one door to the network, so there is one place to shut it.
+ *
+ * `CVT_OFFLINE=1` makes every request throw instead of leaving the machine.
+ * It exists for the integration suite: tests/integration/run-brief-retry.test.sh
+ * drives scripts/run-brief.sh, whose retry loop re-scrapes the stale blocking
+ * sources — which meant the suite made live NWS requests, and, because those
+ * requests SUCCEEDED, the prerequisites it had staged as stale went fresh and
+ * the run went on to assemble and publish a real daily brief into
+ * content/published/. The test still passed: run-brief.sh failed one step later
+ * at deploy.sh, so the assertion was satisfied by the wrong failure entirely.
+ *
+ * A test that reaches the network is not testing this repo. Failing loudly is
+ * also the point — a silent no-op would let a scraper's own error handling
+ * absorb the block and report a clean run.
+ *
+ * Its own error type, because every other throw out of a fetch here is a
+ * transport error and gets one retry after a 5s pause. This one is a standing
+ * decision, not a blip: retrying it only spends ten seconds arriving at the
+ * same answer, once per request, across a whole suite.
+ */
+class OfflineError extends Error {}
+
+function assertOnlineAllowed(url: string): void {
+	if (process.env.CVT_OFFLINE) {
+		throw new OfflineError(
+			`CVT_OFFLINE is set; refusing to fetch ${url}. ` +
+				"Something under test tried to reach the network.",
+		);
+	}
+}
 
 function validateHostAndProtocol(url: string, allowedHosts?: string[]): URL {
 	const u = new URL(url);
@@ -200,6 +236,7 @@ async function attempt(
 	redirect: "follow" | "manual" = "follow",
 	body?: string,
 ): Promise<Response> {
+	assertOnlineAllowed(url);
 	return fetch(url, {
 		headers,
 		redirect,
@@ -275,6 +312,9 @@ export async function politeFetch(
 				res = await attempt(currentUrl, headers, redirectMode, reqBody);
 			}
 		} catch (err) {
+			// A refusal to go online is a decision, not a transient failure; a
+			// retry can only reach it again more slowly.
+			if (err instanceof OfflineError) throw err;
 			// Sources onboarded fail-closed surface the transport error instead of
 			// silently retrying: for those, whether the request happened at all is
 			// part of what the caller is being asked to decide.
