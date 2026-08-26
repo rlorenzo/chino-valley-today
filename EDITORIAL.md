@@ -14,6 +14,43 @@ reviewer. Changes to this file are editorial decisions — date them.
 - Generated recaps are summaries of the public record, NEVER "minutes."
   Official minutes are a legal record adopted by the body. Label accordingly.
 
+### Archive-backed citations (decided 2026-08-25)
+
+Some sources publish a link a reader cannot use. An NWS alert's permanent URL
+serves raw CAP JSON and there is no per-alert human page to point at instead;
+an ABC licence report page serves whatever report is newest, so the records a
+post describes are gone by the time anyone follows the link. For those, the
+citation is `/source/<sha256>/` — our own dated copy of the exact bytes the
+post was built from, rendered for a person.
+
+- **The mirror is never the authority.** Every archive page carries the fetch
+  time and links the issuing body's live page above everything else, and says
+  in plain words that what it shows may have been superseded, extended or
+  cancelled. A stale copy of safety text presented as current is the same
+  failure as an expired alert rendered as active, one layer down.
+- **The stamp still names the issuing body**, not us. A provenance stamp
+  reading `chinovalley.today` would claim we are our own source.
+- **Reproducing the document in full is the point, and it has a limit.** NWS
+  alerts are US government work and not copyrightable, so the page carries the
+  alert entire. This licenses nothing for secondary press, whose 1–2 sentence
+  limit above is copyright and holds regardless.
+- **A statewide document is mirrored as an extract, disclosed as one.** ABC
+  licence reports are statewide — 410 rows across 183 cities in the
+  2026-08-12 report, two of them in Chino. The archive page renders the rows
+  whose premises city we cover, states how many of how many it is showing, and
+  links the full report. Copyright does not require this; scope does. Standing
+  up a permanent, self-hosted, second copy of 408 unrelated licensees is not
+  what citing two rows requires, and this is a two-city publication.
+- **Two columns of a mirrored licence row are never rendered:** the licensee's
+  mailing address and the escrow agent's address. A mailing address is
+  frequently a sole proprietor's home, the escrow line is a third party's
+  address, and neither backs any claim published here. The state publishes
+  both; that makes them public, not ours to re-host. The page names what it
+  leaves out, so the omission is disclosed rather than silent.
+- **Backfilling an already-published post's citation is a content edit** and
+  gets the visible-correction treatment below, like any other. New posts cite
+  the new route immediately; old ones are a separate, deliberate decision.
+
 ## Tiers (binding routing rules)
 
 - **Tier A — auto-publish, zero LLM:** deterministic template rendering of

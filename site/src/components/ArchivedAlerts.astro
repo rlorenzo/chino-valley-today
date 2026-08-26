@@ -1,0 +1,226 @@
+---
+/**
+ * The alerts inside one archived api.weather.gov feed, rendered for a person.
+ *
+ * Split out of pages/source/[hash].astro when the ABC renderer joined it: the
+ * page owns the chrome every archive page shares (mirror notice, provenance,
+ * the bytes' address) and each renderer owns one document type.
+ */
+import {
+	type CapAlert,
+	capAlertTitle,
+	capBlocks,
+	formatCapInstant,
+} from "../lib/cap.ts";
+
+interface Props {
+	alerts: CapAlert[];
+	/** When the bytes were archived, already formatted. */
+	fetchedAt: string;
+	/** The document's own URL, for an alert that carries no @id of its own. */
+	documentUrl: string;
+	sourceHost: string;
+}
+
+const { alerts, fetchedAt, documentUrl, sourceHost } = Astro.props;
+---
+
+{
+	alerts.length === 0 && (
+		<p class="archnote">
+			No alerts were in effect for this area when this document was fetched.
+			That is the record, not a gap.
+		</p>
+	)
+}
+
+{
+	alerts.length > 1 && (
+		<nav class="archtoc" aria-labelledby="contents-heading">
+			<h2 class="archtoc__heading mark" id="contents-heading">
+				{alerts.length} alerts in this document
+			</h2>
+			<ol class="archtoc__list">
+				{alerts.map((a) => (
+					<li>
+						<a href={`#${a.id}`}>{capAlertTitle(a)}</a>
+						{a.areaDesc && (
+							<span class="archtoc__meta">{a.areaDesc.split(";")[0]}</span>
+						)}
+					</li>
+				))}
+			</ol>
+		</nav>
+	)
+}
+
+{
+	alerts.map((alert) => {
+		// Every value below is copied out of the record verbatim. Nothing here is
+		// derived, ranked, or characterised.
+		const facts: Array<[string, string | null]> = [
+			["Issued", formatCapInstant(alert.sent)],
+			["Effective", formatCapInstant(alert.effective ?? alert.onset)],
+			["Ends", formatCapInstant(alert.ends ?? alert.expires)],
+			["Severity", alert.severity],
+			["Urgency", alert.urgency],
+			["Certainty", alert.certainty],
+			["Status", alert.status],
+			["Message type", alert.messageType],
+		];
+		const description = capBlocks(alert.description);
+		const instruction = capBlocks(alert.instruction);
+		return (
+			<section class="entry" id={alert.id}>
+				<h2 class="entry__title">{capAlertTitle(alert)}</h2>
+				{alert.senderName && (
+					<p class="entry__by mark">{alert.senderName}</p>
+				)}
+
+				{/*
+				  THE COPY NOTICE, REPEATED PER ALERT.
+
+				  The page-level notice is not enough. Citations land on a fragment,
+				  so the browser scrolls straight past it to this section — measured:
+				  arriving at #<CAP id> puts this heading at the top of the viewport
+				  and the notice 300px above it, unseen. A reader who never learns
+				  this is a dated copy is the failure the notice exists to prevent,
+				  so it also lives where they actually arrive.
+				*/}
+				<p class="entry__copy">
+					Archived copy, taken {fetchedAt}.{" "}
+					{alert.originalUrl ? (
+						<a href={alert.originalUrl} rel="noopener noreferrer">
+							Read this alert at the National Weather Service &rarr;
+						</a>
+					) : (
+						<a href={documentUrl} rel="noopener noreferrer">
+							Read the live original at {sourceHost} &rarr;
+						</a>
+					)}
+				</p>
+
+				{/*
+				  parameters.NWSheadline states an upgrade, extension or expiry in
+				  plain words ("HEAT ADVISORY WILL EXPIRE AT 8 PM PDT THIS EVENING").
+				  It is routinely the most useful sentence in the whole record and it
+				  sits four levels deep in the JSON, so it leads here.
+				*/}
+				{alert.nwsHeadline && (
+					<p class="entry__banner">{alert.nwsHeadline}</p>
+				)}
+				{alert.headline && <p class="entry__sub">{alert.headline}</p>}
+
+				<dl class="facts">
+					{facts
+						.filter(([, v]) => v)
+						.map(([k, v]) => (
+							<div class="facts__pair">
+								<dt class="mark">{k}</dt>
+								<dd>{v}</dd>
+							</div>
+						))}
+				</dl>
+
+				{alert.areaDesc && (
+					<p class="entry__area">
+						<span class="mark">Area</span>
+						{alert.areaDesc}
+					</p>
+				)}
+
+				{description.length > 0 && (
+					<div class="capbody">
+						{description.map((block) =>
+							block.kind === "list" ? (
+								<ul>
+									{block.items.map((item) => (
+										<li>{item}</li>
+									))}
+								</ul>
+							) : (
+								<p>{block.text}</p>
+							),
+						)}
+					</div>
+				)}
+
+				{instruction.length > 0 && (
+					<div class="capbody capbody--instruction">
+						<h3 class="mark">What the Weather Service says to do</h3>
+						{instruction.map((block) =>
+							block.kind === "list" ? (
+								<ul>
+									{block.items.map((item) => (
+										<li>{item}</li>
+									))}
+								</ul>
+							) : (
+								<p>{block.text}</p>
+							),
+						)}
+					</div>
+				)}
+			</section>
+		);
+	})
+}
+
+<style>
+	.entry__banner {
+		margin: 1rem 0 0;
+		padding: 0.6rem 0.8rem;
+		background: var(--placard);
+		color: var(--stencil);
+		font-weight: 600;
+		font-size: 0.95rem;
+		line-height: 1.4;
+	}
+	.entry__sub {
+		margin: 0.9rem 0 0;
+		font-size: 0.92rem;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+	.entry__area {
+		margin: 1rem 0 0;
+		font-size: 0.86rem;
+		color: var(--muted);
+		line-height: 1.5;
+	}
+	.entry__area .mark {
+		display: block;
+		font-size: 0.68rem;
+		letter-spacing: 0.11em;
+		margin-bottom: 0.15rem;
+	}
+
+	.capbody {
+		margin-top: 1.3rem;
+	}
+	.capbody p,
+	.capbody li {
+		line-height: 1.6;
+	}
+	.capbody p {
+		margin: 0 0 0.9rem;
+	}
+	.capbody ul {
+		margin: 0 0 0.9rem;
+		padding-left: 1.1rem;
+	}
+	.capbody li + li {
+		margin-top: 0.35rem;
+	}
+	.capbody--instruction {
+		border-left: 3px solid var(--crate-line);
+		padding-left: 0.9rem;
+	}
+	.capbody--instruction h3 {
+		margin: 0 0 0.6rem;
+		font-size: 0.72rem;
+		letter-spacing: 0.11em;
+		color: var(--crate);
+		font-weight: 700;
+	}
+</style>

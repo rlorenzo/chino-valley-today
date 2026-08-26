@@ -49,6 +49,69 @@ async function withStubbedFetch(
 
 const ALLOW_ALL = "User-agent: *\nAllow: /\n";
 
+// CVT_OFFLINE is what the integration suite sets so that driving a production
+// script cannot reach a real service. It is asserted here rather than trusted,
+// because the failure it prevents is silent: the suite's step 5 used to make
+// live NWS requests, and because those requests SUCCEEDED, the stale
+// prerequisites it had staged went fresh and a real brief got published — while
+// the test still passed on a later, unrelated failure.
+test("CVT_OFFLINE refuses to leave the machine", async (t) => {
+	await t.test(
+		"throws instead of fetching, and never calls fetch",
+		async () => {
+			process.env.CVT_OFFLINE = "1";
+			try {
+				const requested = await withStubbedFetch(
+					{ "https://offline.example/x": { body: "should never be read" } },
+					async () => {
+						await assert.rejects(
+							() =>
+								politeFetch("https://offline.example/x", { skipRobots: true }),
+							{ message: /CVT_OFFLINE is set; refusing to fetch/ },
+						);
+					},
+				);
+				assert.deepEqual(requested, []);
+			} finally {
+				delete process.env.CVT_OFFLINE;
+			}
+		},
+	);
+
+	// robots.txt goes out over the same wire and is fetched before the request
+	// it guards, so a guard that only covered the second one would still leak a
+	// request to every new origin a test touches.
+	await t.test("blocks the robots.txt request too", async () => {
+		process.env.CVT_OFFLINE = "1";
+		try {
+			const requested = await withStubbedFetch(
+				{ "https://offline-robots.example/robots.txt": { body: ALLOW_ALL } },
+				async () => {
+					await assert.rejects(() =>
+						politeFetch("https://offline-robots.example/x"),
+					);
+				},
+			);
+			assert.deepEqual(requested, []);
+		} finally {
+			delete process.env.CVT_OFFLINE;
+		}
+	});
+
+	await t.test("unset means business as usual", async () => {
+		await withStubbedFetch(
+			{
+				"https://online.example/robots.txt": { body: ALLOW_ALL },
+				"https://online.example/x": { body: "hello" },
+			},
+			async () => {
+				const res = await politeFetch("https://online.example/x");
+				assert.equal(res.body.toString("utf8"), "hello");
+			},
+		);
+	});
+});
+
 test("politeFetch host and protocol allowlisting", async (t) => {
 	await t.test("rejects a host outside allowedHosts", async () => {
 		await assert.rejects(

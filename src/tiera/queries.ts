@@ -15,6 +15,12 @@ export interface ItemRow {
 	occurred_at: string | null;
 	source_key: string;
 	doc_url: string;
+	/**
+	 * sha256 of the document's archived bytes — the address of the archive page
+	 * that serves them (/source/<hash>/). Selected for every item because a
+	 * citation to the archive is the citation now: see src/pipeline/site-url.ts.
+	 */
+	doc_content_hash: string;
 	doc_type: string;
 	doc_title: string | null;
 	doc_meeting_date: string | null;
@@ -41,7 +47,8 @@ export function queryItems(
 	const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
 	const sql = `
     SELECT i.id, i.document_id, i.source_url, i.item_type, i.external_id, i.title, i.body, i.meta, i.occurred_at,
-           s.key AS source_key, d.url AS doc_url, d.doc_type, d.title AS doc_title,
+           s.key AS source_key, d.url AS doc_url, d.content_hash AS doc_content_hash,
+           d.doc_type, d.title AS doc_title,
            d.meeting_date AS doc_meeting_date, d.location AS doc_location, d.event_key AS doc_event_key
     FROM items i
     JOIN documents d ON i.document_id = d.id

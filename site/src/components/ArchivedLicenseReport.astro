@@ -1,0 +1,182 @@
+---
+/**
+ * The Chino and Chino Hills rows of one archived ABC daily licence report.
+ *
+ * AN EXTRACT, AND IT SAYS SO. Every ABC report is statewide — the archived
+ * status-changes report for 2026-08-12 held 410 rows across 183 cities, two of
+ * them in Chino. A citation for those two rows does not require standing up a
+ * permanent, self-hosted copy of 408 unrelated licensees, and this site's beat
+ * is two cities. The URL still names the exact bytes and the notice below says
+ * what is shown out of what, so nothing about the provenance claim is softened.
+ *
+ * Two columns are dropped from the rows that ARE shown: a mailing address is
+ * frequently a sole proprietor's home, and the escrow line carries a third
+ * party's street address. Neither backs a claim this site publishes.
+ */
+import {
+	type LicenseReport,
+	licenseRowTitle,
+	OMITTED_COLUMNS,
+} from "../lib/abc.ts";
+
+interface Props {
+	report: LicenseReport;
+	/** When the bytes were archived, already formatted. */
+	fetchedAt: string;
+	/** The report page at abc.ca.gov. The authority. */
+	documentUrl: string;
+	sourceHost: string;
+}
+
+const { report, fetchedAt, documentUrl, sourceHost } = Astro.props;
+const { rows, totalRows } = report;
+---
+
+<aside class="extract" aria-labelledby="extract-heading">
+	<h2 class="extract__heading mark" id="extract-heading">
+		Extract &mdash; {rows.length} of {totalRows}
+		{totalRows === 1 ? " row" : " rows"}
+	</h2>
+	<p>
+		This is a statewide report. Shown here are the rows whose premises are in
+		Chino or Chino Hills, which is what this site covers; the other{" "}
+		{totalRows - rows.length} are not reproduced. Each row&rsquo;s {
+			OMITTED_COLUMNS
+		} are left out as well &mdash; a mailing address is often a home one, and
+		neither column backs anything published here.
+	</p>
+	<p class="extract__go">
+		<a href={documentUrl} rel="noopener noreferrer">
+			The full report at {sourceHost} &rarr;
+		</a>
+	</p>
+</aside>
+
+{
+	rows.length === 0 && (
+		<p class="archnote">
+			This report listed nothing in Chino or Chino Hills. That is the record,
+			not a gap: most days the state&rsquo;s report has nothing here at all.
+		</p>
+	)
+}
+
+{
+	rows.length > 1 && (
+		<nav class="archtoc" aria-labelledby="contents-heading">
+			<h2 class="archtoc__heading mark" id="contents-heading">
+				{rows.length} local rows in this report
+			</h2>
+			<ol class="archtoc__list">
+				{rows.map((row) => (
+					<li>
+						<a href={`#row-${row.rowIndex}`}>{licenseRowTitle(row)}</a>
+						<span class="archtoc__meta">
+							{row.dba ?? row.primaryName}
+						</span>
+					</li>
+				))}
+			</ol>
+		</nav>
+	)
+}
+
+{
+	rows.map((row) => {
+		// Verbatim record fields, in the order a reader checking a published line
+		// needs them. Nothing derived.
+		const facts: Array<[string, string | null]> = [
+			["Licence type", row.licenseType ? `${row.licenseType} | ${row.licenseDup}` : null],
+			["Status", row.status || null],
+			["Premises", row.premisesAddress || null],
+			["Original issue date", row.originalIssueDate],
+			["Expiration date", row.expiryDate],
+			["Transfer from/to", row.transferFromTo],
+			["Action", row.action],
+			["Conditions", row.conditions],
+			["District code", row.districtCode],
+			["Geo code", row.geoCode],
+		];
+		return (
+			<section class="entry" id={`row-${row.rowIndex}`}>
+				<h2 class="entry__title">{licenseRowTitle(row)}</h2>
+				<p class="entry__by mark">
+					Row {row.rowIndex} of {totalRows}
+				</p>
+
+				{/*
+				  Same reasoning as the alert renderer: a citation lands on this
+				  section's fragment, scrolling past the page-level copy notice. The
+				  reader has to learn here that this is a dated copy of a report the
+				  state has since replaced — which for ABC is not a hypothetical, the
+				  live page shows a different day's report by tomorrow.
+				*/}
+				<p class="entry__copy">
+					Archived copy of the report for {report.reportDate ?? "an unstated date"},
+					taken {fetchedAt}. The page it came from carries whichever report is
+					current, so it may no longer be this one.{" "}
+					<a href={documentUrl} rel="noopener noreferrer">
+						The live report at {sourceHost} &rarr;
+					</a>
+				</p>
+
+				<p class="entry__banner">
+					{row.primaryName || "Owner not stated"}
+					{row.dba && <span class="entry__dba">doing business as {row.dba}</span>}
+				</p>
+
+				<dl class="facts">
+					{facts
+						.filter(([, v]) => v)
+						.map(([k, v]) => (
+							<div class="facts__pair">
+								<dt class="mark">{k}</dt>
+								<dd>{v}</dd>
+							</div>
+						))}
+				</dl>
+			</section>
+		);
+	})
+}
+
+<style>
+	/* Crate, not oxide: this is a scope statement, not a warning about
+	   staleness. The oxide notices above and inside each row carry that. */
+	.extract {
+		border-left: 4px solid var(--crate);
+		background: var(--galv-sunk);
+		padding: 1rem 1.1rem;
+		margin-bottom: 2.2rem;
+	}
+	.extract__heading {
+		margin: 0 0 0.5rem;
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--crate);
+	}
+	.extract p {
+		margin: 0 0 0.7rem;
+		font-size: 0.92rem;
+		line-height: 1.55;
+	}
+	.extract__go {
+		margin-bottom: 0;
+		font-size: 0.86rem;
+	}
+
+	.entry__banner {
+		margin: 1rem 0 0;
+		padding: 0.6rem 0.8rem;
+		background: var(--placard);
+		color: var(--stencil);
+		font-weight: 600;
+		font-size: 0.95rem;
+		line-height: 1.4;
+	}
+	.entry__dba {
+		display: block;
+		font-weight: 400;
+		font-size: 0.86rem;
+	}
+</style>

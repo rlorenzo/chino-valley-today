@@ -9,6 +9,7 @@ import {
 	topicsFor,
 	typeLabel,
 } from "../lib/record.ts";
+import { archiveDocumentFor } from "../lib/archive.ts";
 
 interface Props {
 	post: Post;
@@ -24,6 +25,26 @@ const topics = topicsFor(post);
 const attributions = post.data.attributions ?? [];
 const sourceCount = post.data.sources.length;
 const attributionCount = attributions.length;
+
+// A citation may point at our own archive page rather than at the source's live
+// URL — NWS alerts do, because the alert's permanent URL is raw CAP JSON no
+// reader can use (see pages/source/[hash].astro).
+//
+// The stamp still has to name the ISSUING BODY. Its whole meaning is "this is
+// the authority that stands behind the line", and a stamp reading
+// "chinovalley.today" would say we are our own source. So the face comes from
+// the archived document's own URL, and the row is marked as a copy so the
+// reader knows where the link actually lands. The full href prints underneath
+// either way.
+const sources = post.data.sources.map((url) => {
+	const archived = archiveDocumentFor(url);
+	return {
+		url,
+		host: sourceHost(archived?.url ?? url),
+		archived: archived !== null,
+	};
+});
+const hasArchived = sources.some((s) => s.archived);
 ---
 
 <article>
@@ -104,16 +125,35 @@ const attributionCount = attributions.length;
 					<p class="inspection__note">
 						Every civic claim above is drawn from these records. Follow any
 						one to the primary document and check it.
+						{
+							hasArchived && (
+								<>
+									{" "}
+									A record marked <em>archived copy</em> opens our dated copy of
+									the document, taken when the post was written, with the
+									issuing body&rsquo;s live page linked from it.
+								</>
+							)
+						}
 					</p>
 					<ol class="inspection__list">
 						{
-							post.data.sources.map((src) => (
+							sources.map((src) => (
 								<li>
-									<a class="stamp" href={src} rel="noopener noreferrer">
-										{sourceHost(src)}
-									</a>
-									<a class="inspection__url" href={src} rel="noopener noreferrer">
-										{src}
+									<span class="inspection__mark">
+										<a class="stamp" href={src.url} rel="noopener noreferrer">
+											{src.host}
+										</a>
+										{src.archived && (
+											<span class="inspection__copy mark">archived copy</span>
+										)}
+									</span>
+									<a
+										class="inspection__url"
+										href={src.url}
+										rel="noopener noreferrer"
+									>
+										{src.url}
 									</a>
 								</li>
 							))
@@ -301,6 +341,21 @@ const attributionCount = attributions.length;
 	}
 	.inspection__list .stamp {
 		justify-self: start;
+	}
+	/* Stamp and copy-marker share the row's first line, so the pair reads as one
+	   label: this authority, our copy of it. Wrapped rather than placed
+	   individually, because the row is a two-row grid and a second item in
+	   column 2 would land on top of the stamp. */
+	.inspection__mark {
+		display: flex;
+		align-items: center;
+		gap: 0.5rem;
+		flex-wrap: wrap;
+	}
+	.inspection__copy {
+		font-size: 0.64rem;
+		letter-spacing: 0.11em;
+		color: var(--muted);
 	}
 	.inspection__url {
 		font-size: 0.76rem;

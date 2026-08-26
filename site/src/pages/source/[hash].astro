@@ -1,0 +1,494 @@
+---
+/**
+ * ARCHIVE-BACKED CITATION PAGE — /source/<sha256>/
+ *
+ * The document a post was built from, as it stood when the pipeline fetched it,
+ * served from our own content-addressed archive.
+ *
+ * Two defects made this necessary, and they are the same defect. NWS alerts
+ * cited raw CAP JSON at api.weather.gov: permanent, machine-checkable, and
+ * unreadable by a person, with no per-alert human page at NWS to point at
+ * instead. ABC licence reports cited a page that serves whatever report is
+ * newest, so the records a post described were already gone by the time a
+ * reader followed the link. One was unreadable, the other unstable. A URL that
+ * names the exact bytes fixes both, and it is the only fix that survives the
+ * source deleting its page.
+ *
+ * THIS PAGE IS A MIRROR AND SAYS SO. It carries the issuance time and links the
+ * live original as the authority, because a stale copy of safety text presented
+ * as current is the cancelled-alert-rendered-as-active failure one layer down.
+ *
+ * This file owns the chrome every archive page shares; the per-type renderers
+ * own what a document says. A post citing a type with no renderer fails the
+ * build below rather than shipping a dead citation.
+ */
+import { getCollection } from "astro:content";
+import ArchivedAlerts from "../../components/ArchivedAlerts.astro";
+import ArchivedLicenseReport from "../../components/ArchivedLicenseReport.astro";
+import Base from "../../layouts/Base.astro";
+import { type LicenseReport, parseLicenseReport } from "../../lib/abc.ts";
+import {
+	type ArchiveDocument,
+	archiveDocuments,
+	archiveHashFromUrl,
+	formatBytes,
+	readArchiveText,
+} from "../../lib/archive.ts";
+import { type CapAlert, formatCapInstant, parseCapFeed } from "../../lib/cap.ts";
+
+export async function getStaticPaths() {
+	// Declared INSIDE the function on purpose: Astro extracts getStaticPaths into
+	// its own module, so a const in the component frontmatter is not in scope
+	// here and the build fails with a bare "X is not defined".
+
+	/**
+	 * Types built for every archived document, cited or not.
+	 *
+	 * Alert feeds only. They are small JSON, they are this zone's own alerts
+	 * end to end, and a page existing before anything cites it costs nothing.
+	 */
+	const ALWAYS = ["alert"];
+
+	/**
+	 * Types built only for documents a published post actually cites.
+	 *
+	 * ABC reports are 160KB-660KB of HTML each, one or two a day, and parsing
+	 * every one ever archived on every build is a cost that only grows. They are
+	 * also statewide, so a page nobody cites would be a copy of other cities'
+	 * records standing up for no reason.
+	 */
+	const ON_DEMAND = ["license_report"];
+
+	const docs = archiveDocuments([...ALWAYS, ...ON_DEMAND]);
+	const byHash = new Map(docs.map((d) => [d.hash, d]));
+
+	// A published post's citation is baked into its frontmatter and never
+	// revisited, so a cited hash with no page here is a dead link on the live
+	// site — the exact failure this route exists to end. Fail the build instead.
+	//
+	// This is also what catches a build running where data/ is absent. A
+	// checkout with no archive and no archive citations builds a fine site; the
+	// moment one post cites an archive page, a build that cannot produce it
+	// stops rather than publishing 404s over the real thing.
+	const cited = new Map<string, string[]>();
+	for (const post of await getCollection("posts")) {
+		for (const src of post.data.sources) {
+			const hash = archiveHashFromUrl(src);
+			if (!hash) continue;
+			const citing = cited.get(hash) ?? [];
+			citing.push(post.id);
+			cited.set(hash, citing);
+		}
+	}
+
+	const missing = [...cited].filter(([hash]) => !byHash.has(hash));
+	if (missing.length > 0) {
+		const detail = missing
+			.map(([hash, slugs]) => `  ${hash}\n    cited by ${slugs.join(", ")}`)
+			.join("\n");
+		const renderable = [...ALWAYS, ...ON_DEMAND].join(", ");
+		throw new Error(
+			`published posts cite ${missing.length} archive page(s) this build cannot produce:\n${detail}\n` +
+				"One of three things is true:\n" +
+				"  - the archive and database are missing from this checkout — build " +
+				"on the host, which holds them (scripts/deploy.sh all);\n" +
+				"  - the document is of a type /source/ does not render yet (today it " +
+				`renders: ${renderable});\n` +
+				"  - the database was rebuilt and these documents are gone with it — " +
+				"restore data/ from backup, because those citations cannot be " +
+				"re-derived from a fresh scrape.\n" +
+				"This build stops rather than publishing dead citations, which is the " +
+				"failure /source/ exists to end.",
+		);
+	}
+
+	const wanted = docs.filter(
+		(d) => ALWAYS.includes(d.docType) || cited.has(d.hash),
+	);
+	return wanted.map((doc) => ({ params: { hash: doc.hash }, props: { doc } }));
+}
+
+interface Props {
+	doc: ArchiveDocument;
+}
+
+const { doc } = Astro.props as Props;
+
+const text = readArchiveText(doc.rawPath);
+
+// Each parser returns null for "these bytes are not that", so an unreadable or
+// unexpected document says so rather than rendering an empty shell that reads
+// like an empty record.
+const alerts: CapAlert[] | null =
+	doc.docType === "alert" && text !== null ? parseCapFeed(text) : null;
+const report: LicenseReport | null =
+	doc.docType === "license_report" && text !== null
+		? parseLicenseReport(text)
+		: null;
+const unreadable = alerts === null && report === null;
+
+const fetchedAt = formatCapInstant(doc.fetchedAt) ?? doc.fetchedAt;
+const size = formatBytes(doc.bytes);
+let sourceHost = "the source";
+try {
+	sourceHost = new URL(doc.url).hostname.replace(/^www\./, "");
+} catch {
+	// A malformed URL in the archive is not a reason to fail the page; the full
+	// URL still prints in the provenance block below.
+}
+
+// The document title an ABC report carries is stamped with the RUN date, not
+// the report's own as-of date — the scraper cannot know the second until after
+// it has parsed the body, and re-fetching purely to relabel would double the
+// requests made to the origin (src/scrapers/abc-licenses.ts documents this).
+// Here the body IS parsed, so the trailing run date comes off rather than
+// standing in the largest type on the page saying the wrong day.
+const reportDate = report?.reportDate ?? null;
+const baseTitle = doc.title ?? `Archived ${doc.docType}`;
+const title =
+	reportDate && doc.title
+		? doc.title.replace(/\s+\d{4}-\d{2}-\d{2}\s*$/, "")
+		: baseTitle;
+---
+
+<Base
+	title={`${title} — archived copy · Chino Valley Today`}
+	description={`Chino Valley Today's archived copy of ${title}, issued by ${doc.sourceName} and fetched ${doc.fetchedAt.slice(0, 10)}.`}
+	noindex
+>
+	<article>
+		<header class="archhead">
+			<div class="shell archhead__inner">
+				<p class="archhead__kicker mark">Archived document</p>
+				<h1 class="archhead__title">{title}</h1>
+				<p class="archhead__by">
+					{
+						report?.reportDateText && (
+							<span class="archhead__reportdate">
+								{report.reportDateText}.{" "}
+							</span>
+						)
+					}
+					Issued by {doc.sourceName}. Fetched and archived by Chino Valley
+					Today on {fetchedAt}.
+				</p>
+			</div>
+		</header>
+
+		<div class="reading body">
+			{/*
+			  THE MIRROR NOTICE, first and unmissable.
+
+			  Reproducing a government document is fine — an NWS alert is US
+			  government work and not copyrightable, and an ABC report is a public
+			  record — but it makes us the publisher of that text rather than a
+			  pointer to it. What keeps that honest is saying plainly that this is a
+			  copy, when it was taken, and where the live version is.
+			*/}
+			<aside class="mirror" aria-labelledby="mirror-heading">
+				<h2 class="mirror__heading mark" id="mirror-heading">
+					This is a copy, not the authority
+				</h2>
+				<p>
+					Chino Valley Today archived these bytes on {fetchedAt} and has not
+					changed them since. What they describe may have been superseded,
+					extended, cancelled or replaced in the meantime. {sourceHost} is the
+					authority on what is in effect right now.
+				</p>
+				<p class="mirror__go">
+					<a class="stamp" href={doc.url} rel="noopener noreferrer">
+						{sourceHost}
+					</a>
+					<a class="mirror__url" href={doc.url} rel="noopener noreferrer">
+						Open the live original &rarr;
+					</a>
+				</p>
+			</aside>
+
+			{
+				unreadable && (
+					<p class="archnote">
+						These archived bytes could not be read as a {doc.docType} document,
+						so there is nothing to lay out here. Follow the original above to
+						read the document at its source; its exact address is recorded
+						below.
+					</p>
+				)
+			}
+
+			{
+				alerts !== null && (
+					<ArchivedAlerts
+						alerts={alerts}
+						fetchedAt={fetchedAt}
+						documentUrl={doc.url}
+						sourceHost={sourceHost}
+					/>
+				)
+			}
+
+			{
+				report !== null && (
+					<ArchivedLicenseReport
+						report={report}
+						fetchedAt={fetchedAt}
+						documentUrl={doc.url}
+						sourceHost={sourceHost}
+					/>
+				)
+			}
+
+			{/*
+			  THE ADDRESS OF THE BYTES. The sha256 is not decoration: it is what
+			  makes this URL unable to drift onto different content, and anyone
+			  holding their own copy of the document can check it against this.
+			*/}
+			<section class="prov" aria-labelledby="prov-heading">
+				<h2 class="prov__heading mark" id="prov-heading">Provenance</h2>
+				<dl class="facts">
+					<div class="facts__pair">
+						<dt class="mark">Issued by</dt>
+						<dd>{doc.sourceName}</dd>
+					</div>
+					<div class="facts__pair">
+						<dt class="mark">Fetched from</dt>
+						<dd class="prov__url">{doc.url}</dd>
+					</div>
+					<div class="facts__pair">
+						<dt class="mark">Fetched at</dt>
+						<dd>{fetchedAt}</dd>
+					</div>
+					<div class="facts__pair">
+						<dt class="mark">sha256</dt>
+						<dd class="prov__hash">{doc.hash}</dd>
+					</div>
+					{
+						size && (
+							<div class="facts__pair">
+								<dt class="mark">Size</dt>
+								<dd>{size}</dd>
+							</div>
+						)
+					}
+				</dl>
+			</section>
+
+			<nav class="postnav mark" aria-label="Record">
+				<a href="/">
+					<svg
+						viewBox="0 0 12 12"
+						width="11"
+						height="11"
+						aria-hidden="true"
+						focusable="false"
+					>
+						<path
+							d="M9 1.5 L3 6 L9 10.5"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"></path>
+					</svg>
+					All entries
+				</a>
+			</nav>
+		</div>
+	</article>
+</Base>
+
+<style is:global>
+	/* ---------------------------------------------------------------------------
+	 * Shared by both archive renderers, which are separate components and cannot
+	 * see this file's scoped styles. Global rather than duplicated: an entry is
+	 * an entry whichever document type produced it, and two copies of these
+	 * rules is how the two renderers drift apart visually.
+	 * ------------------------------------------------------------------------- */
+	.archnote {
+		margin: 0 0 2rem;
+		color: var(--muted);
+		font-size: 0.95rem;
+		line-height: 1.55;
+	}
+
+	/* Crate, not violet. A contents list is navigation, not provenance, and the
+	   one rule with teeth says violet marks a sourced claim and nothing else.
+	   The provenance block at the foot of the page is the part that earns it. */
+	.archtoc {
+		border-top: 2px solid var(--crate);
+		border-bottom: 1px solid var(--galv-edge);
+		padding-block: 0.9rem 1rem;
+		margin-bottom: 2.2rem;
+	}
+	.archtoc__heading {
+		margin: 0 0 0.6rem;
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--crate);
+	}
+	.archtoc__list {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		counter-reset: entry;
+	}
+	.archtoc__list li {
+		counter-increment: entry;
+		display: grid;
+		grid-template-columns: 1.6rem 1fr;
+		gap: 0.1rem 0.6rem;
+		padding-block: 0.4rem;
+	}
+	.archtoc__list li::before {
+		content: counter(entry, decimal-leading-zero);
+		grid-row: 1 / span 2;
+		font-family: "Archivo Narrow", "Arial Narrow", sans-serif;
+		font-weight: 700;
+		font-size: 0.72rem;
+		color: var(--muted);
+		padding-top: 0.2rem;
+	}
+	.archtoc__meta {
+		font-size: 0.76rem;
+		color: var(--muted);
+	}
+
+	.entry {
+		border-top: 1px solid var(--galv-edge);
+		padding-block: 1.8rem 0.6rem;
+		/* Arrived at from a citation's fragment, so the heading must not land
+		   flush against the top edge of the viewport. */
+		scroll-margin-top: 1.5rem;
+	}
+	.entry__title {
+		margin: 0;
+		font-size: 1.3rem;
+		line-height: 1.2;
+		font-weight: 600;
+	}
+	.entry__by {
+		margin: 0.35rem 0 0;
+		font-size: 0.72rem;
+		letter-spacing: 0.1em;
+		color: var(--muted);
+	}
+	/* Oxide, like the page-level notice: same warning, same ink, so a reader
+	   arriving mid-page reads the same thing as one arriving at the top. */
+	.entry__copy {
+		margin: 0.6rem 0 0;
+		padding-left: 0.7rem;
+		border-left: 3px solid var(--oxide);
+		font-size: 0.8rem;
+		line-height: 1.5;
+		color: var(--muted);
+	}
+</style>
+
+<style>
+	/* Crate masthead, as a post gets: this IS a record page, not a utility view. */
+	.archhead {
+		background: var(--crate);
+		color: #fff;
+		border-bottom: 6px solid var(--placard);
+	}
+	.archhead__inner {
+		padding-block: 1.9rem 2.1rem;
+		max-width: 46rem;
+	}
+	.archhead__kicker {
+		margin: 0 0 0.7rem;
+		font-size: 0.72rem;
+		letter-spacing: 0.13em;
+		color: var(--placard);
+	}
+	.archhead__title {
+		margin: 0;
+		font-size: clamp(1.4rem, 1.1rem + 1.8vw, 2.2rem);
+		line-height: 1.16;
+		font-weight: 600;
+		letter-spacing: -0.006em;
+	}
+	.archhead__by {
+		margin: 0.9rem 0 0;
+		font-size: 0.86rem;
+		color: #cdd8ec;
+	}
+	/* The report's OWN date, which is the one that identifies it — and which
+	   differs from the date in the document title, that being the day we
+	   fetched it. */
+	.archhead__reportdate {
+		color: var(--placard);
+	}
+
+	.body {
+		padding-block: 2.2rem 1rem;
+	}
+
+	/* The mirror notice wears oxide, the palette's warning ink. A reader who
+	   reads nothing else here has to come away knowing the live document may say
+	   something different. */
+	.mirror {
+		border-left: 4px solid var(--oxide);
+		background: var(--galv-sunk);
+		padding: 1rem 1.1rem;
+		margin-bottom: 2.2rem;
+	}
+	.mirror__heading {
+		margin: 0 0 0.5rem;
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--oxide);
+	}
+	.mirror p {
+		margin: 0 0 0.7rem;
+		font-size: 0.92rem;
+		line-height: 1.55;
+	}
+	.mirror__go {
+		display: flex;
+		align-items: center;
+		gap: 0.7rem;
+		flex-wrap: wrap;
+		margin-bottom: 0;
+	}
+	.mirror__url {
+		font-size: 0.86rem;
+	}
+
+	.prov {
+		margin-top: 3rem;
+		border-top: 2px solid var(--stamp);
+		padding-top: 0.9rem;
+	}
+	.prov__heading {
+		margin: 0;
+		font-size: 0.76rem;
+		letter-spacing: 0.13em;
+		color: var(--stamp);
+	}
+	.prov__url,
+	.prov__hash {
+		font-size: 0.76rem;
+		color: var(--muted);
+		overflow-wrap: anywhere;
+	}
+	.prov__hash {
+		font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	}
+
+	.postnav {
+		margin-top: 2.4rem;
+		padding-top: 1.2rem;
+		border-top: 1px solid var(--galv-edge);
+		font-size: 0.76rem;
+		letter-spacing: 0.08em;
+	}
+	.postnav a {
+		text-decoration: none;
+		color: var(--crate);
+		display: inline-flex;
+		align-items: center;
+		gap: 0.45rem;
+	}
+	.postnav a:hover {
+		text-decoration: underline;
+	}
+</style>

@@ -251,6 +251,39 @@ img {
 	outline-color: var(--placard);
 }
 
+/* ---------------------------------------------------------------------------
+ * .facts — a record's field list. Label above value, wrapping into as many
+ * columns as the measure allows, ruled top and bottom like a register.
+ *
+ * Lives here rather than in one component because both archive renderers use
+ * it (a CAP alert's severity/urgency block and an ABC licence row's fields are
+ * the same object: verbatim record fields, nothing derived), and DESIGN.md's
+ * rule is to reuse a record annotation rather than respecify it per component.
+ * ------------------------------------------------------------------------- */
+.facts {
+	margin: 1.2rem 0 0;
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+	gap: 0.7rem 1.2rem;
+	border-top: 1px solid var(--galv-edge);
+	border-bottom: 1px solid var(--galv-edge);
+	padding-block: 0.9rem;
+}
+.facts__pair {
+	min-width: 0;
+}
+.facts dt {
+	font-size: 0.68rem;
+	letter-spacing: 0.11em;
+	color: var(--muted);
+}
+.facts dd {
+	margin: 0.15rem 0 0;
+	font-size: 0.88rem;
+	line-height: 1.4;
+	overflow-wrap: anywhere;
+}
+
 /* =========================================================================
    LAYOUT
    ========================================================================= */

@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><body>
+<!--
+  Trimmed from a real abc.ca.gov status-changes report archived 2026-08-23
+  (data/raw/80/808b7ae4...html, 410 rows). Kept: the column set and order, the
+  hidden-but-present City/Zip/Prem Street columns the parser reads, the
+  <br>-packed owner and status cells, and one row for each case that matters -
+  a Chino row, a Chino Hills row, an out-of-area row, and a second row for a
+  licence number that already appeared, which is why anchors are positional.
+  data/ is gitignored, so the real archive cannot be a test fixture.
+-->
+<p id="rptdate">Report Date: Wednesday, August 12, 2026</p>
+<table id="license_report">
+<thead><tr>
+<th>License Number</th><th>Status Changed From/To</th><th>Type| Dup</th>
+<th>Original Issue Date</th><th>Expir. Date</th>
+<th>Primary Owner and Premises Addr.</th><th>Mailing Addr.</th>
+<th>Transfer-From/To</th><th>Conditions</th><th>Escrow</th>
+<th>District Code</th><th>Geo Code</th><th>Prem Street</th><th>City</th>
+<th>County</th><th>Zip Code</th>
+</tr></thead>
+<tbody>
+<tr>
+<th><a href="/licensing/license-lookup/single-license/?RPTTYPE=12&amp;LICENSE=111111">111111</a></th>
+<td>ACTIVE<br>SURREND</td><td>41 | 0 </td><td>03/04/2019</td><td>02/28/2027</td>
+<td> DBA: THE CORNER<br> ACME HOSPITALITY LLC<br> 1234 CENTRAL AVE,<br> CHINO, CA 91710 </td>
+<td>99 PRIVATE LN <br> SOMEWHERE, CA 90001</td>
+<td>41-000001</td><td>7, 8</td><td>ESCROW CO 1 MAIN ST SAN JOSE, CA 95128</td>
+<td>22</td><td>3602</td><td>1234 CENTRAL AVE</td><td>CHINO</td><td>36</td><td>91710</td>
+</tr>
+<tr>
+<th><a href="/licensing/license-lookup/single-license/?RPTTYPE=12&amp;LICENSE=222222">222222</a></th>
+<td>PEND<br>ACTIVE</td><td>47 | 0 </td><td>07/01/2020</td><td>06/30/2026</td>
+<td> BIG CHAIN INC<br> 500 MARKET ST,<br> SAN FRANCISCO, CA 94105 </td>
+<td>500 MARKET ST <br> SAN FRANCISCO, CA 94105</td>
+<td></td><td></td><td></td>
+<td>1</td><td>0101</td><td>500 MARKET ST</td><td>SAN FRANCISCO</td><td>38</td><td>94105</td>
+</tr>
+<tr>
+<th><a href="/licensing/license-lookup/single-license/?RPTTYPE=12&amp;LICENSE=111111">111111</a></th>
+<td>SURREND<br>REVOKED</td><td>41 | 0 </td><td>03/04/2019</td><td>02/28/2027</td>
+<td> DBA: THE CORNER<br> ACME HOSPITALITY LLC<br> 1234 CENTRAL AVE,<br> CHINO, CA 91710 </td>
+<td>99 PRIVATE LN <br> SOMEWHERE, CA 90001</td>
+<td>41-000002</td><td></td><td></td>
+<td>22</td><td>3602</td><td>1234 CENTRAL AVE</td><td>CHINO</td><td>36</td><td>91710</td>
+</tr>
+<tr>
+<th><a href="/licensing/license-lookup/single-license/?RPTTYPE=12&amp;LICENSE=333333">333333</a></th>
+<td>ACTIVE</td><td>21 | 0 </td><td>11/12/2015</td><td>10/31/2026</td>
+<td> CAF&Eacute; DEL SOL LLC<br> 77 GRAND AVE,<br> CHINO HILLS, CA 91709 </td>
+<td>77 GRAND AVE <br> CHINO HILLS, CA 91709</td>
+<td></td><td>None</td><td></td>
+<td>22</td><td>3603</td><td>77 GRAND AVE</td><td>CHINO HILLS</td><td>36</td><td>91709</td>
+</tr>
+</tbody>
+</table>
+</body></html>

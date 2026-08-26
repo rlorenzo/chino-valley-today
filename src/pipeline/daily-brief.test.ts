@@ -41,6 +41,7 @@ import {
 	weatherGlyph,
 } from "./daily-brief.ts";
 import { type NewPost, type PostRow, renderPostFile } from "./posts.ts";
+import { archiveUrl } from "./site-url.ts";
 
 // 6:05 AM PDT, Monday 2026-08-17 — the timer's real run window.
 const NOW = new Date("2026-08-17T13:05:00.000Z");
@@ -62,6 +63,10 @@ function item(over: Partial<ItemRow>): ItemRow {
 		occurred_at: null,
 		source_key: "test",
 		doc_url: "https://example.org/doc",
+		// A real sha256 shape, so anything that mints an archive URL from it
+		// (the brief's alert line does) gets a value archivePath() accepts.
+		doc_content_hash:
+			"0000000000000000000000000000000000000000000000000000000000000001",
 		doc_type: "agenda",
 		doc_title: null,
 		doc_meeting_date: null,
@@ -2350,8 +2355,12 @@ describe("active weather alerts", () => {
 			nwsAlerts: [alertRow(1, "2026-08-17T11:56:00-07:00")],
 		};
 		const { post } = assembleBrief(inputs, NOW);
+		// The link is the archive page for the alert, not the CAP JSON URL: the
+		// brief and the alert post cite the same readable record.
 		assert.ok(
-			post.bodyMd.includes("([NWS](https://api.weather.gov/alerts/1))"),
+			post.bodyMd.includes(
+				`([NWS](${archiveUrl("0000000000000000000000000000000000000000000000000000000000000001", "urn:oid:1")}))`,
+			),
 		);
 		assert.ok(!post.bodyMd.includes(`[${title}]`));
 		// The advisory itself still reads in full.
