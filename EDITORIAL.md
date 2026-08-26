@@ -148,6 +148,30 @@ filters apply per item.
   fetchable, but Nexstar's Terms of Use prohibit any "data gathering or data
   extraction practices for any purpose" — same class as the Nixle scraping
   prohibition. Do not revisit without a change in their terms.
+- **The Champion is stopped on the same rule (decided 2026-08-26).** Its Terms
+  of Service prohibit republishing "any portion of the Content", incorporating
+  it "in any database, compilation, archive or cache", scraping it "without
+  permission", and "any data mining, data gathering or extraction method". The
+  scraper did all four: sitemap discovery, article fetches, a content-addressed
+  copy of every page, and headline plus teaser stored as rows.
+  - **This was not a drift.** The non-volatile terms digest is identical to the
+    2026-03-11 archived copy, so the clause was there when the source was
+    approved on 2026-08-18 with the note "permits automated title and short
+    teaser link-back". The approval missed it. Applying the KTLA rule to KTLA
+    and not to the Champion was the project judging two outlets by one standard
+    and one rule.
+  - **"We only link, we do not republish" does not answer it.** Three of the
+    four prohibitions are about access and storage, not publication: even
+    publishing nothing, fetching the pages is the prohibited act. Nor does
+    deleting the cache — that clears one clause and leaves scraping and data
+    gathering untouched.
+  - The one thing the terms do grant is linking, revocable on request.
+  - **A written permission request is with the Publisher**, which is the
+    channel their terms require ("Your request must be made in writing. No
+    phone calls please."). If permission arrives, record it here with the date
+    and the form it took, and re-register the scraper. Until then the source is
+    out of `src/scrapers/registry.ts` and out of the press group, so nothing
+    can invoke it.
 
 ## Agency alert channels (decided 2026-08-17, amended 2026-08-18)
 

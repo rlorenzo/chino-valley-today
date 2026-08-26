@@ -16,7 +16,13 @@ let tmpDir: string;
 let dbPath: string;
 let blockNetworkPreload: string;
 
-const HELD_KEY = "champion-news";
+// Any registered source that carries a publisher-terms contract will do; this
+// test is about the gate, not about the outlet. It used to be champion-news,
+// which stopped working as a fixture when that scraper was unregistered
+// (see src/scrapers/registry.ts) — an unregistered key exits on the usage
+// message before the gate is ever consulted, so the test would have passed for
+// the wrong reason if it asserted anything looser than the exact message.
+const HELD_KEY = "dailybulletin-news";
 // nws-forecast is a civic/agency source: it carries no publisher-terms
 // contract and is not in SOURCE_TOS_REGISTRY, so run-one.ts's gate must never
 // consult source_tos_status for it at all (see the scoping comment at
@@ -43,7 +49,7 @@ before(() => {
 	);
 
 	// Seed the DB via the same path run-one.ts's own openDb() will seed, then
-	// put the champion-news source on hold -- exactly the operator action
+	// put the held source on hold -- exactly the operator action
 	// (setSourceTosHold) that the ToS-drift checker performs in production.
 	const db = openDb(dbPath);
 	db.setSourceTosHold(HELD_KEY, { reason: "test_hold" });
@@ -104,7 +110,9 @@ test("run-one.ts refuses to execute a held scraper", () => {
 	);
 	assert.match(
 		result.stderr,
-		/Scraper champion-news is HELD due to ToS status \(test_hold\)\. Skipping execution\./,
+		new RegExp(
+			`Scraper ${HELD_KEY} is HELD due to ToS status \\(test_hold\\)\\. Skipping execution\\.`,
+		),
 	);
 	// The preload throwing would surface as an uncaught exception in stderr,
 	// not as this specific hold message -- so matching the message above
