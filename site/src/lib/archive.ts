@@ -81,15 +81,28 @@ interface DocRow {
 /**
  * The archive page path a URL names, or null.
  *
- * Matched on the path alone rather than against SITE_ORIGIN, deliberately: the
- * interim host and the branded domain serve the same build (see
- * astro.config.mjs), so an origin test would stop recognising our own citations
- * the moment the two differ. A foreign URL that happens to carry
- * `/source/<64 hex>/` would be a false positive; nothing in the source corpus
- * looks remotely like one.
+ * Matched on the PATHNAME, and only the pathname. Two decisions here:
+ *
+ * The host is deliberately not checked. The interim host and the branded domain
+ * serve the same build (see astro.config.mjs), and a citation is minted once
+ * against whichever CVT_SITE_ORIGIN was set at generation time and then baked
+ * into a post forever. An origin test would stop recognising our own older
+ * citations the moment those two differ — and the failure would be silent,
+ * because the build guard would then quietly stop guarding them. A false
+ * positive is loud (the build demands a page); a false negative is not.
+ *
+ * But it is matched against `URL.pathname` rather than against the raw string,
+ * so a `/source/<hash>/` sitting in someone else's query string or fragment is
+ * not mistaken for a path. A URL that will not parse is not one of ours.
  */
 export function archiveHashFromUrl(url: string): string | null {
-	const match = url.match(/\/source\/([0-9a-f]{64})\/?(?:[#?]|$)/);
+	let pathname: string;
+	try {
+		pathname = new URL(url).pathname;
+	} catch {
+		return null;
+	}
+	const match = pathname.match(/^\/source\/([0-9a-f]{64})\/?$/);
 	return match ? match[1] : null;
 }
 

@@ -59,11 +59,22 @@ const TARGET_CITIES = new Set(["CHINO", "CHINO HILLS"]);
 
 // "Monday, August 10, 2026" -> "2026-08-10". Falls back to null (rather than
 // throwing) if the site ever changes the phrasing; callers note that.
+//
+// A CALENDAR date, read as one. `new Date(cleaned).toISOString()` looks
+// equivalent and is not: that parse lands on local midnight, so on any machine
+// east of Greenwich the ISO slice hands back the day before — in Asia/Tokyo,
+// "August 12" becomes 2026-08-11. This value becomes every item's occurred_at
+// and its external_id, so a scrape run from the wrong timezone would file a
+// day of licence activity under the previous day and mint different item
+// identities for it. The report names a day; the machine's zone is not
+// information about that day.
 function parseReportDate(text: string): string | null {
 	const cleaned = text.replace(/^Report Date:\s*/i, "").trim();
 	const d = new Date(cleaned);
 	if (Number.isNaN(d.getTime())) return null;
-	return d.toISOString().slice(0, 10);
+	return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+		.toISOString()
+		.slice(0, 10);
 }
 
 // "08/10/2026" -> "2026-08-10"; passes through empty/unparseable input as null.

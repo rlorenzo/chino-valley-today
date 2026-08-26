@@ -142,13 +142,26 @@ function parseOwner(lines: string[]): {
 		: { primaryName: lines[0].trim(), dba: null };
 }
 
-/** "Report Date: Wednesday, August 12, 2026" -> "2026-08-12". */
+/**
+ * "Report Date: Wednesday, August 12, 2026" -> "2026-08-12".
+ *
+ * A CALENDAR date, read as one. `new Date(cleaned).toISOString()` looks
+ * equivalent and is not: that parse lands on local midnight, so on any machine
+ * east of Greenwich the ISO slice hands back the day before — in Asia/Tokyo,
+ * "August 12" becomes 2026-08-11. The report names a day, not an instant, and
+ * a build machine's timezone is not information about it.
+ */
 export function parseReportDate(raw: string): string | null {
 	const cleaned = raw.replace(/^Report Date:\s*/i, "").trim();
 	if (!cleaned) return null;
+	// Parsed for its components, then re-stamped as UTC so no local offset can
+	// shift the day. The Date is still what reads "August 12, 2026" — only the
+	// zone it is interpreted in is pinned.
 	const d = new Date(cleaned);
 	if (Number.isNaN(d.getTime())) return null;
-	return d.toISOString().slice(0, 10);
+	return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()))
+		.toISOString()
+		.slice(0, 10);
 }
 
 /** "08/31/2027" -> "2027-08-31"; anything else back as null. */

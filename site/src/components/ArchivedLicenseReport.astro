@@ -113,10 +113,10 @@ const { rows, totalRows } = report;
 				*/}
 				<p class="entry__copy">
 					Archived copy of the report for {report.reportDate ?? "an unstated date"},
-					taken {fetchedAt}. The page it came from now shows a different
-					day.{" "}
+					taken {fetchedAt}. The page it came from carries whichever report is
+					current, so it may no longer be this one.{" "}
 					<a href={documentUrl} rel="noopener noreferrer">
-						Today&rsquo;s report at {sourceHost} &rarr;
+						The live report at {sourceHost} &rarr;
 					</a>
 				</p>
 

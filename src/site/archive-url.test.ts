@@ -71,5 +71,40 @@ describe("archive citation URLs", () => {
 			null,
 		);
 		assert.equal(archiveHashFromUrl(`${SITE_ORIGIN}/source/notahash/`), null);
+		assert.equal(archiveHashFromUrl("not a url at all"), null);
+	});
+
+	// Matched on the URL's PATHNAME, not on the raw string. A hash-shaped path
+	// sitting in someone else's query string or fragment is not a citation to
+	// this site, and treating it as one puts a hash into the build guard's map
+	// that no post ever cited.
+	test("a hash in a foreign query string or fragment is not a citation", () => {
+		assert.equal(
+			archiveHashFromUrl(`https://example.org/redirect?to=/source/${HASH}/`),
+			null,
+		);
+		assert.equal(
+			archiveHashFromUrl(`https://example.org/page#/source/${HASH}/`),
+			null,
+		);
+		assert.equal(
+			archiveHashFromUrl(`https://example.org/wrap/source/${HASH}/`),
+			null,
+		);
+	});
+
+	// The host is deliberately NOT checked: the interim host and the branded
+	// domain serve the same build, and a citation minted against one has to keep
+	// resolving when the other is serving. An origin test would silently stop
+	// guarding older citations exactly when the two differ.
+	test("either host this site is served from is recognised", () => {
+		assert.equal(
+			archiveHashFromUrl(`https://chinovalley.today/source/${HASH}/`),
+			HASH,
+		);
+		assert.equal(
+			archiveHashFromUrl(`https://cvtoday.rexlorenzo.com/source/${HASH}/`),
+			HASH,
+		);
 	});
 });

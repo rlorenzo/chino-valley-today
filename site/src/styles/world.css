@@ -247,6 +247,10 @@ img {
 
 :where(.masthead, .footer, .posthead, .topichead, .abouthead, .markcard)
 	:where(a, button, summary, [tabindex]):focus-visible,
+.markcard:focus-visible {
+	outline-color: var(--placard);
+}
+
 /* ---------------------------------------------------------------------------
  * .facts — a record's field list. Label above value, wrapping into as many
  * columns as the measure allows, ruled top and bottom like a register.
@@ -278,10 +282,6 @@ img {
 	font-size: 0.88rem;
 	line-height: 1.4;
 	overflow-wrap: anywhere;
-}
-
-.markcard:focus-visible {
-	outline-color: var(--placard);
 }
 
 /* =========================================================================

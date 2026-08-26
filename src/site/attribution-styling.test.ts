@@ -102,4 +102,27 @@ test("attribution styling keeps violet reserved for primary records", async (t) 
 		assert.doesNotMatch(postArticle, /sources\.length \+ attributions\.length/);
 		assert.match(postArticle, /attributionCount/);
 	});
+
+	// A multi-line selector GROUP is the trap here, and it has already been
+	// sprung once: a new rule inserted between the two selectors of the
+	// crate-field focus rule joined that group instead of standing alone, so
+	// every focused link on a crate field took a grid layout and lost the
+	// placard outline that makes it visible there (stencil black on crate is
+	// nearly invisible — DESIGN.md measures it). Nothing failed; the CSS was
+	// still valid, the site still built, and only a keyboard user would see it.
+	await t.test("the crate-field focus rule keeps both its selectors", () => {
+		const body = ruleBody(
+			":where(.masthead, .footer, .posthead, .topichead, .abouthead, .markcard)\n\t:where(a, button, summary, [tabindex]):focus-visible,\n.markcard:focus-visible",
+		);
+		assert.match(body, /outline-color:\s*var\(--placard\)/);
+		// The rule sets the outline colour and nothing else. Anything more means
+		// another rule has been folded into the group.
+		assert.doesNotMatch(body, /display:/);
+	});
+
+	await t.test(".facts is its own rule, not part of a focus group", () => {
+		const body = ruleBody(".facts");
+		assert.match(body, /display:\s*grid/);
+		assert.doesNotMatch(body, /outline/);
+	});
 });

@@ -94,6 +94,35 @@ describe("parseLicenseReport", () => {
 		assert.equal(parseReportDate("Report Date: sometime last week"), null);
 		assert.equal(parseReportDate(""), null);
 	});
+
+	// The report names a CALENDAR DAY, and the machine reading it has a
+	// timezone that is not information about that day. Parsed the obvious way —
+	// new Date(text).toISOString().slice(0, 10) — the string lands on local
+	// midnight and the ISO slice hands back the day before on anything east of
+	// Greenwich: in Asia/Tokyo, "August 12" becomes 2026-08-11. Nothing here
+	// runs east of Greenwich today, which is exactly why this needs asserting
+	// rather than noticing.
+	test("the same day in every timezone", () => {
+		const original = process.env.TZ;
+		try {
+			for (const tz of [
+				"UTC",
+				"America/Los_Angeles",
+				"Asia/Tokyo",
+				"Pacific/Kiritimati", // UTC+14, the furthest east there is
+			]) {
+				process.env.TZ = tz;
+				assert.equal(
+					parseReportDate("Report Date: Wednesday, August 12, 2026"),
+					"2026-08-12",
+					`report date shifted in ${tz}`,
+				);
+			}
+		} finally {
+			if (original === undefined) delete process.env.TZ;
+			else process.env.TZ = original;
+		}
+	});
 });
 
 describe("row anchors", () => {
