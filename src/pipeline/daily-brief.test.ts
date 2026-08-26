@@ -1170,7 +1170,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 
 		// Without any scrape runs recorded
 		const freshMap1 = checkHeadlinesFreshness(db, NOW);
-		assert.equal(freshMap1["champion-news"].isFresh, false);
+		assert.equal(freshMap1["quest-news"].isFresh, false);
 		assert.equal(freshMap1["dailybulletin-news"].isFresh, false);
 
 		// Populate successful scrape runs
@@ -1180,7 +1180,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 				 VALUES (?, ?, ?, 'success', 1, 1)`,
 			)
 			.run(
-				"champion-news",
+				"quest-news",
 				"2026-08-15T07:50:00.000Z",
 				"2026-08-15T08:00:00.000Z",
 			);
@@ -1197,7 +1197,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 			);
 
 		const freshMap2 = checkHeadlinesFreshness(db, NOW);
-		assert.equal(freshMap2["champion-news"].isFresh, true);
+		assert.equal(freshMap2["quest-news"].isFresh, true);
 		assert.equal(freshMap2["dailybulletin-news"].isFresh, true);
 	});
 
@@ -1240,7 +1240,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 				 VALUES (?, ?, ?, 'failure', 'HTTP 503', 0, 0)`,
 			)
 			.run(
-				"champion-news",
+				"quest-news",
 				"2026-08-17T05:50:00.000Z",
 				"2026-08-17T06:00:00.000Z",
 			);
@@ -1252,8 +1252,8 @@ describe("headlines elsewhere deduplication and selection", () => {
 			.run("dailybulletin-news", "2026-08-17T05:50:00.000Z");
 
 		const freshness = checkHeadlinesFreshness(db, NOW);
-		assert.equal(freshness["champion-news"].isFresh, false);
-		assert.match(freshness["champion-news"].heldReason ?? "", /HTTP 503/);
+		assert.equal(freshness["quest-news"].isFresh, false);
+		assert.match(freshness["quest-news"].heldReason ?? "", /HTTP 503/);
 		assert.equal(freshness["dailybulletin-news"].isFresh, false);
 		assert.equal(
 			freshness["dailybulletin-news"].heldReason,
@@ -1262,7 +1262,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 	});
 
 	test("each outlet is judged stale on its own publishing cadence", () => {
-		// The Champion is a weekly and the Daily Bulletin publishes daily, so one
+		// Quest News is a weekly and the Daily Bulletin publishes daily, so one
 		// staleness threshold cannot serve both. This run is ~31h old: fine for
 		// the weekly's 8-day window, well past the daily's 26h one.
 		const db = openDb(":memory:");
@@ -1276,7 +1276,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 		}
 
 		const freshness = checkHeadlinesFreshness(db, NOW);
-		assert.equal(freshness["champion-news"].isFresh, true);
+		assert.equal(freshness["quest-news"].isFresh, true);
 		assert.equal(freshness["dailybulletin-news"].isFresh, false);
 		assert.match(
 			freshness["dailybulletin-news"].heldReason ?? "",

@@ -101,7 +101,15 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 		// The entry stays here on purpose. A written permission request is with
 		// the Publisher (the channel their terms require), and if their terms
 		// change to permit this, the weekly drift check is how we find out.
-		status: "enabled",
+		//
+		// `held` matters beyond documentation. openDb() seeds source_tos_status
+		// from this registry with INSERT OR IGNORE, so a fresh database — a
+		// rebuild, a new host — would otherwise come up with this source enabled,
+		// and checkHeadlinesFreshness would then let the thirty-six articles
+		// already in the corpus publish. It also makes resetSourceTosHold refuse
+		// outright ("configured as 'held' in baseline registry"), so clearing this
+		// takes editing the contract, which is the point.
+		status: "held",
 		terms_url: "https://www.championnewspapers.com/site/terms.html",
 		reviewed_hash:
 			"b00ff0478d29955b84a444af610933d1d9e29a93c00e68e3a19b254119e587d4",
