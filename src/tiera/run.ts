@@ -11,7 +11,12 @@
 //
 // Usage: node src/tiera/run.ts
 import { openDb } from "../db/index.ts";
-import { createPost, type NewPost, transitionPost } from "../pipeline/posts.ts";
+import {
+	createPost,
+	type NewPost,
+	normalizeSlug,
+	transitionPost,
+} from "../pipeline/posts.ts";
 import { generateAlerts } from "./alerts.ts";
 import { generateBusinessTracker } from "./business-tracker.ts";
 import { generateMeetingPreviews } from "./meeting-previews.ts";
@@ -50,13 +55,16 @@ function main(): void {
 
 		totals[gen.label] = { created: 0, updated: 0, skipped: 0 };
 		for (const post of posts) {
-			if (seenSlugs.has(post.slug)) {
+			// Compared normalized, because createPost() normalizes: two generators
+			// emitting 2026-W36-x and 2026-w36-x are one post, not two.
+			const slug = normalizeSlug(post.slug);
+			if (seenSlugs.has(slug)) {
 				console.error(
 					`  ERROR: slug collision within this run, refusing to overwrite: ${post.slug}`,
 				);
 				continue;
 			}
-			seenSlugs.add(post.slug);
+			seenSlugs.add(slug);
 			anyPosts++;
 
 			const { outcome } = createPost(db, post);
@@ -66,13 +74,13 @@ function main(): void {
 			// and rather than dropping it, which is what skipping it amounts to.
 			const target = post.heldReason ? "held" : "published";
 			if (outcome !== "skipped") {
-				transitionPost(db, post.slug, target, {
+				transitionPost(db, slug, target, {
 					heldReason: post.heldReason,
 				});
 			}
 			totals[gen.label][outcome]++;
 			console.log(
-				`  ${post.slug}: ${outcome}${outcome !== "skipped" ? ` -> ${target}` : ""}`,
+				`  ${slug}: ${outcome}${outcome !== "skipped" ? ` -> ${target}` : ""}`,
 			);
 		}
 		if (posts.length === 0) console.log("  (no posts generated)");

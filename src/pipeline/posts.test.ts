@@ -7,9 +7,12 @@ import { validateDraft } from "../gates/validators.ts";
 import { ROOT } from "../store.ts";
 import {
 	createPost,
+	getPost,
 	glossaryFor,
 	type NewPost,
+	normalizeSlug,
 	renderPostFile,
+	transitionPost,
 } from "./posts.ts";
 
 const SOURCE =
@@ -261,5 +264,73 @@ describe("createPost respects a terminal post on disk with no DB row", () => {
 		} finally {
 			rmSync(queued, { force: true });
 		}
+	});
+});
+
+// The site publishes a post at Astro's collection id, which its glob loader
+// derives by lowercasing the filename. An ISO-week slug (2026-W36-news-digest)
+// therefore published at an address the pipeline never recorded, and the daily
+// brief, which links by stored slug, linked to a 404. createPost() owning the
+// normalization is what keeps the row, the file and the URL one string.
+describe("slug normalization", () => {
+	const draft: NewPost = {
+		slug: "2026-W36-news-digest",
+		postType: "news_digest",
+		tier: "A",
+		title: "Chino Valley News Digest — 2026-W36",
+		bodyMd: "- [Item](https://example.test/a) — 2026-08-27 (Chino)",
+		sources: ["https://example.test/a"],
+	};
+	const lower = "2026-w36-news-digest";
+
+	test("files and records an uppercase slug lowercased", () => {
+		const db = openDb(":memory:");
+		const queued = join(ROOT, "content", "queue", `${lower}.md`);
+		try {
+			const res = createPost(db, draft);
+			assert.equal(res.outcome, "created");
+			assert.equal(res.filePath, join("content", "queue", `${lower}.md`));
+			assert.equal(getPost(db, lower)?.slug, lower);
+		} finally {
+			rmSync(queued, { force: true });
+		}
+	});
+
+	test("re-running the generator updates in place instead of duplicating", () => {
+		const db = openDb(":memory:");
+		const queued = join(ROOT, "content", "queue", `${lower}.md`);
+		try {
+			createPost(db, draft);
+			// The second run is the one that mattered: a normalized write plus an
+			// un-normalized lookup would have missed the row and made a twin.
+			const again = createPost(db, { ...draft, bodyMd: "- second run" });
+			assert.equal(again.outcome, "updated");
+			const rows = db.raw
+				.prepare("SELECT COUNT(*) c FROM posts")
+				.get() as unknown as { c: number };
+			assert.equal(rows.c, 1);
+		} finally {
+			rmSync(queued, { force: true });
+		}
+	});
+
+	test("a caller holding the pre-normalization slug still finds the post", () => {
+		const db = openDb(":memory:");
+		const queued = join(ROOT, "content", "queue", `${lower}.md`);
+		const published = join(ROOT, "content", "published", `${lower}.md`);
+		try {
+			createPost(db, draft);
+			// tiera/run.ts transitions using the generator's own string.
+			const row = transitionPost(db, draft.slug, "published");
+			assert.equal(row.slug, lower);
+			assert.equal(row.file_path, join("content", "published", `${lower}.md`));
+		} finally {
+			rmSync(queued, { force: true });
+			rmSync(published, { force: true });
+		}
+	});
+
+	test("leaves an already-lowercase slug alone", () => {
+		assert.equal(normalizeSlug(lower), lower);
 	});
 });

@@ -221,10 +221,30 @@ function writePostFile(relPath: string, content: string): void {
 	writeFileSync(abs, content);
 }
 
+/**
+ * A post's public URL is not its stored slug: the site reads content/ with
+ * Astro's glob loader, which derives a collection id by LOWERCASING the
+ * filename, and routes /posts/<id>/. So a slug carrying an uppercase letter —
+ * which every ISO-week slug does, `2026-W36-news-digest` — is filed and
+ * recorded at one address and published at another. Nothing catches it: the
+ * site's own links go through postUrl(post.id) and are fine, while the daily
+ * brief links posts by their STORED slug and therefore linked to a 404 with an
+ * empty body (a reader sees a blank page). Normalizing here, at the one
+ * function that creates a post and the one that finds it, is what makes the
+ * stored slug, the filename and the published URL the same string — for every
+ * generator that exists now and every one added later.
+ */
+export function normalizeSlug(slug: string): string {
+	return slug.toLowerCase();
+}
+
+// Case-insensitive by way of normalizeSlug, so a caller still holding the
+// pre-normalization slug — tiera/run.ts transitions the post it just created
+// using the generator's own string — still finds the row it just wrote.
 export function getPost(db: Db, slug: string): PostRow | undefined {
-	return db.raw.prepare("SELECT * FROM posts WHERE slug = ?").get(slug) as
-		| PostRow
-		| undefined;
+	return db.raw
+		.prepare("SELECT * FROM posts WHERE slug = ?")
+		.get(normalizeSlug(slug)) as PostRow | undefined;
 }
 
 export function listPosts(db: Db, status?: PostStatus): PostRow[] {
@@ -250,13 +270,16 @@ export function listPosts(db: Db, status?: PostStatus): PostRow[] {
 // id for, and inventing one would be a lie. Callers care about `outcome`.
 export function createPost(
 	db: Db,
-	p: NewPost,
+	input: NewPost,
 	opts: { replacePublished?: boolean } = {},
 ): {
 	id: number | null;
 	filePath: string;
 	outcome: "created" | "updated" | "skipped";
 } {
+	// Normalized once, up front, so every use below — the identity lookup, the
+	// on-disk terminal-state check, the filename, the row — agrees on one slug.
+	const p: NewPost = { ...input, slug: normalizeSlug(input.slug) };
 	if (p.sources.length === 0)
 		throw new Error(`post ${p.slug}: sources[] must not be empty`);
 	const existing = getPost(db, p.slug);

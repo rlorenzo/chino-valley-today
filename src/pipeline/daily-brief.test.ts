@@ -754,6 +754,26 @@ describe("assembleBrief", () => {
 		assert.equal(new Set(p.sources).size, p.sources.length);
 	});
 
+	// The live bug (2026-08-31): the brief linked the week's digest as
+	// /posts/2026-W36-news-digest/, but the site publishes it at the lowercased
+	// slug Astro's glob loader derives from the filename. The uppercase URL
+	// 404d with an empty body, so the reader saw a blank page.
+	test("links a post at its lowercased slug, which is the URL the site serves", () => {
+		const inputs = quietInputs();
+		inputs.publishedPosts = [
+			post({
+				slug: "2026-W36-news-digest",
+				post_type: "news_digest",
+				file_path: "content/published/2026-W36-news-digest.md",
+				published_at: "2026-08-17T01:00:00.000Z",
+			}),
+		];
+		inputs.prevBriefPublishedAt = "2026-08-16T13:10:00.000Z";
+		const { post: p } = assembleBrief(inputs, NOW);
+		assert.match(p.bodyMd, /\(\/posts\/2026-w36-news-digest\/\)/);
+		assert.doesNotMatch(p.bodyMd, /2026-W36/);
+	});
+
 	test("city Alert Center items render in Fire & safety under their city's label", () => {
 		const inputs = quietInputs();
 		inputs.fire = [
