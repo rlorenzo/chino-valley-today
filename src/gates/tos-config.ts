@@ -83,7 +83,33 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 	},
 	"champion-news": {
 		source_key: "champion-news",
-		status: "enabled",
+		// NOT INGESTED, by decision (2026-08-26). The lock is in
+		// src/scrapers/registry.ts, which no longer lists this scraper, and in
+		// scripts/run-group.sh, which no longer schedules it. Nothing invokes it.
+		//
+		// Why: the Champion's terms prohibit republishing any portion of the
+		// content, incorporating it "in any database, compilation, archive or
+		// cache", scraping it "without permission", and "any data mining, data
+		// gathering or extraction method". This scraper did all four. EDITORIAL.md
+		// rejects KTLA on weaker wording, so ingesting the Champion was the
+		// project applying its own rule unevenly.
+		//
+		// This was never a drift: the non-volatile terms digest is identical to
+		// the 2026-03-11 archived copy, so the clause was there when the source
+		// was approved on 2026-08-18 and the approval simply missed it.
+		//
+		// The entry stays here on purpose. A written permission request is with
+		// the Publisher (the channel their terms require), and if their terms
+		// change to permit this, the weekly drift check is how we find out.
+		//
+		// `held` matters beyond documentation. openDb() seeds source_tos_status
+		// from this registry with INSERT OR IGNORE, so a fresh database — a
+		// rebuild, a new host — would otherwise come up with this source enabled,
+		// and checkHeadlinesFreshness would then let the thirty-six articles
+		// already in the corpus publish. It also makes resetSourceTosHold refuse
+		// outright ("configured as 'held' in baseline registry"), so clearing this
+		// takes editing the contract, which is the point.
+		status: "held",
 		terms_url: "https://www.championnewspapers.com/site/terms.html",
 		reviewed_hash:
 			"b00ff0478d29955b84a444af610933d1d9e29a93c00e68e3a19b254119e587d4",

@@ -23,7 +23,12 @@ export const SCRAPERS: Record<string, string> = {
 	"cbwcd-events": "./scrapers/cbwcd-events.ts",
 	"yanksair-events": "./scrapers/yanksair-events.ts",
 	// Phase 4 Task 4.2 (headlines-elsewhere press ingestion, 2026-08-18)
-	"champion-news": "./scrapers/champion-news.ts",
+	// champion-news is intentionally unregistered (2026-08-26): its terms
+	// prohibit the access it performs, and a written permission request is with
+	// the Publisher. Unregistering rather than flagging is the point — nothing,
+	// including a hand-run `node src/run-one.ts`, can invoke a scraper that is
+	// not here. The file is kept, not deleted: re-registering is one line if
+	// permission arrives. Reasoning in src/gates/tos-config.ts.
 	"dailybulletin-news": "./scrapers/dailybulletin-news.ts",
 	// Press expansion (student papers + NBC4 keyword-filtered, 2026-08-19)
 	"quest-news": "./scrapers/quest-news.ts",

@@ -207,6 +207,15 @@ whenever a source changes behavior.
 
 ### champion-news — The Champion Newspapers (TownNews Blox CMS)
 
+- **STOPPED 2026-08-26 — not ingested, pending written permission.** The
+  Champion's terms prohibit scraping, data gathering, and incorporating content
+  into a database, archive or cache, without permission. EDITORIAL.md rejects
+  KTLA on weaker wording. The scraper is out of `src/scrapers/registry.ts` and
+  out of the press group in `scripts/run-group.sh`, so nothing can invoke it;
+  the file is kept and the `tos-config.ts` entry stays so the weekly drift
+  check keeps watching their terms. Full reasoning in EDITORIAL.md under
+  "Student press and broadcast feeds". Everything below describes the source as
+  built, and applies again only if the Publisher grants permission.
 - **Added 2026-08-18 (Phase 4 Task 4.2).** Weekly community newspaper covering
   Chino and Chino Hills. Ingests Saturday edition sitemaps from
   `championnewspapers.com/tncms/sitemap/editorial.xml` (capped at 15 candidate

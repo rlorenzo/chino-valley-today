@@ -40,6 +40,19 @@ test("check-tos-drift watchdog and reset suite", async (t) => {
 	const targetSource = "champion-news";
 	const config = SOURCE_TOS_REGISTRY[targetSource];
 
+	// champion-news is the only source carrying a `scope`, so the scoped paths
+	// below can use nothing else. It is also baseline-`held` now, by the terms
+	// decision recorded in tos-config.ts, and resetSourceTosHold refuses a
+	// source the registry declares held. The reset subtests are about the reset
+	// MECHANISM, not about this outlet, so the baseline status is overridden for
+	// the run and restored after — the same treatment reviewed_hash already
+	// gets a few lines down, and for the same reason.
+	const originalStatus = config.status;
+	(config as { status: "enabled" | "held" }).status = "enabled";
+	t.after(() => {
+		(config as { status: "enabled" | "held" }).status = originalStatus;
+	});
+
 	// Create a mock fetcher that returns exact reviewed hash content
 	const matchingBody = Buffer.from(
 		"Baseline Terms of Service content for test",
@@ -654,6 +667,16 @@ test("--reset anchors the version, so the short path works afterwards", async (t
 	const db = openDb(join(tmpDir, "resetanchor.db"));
 	const source = "champion-news";
 	const config = SOURCE_TOS_REGISTRY[source];
+
+	// Needs a source that is both SCOPED and resettable, and champion-news is
+	// the only scoped one. Its baseline is `held` by the terms decision in
+	// tos-config.ts, which resetSourceTosHold refuses, so that is overridden for
+	// this test and restored after — as reviewed_hash already is below.
+	const originalStatus = config.status;
+	(config as { status: "enabled" | "held" }).status = "enabled";
+	t.after(() => {
+		(config as { status: "enabled" | "held" }).status = originalStatus;
+	});
 	const body = Buffer.from("<html><body>terms v1</body></html>");
 	const hash = createHash("sha256").update(body).digest("hex");
 
