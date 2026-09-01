@@ -20,6 +20,7 @@ import { type Db, openDb } from "../db/index.ts";
 import { QUIET_IS_HEALTHY } from "../scrapers/quiet-policy.ts";
 import { errorMessage } from "../utils/errors.ts";
 import { laDateOf } from "./daily-brief.ts";
+import { getPost } from "./posts.ts";
 
 const FRESH = "pipeline=fresh";
 const STALE = "pipeline=stale";
@@ -40,9 +41,9 @@ export function checkBriefDatabase(
 	now: Date,
 ): { ok: boolean; status?: string; slug: string } {
 	const slug = expectedBriefSlug(now);
-	const row = db.raw
-		.prepare("SELECT status FROM posts WHERE slug = ?")
-		.get(slug) as { status: string } | undefined;
+	// Through getPost rather than its own query, so normalizeSlug governs every
+	// slug that reaches SQL from one place.
+	const row = getPost(db, slug);
 
 	if (row?.status === "published") {
 		return { ok: true, status: "published", slug };

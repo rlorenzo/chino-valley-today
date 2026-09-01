@@ -58,7 +58,32 @@ describe("planRenames", () => {
 			},
 		]);
 		assert.equal(plans.length, 1);
-		assert.match(plans[0]?.blocked ?? "", /already belongs to post id 2/);
+		assert.match(plans[0]?.blocked ?? "", /also claimed by post id\(s\) 2/);
+	});
+
+	// Neither row IS the lowercased string, so an index on the stored slug sees
+	// no clash and plans both onto one target. The write pass would then hit
+	// posts.slug's UNIQUE constraint having already renamed a file.
+	it("blocks two uppercase variants that normalize onto each other", () => {
+		const plans = planRenames([
+			{
+				id: 1,
+				slug: "2026-W36-news-digest",
+				file_path: "content/published/2026-W36-news-digest.md",
+			},
+			{
+				id: 2,
+				slug: "2026-w36-NEWS-digest",
+				file_path: "content/held/2026-w36-NEWS-digest.md",
+			},
+		]);
+		assert.equal(plans.length, 2);
+		assert.ok(
+			plans.every((p) => p.blocked),
+			"neither row may be renamed while the target is contested",
+		);
+		assert.match(plans[0]?.blocked ?? "", /also claimed by post id\(s\) 2/);
+		assert.match(plans[1]?.blocked ?? "", /also claimed by post id\(s\) 1/);
 	});
 });
 

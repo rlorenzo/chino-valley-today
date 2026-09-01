@@ -56,7 +56,19 @@ export interface Plan {
  * two real posts is an editorial call, not a migration's.
  */
 export function planRenames(rows: Row[]): Plan[] {
-	const bySlug = new Map(rows.map((r) => [r.slug, r]));
+	// Indexed by the NORMALIZED slug, not the stored one. Two rows can both
+	// need renaming and both land on the same target — 2026-W36-x and
+	// 2026-w36-X — and an index on the stored slug sees neither as a clash,
+	// because neither one IS the lowercased string. The write pass would then
+	// hit posts.slug's UNIQUE constraint partway through, having already
+	// renamed a file.
+	const byNormalized = new Map<string, Row[]>();
+	for (const r of rows) {
+		const key = normalizeSlug(r.slug);
+		const bucket = byNormalized.get(key);
+		if (bucket) bucket.push(r);
+		else byNormalized.set(key, [r]);
+	}
 	const plans: Plan[] = [];
 	for (const row of rows) {
 		const to = normalizeSlug(row.slug);
@@ -69,9 +81,11 @@ export function planRenames(rows: Row[]): Plan[] {
 			fromPath: row.file_path,
 			toPath,
 		};
-		const clash = bySlug.get(to);
-		if (clash && clash.id !== row.id)
-			plan.blocked = `slug ${to} already belongs to post id ${clash.id}`;
+		const others = (byNormalized.get(to) ?? []).filter((r) => r.id !== row.id);
+		if (others.length > 0)
+			plan.blocked = `slug ${to} is also claimed by post id(s) ${others
+				.map((r) => r.id)
+				.join(", ")}`;
 		plans.push(plan);
 	}
 	return plans;
