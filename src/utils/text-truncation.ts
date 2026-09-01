@@ -48,9 +48,19 @@ const ABBREVIATIONS = new Set([
  * Strips any markup and decodes HTML entities, collapsing runs of whitespace.
  * Delegates to cheerio rather than a hand-written entity table so the full
  * named/numeric entity set is covered, not just the dozen we thought to list.
+ *
+ * <style> and <script> are REMOVED before the text is taken, not stripped as
+ * tags. Their contents are markup, not prose, but they are text nodes to
+ * cheerio and .text() returns them like any other. CivicPlus embeds
+ * `<style scoped>` blocks in the body of a news release, so the W36 digest
+ * published a teaser reading "* { --categoryColor: var(--cp-module-style-color6); }
+ * News Flash Chino Municipal Code 9.90.010 Effective August 25..." — a
+ * stylesheet presented to readers as the summary of a municipal code change.
  */
 export function cleanPlainText(text: string): string {
-	return cheerio.load(text).text().replace(/\s+/g, " ").trim();
+	const $ = cheerio.load(text);
+	$("style, script").remove();
+	return $.text().replace(/\s+/g, " ").trim();
 }
 
 /**
