@@ -189,12 +189,14 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 		// events this is expected rather than a defect — they name licensees
 		// (public record, allowed as input), so a private_individual flag here is
 		// the designed protection working.
-		// normalizeSlug, because createPost() stored the row under the
-		// normalized slug: matching on the caller's raw one would update zero
-		// rows and leave the post at its original tier while the hold below
-		// still applied — a Tier C post recorded as Tier A.
+		// Normalized AND collated the same way getPost() matches, because both
+		// halves fail the same way here: matching the caller's raw slug misses
+		// the normalized row, and matching case-sensitively misses a legacy row
+		// still stored mixed-case before the migration runs. Either miss updates
+		// zero rows and leaves the post at its original tier while the hold
+		// below still applies — a Tier C post recorded as Tier A.
 		db.raw
-			.prepare("UPDATE posts SET tier = ? WHERE slug = ?")
+			.prepare("UPDATE posts SET tier = ? WHERE slug = ? COLLATE NOCASE")
 			.run("C", normalizeSlug(o.slug));
 		transitionPost(db, o.slug, "held", {
 			heldReason: "tierC: judge content flags",
