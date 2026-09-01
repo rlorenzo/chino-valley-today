@@ -16,6 +16,20 @@ test("text-truncation utils", async (t) => {
 		);
 	});
 
+	// CivicPlus embeds <style scoped> inside a news release body. Its contents
+	// are text nodes, so .text() returned the stylesheet as prose and the W36
+	// digest published a CSS rule as the teaser for a municipal code change.
+	await t.test("cleanPlainText drops style and script contents", () => {
+		const raw =
+			"<style scoped>* { --categoryColor: var(--cp-module-style-color6); }</style>" +
+			"<h2>News Flash</h2> <p>Chino Municipal Code 9.90.010</p>" +
+			"<script>var t = 1;</script>";
+		assert.equal(
+			cleanPlainText(raw),
+			"News Flash Chino Municipal Code 9.90.010",
+		);
+	});
+
 	await t.test("splitSentences handles abbreviations and quotes", () => {
 		const text =
 			'Mayor Dr. Jane Doe met with U.S. officials on St. John Ave. "We made progress," she said. The council will vote next week.';
