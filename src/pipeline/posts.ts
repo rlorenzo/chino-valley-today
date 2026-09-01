@@ -221,10 +221,41 @@ function writePostFile(relPath: string, content: string): void {
 	writeFileSync(abs, content);
 }
 
+/**
+ * A post's public URL is not its stored slug: the site reads content/ with
+ * Astro's glob loader, which derives a collection id by LOWERCASING the
+ * filename, and routes /posts/<id>/. So a slug carrying an uppercase letter —
+ * which every ISO-week slug does, `2026-W36-news-digest` — is filed and
+ * recorded at one address and published at another. Nothing catches it: the
+ * site's own links go through postUrl(post.id) and are fine, while the daily
+ * brief links posts by their STORED slug and therefore linked to a 404 with an
+ * empty body (a reader sees a blank page). Normalizing here, at the one
+ * function that creates a post and the one that finds it, is what makes the
+ * stored slug, the filename and the published URL the same string — for every
+ * generator that exists now and every one added later.
+ */
+export function normalizeSlug(slug: string): string {
+	return slug.toLowerCase();
+}
+
+// COLLATE NOCASE, not a plain match on the normalized slug, because a slug is
+// now a case-insensitive identifier and the lookup should say so.
+//
+// Two callers need it. A caller still holding the pre-normalization string —
+// tiera/run.ts transitions the post it just created using the generator's own
+// slug — must find the row it just wrote. And a row written BEFORE
+// normalization existed is still stored mixed-case until
+// scripts/normalize-post-slugs.ts runs; a lookup that missed it would send
+// createPost() down its insert path and duplicate a post that already exists.
+// Today (ISO week W36) that is not hypothetical: the digest generator re-runs
+// this week's slug every morning, so the very first run after deploying this
+// would have inserted a second W36 row. Finding the legacy row instead means
+// createPost() updates it in place, at the path it already has, and the
+// migration renames it afterwards.
 export function getPost(db: Db, slug: string): PostRow | undefined {
-	return db.raw.prepare("SELECT * FROM posts WHERE slug = ?").get(slug) as
-		| PostRow
-		| undefined;
+	return db.raw
+		.prepare("SELECT * FROM posts WHERE slug = ? COLLATE NOCASE")
+		.get(normalizeSlug(slug)) as PostRow | undefined;
 }
 
 export function listPosts(db: Db, status?: PostStatus): PostRow[] {
@@ -250,13 +281,16 @@ export function listPosts(db: Db, status?: PostStatus): PostRow[] {
 // id for, and inventing one would be a lie. Callers care about `outcome`.
 export function createPost(
 	db: Db,
-	p: NewPost,
+	input: NewPost,
 	opts: { replacePublished?: boolean } = {},
 ): {
 	id: number | null;
 	filePath: string;
 	outcome: "created" | "updated" | "skipped";
 } {
+	// Normalized once, up front, so every use below — the identity lookup, the
+	// on-disk terminal-state check, the filename, the row — agrees on one slug.
+	const p: NewPost = { ...input, slug: normalizeSlug(input.slug) };
 	if (p.sources.length === 0)
 		throw new Error(`post ${p.slug}: sources[] must not be empty`);
 	const existing = getPost(db, p.slug);
@@ -300,11 +334,23 @@ export function createPost(
 	// So for the two TERMINAL states the filesystem gets the final say. `held`
 	// and `queued` are deliberately not checked: nobody has decided about those
 	// yet, and regenerating them in place is the idempotency the runners rely on.
+	//
+	// Probed under BOTH spellings. On a case-sensitive filesystem a terminal
+	// post written before normalization sits at its mixed-case filename, and
+	// probing only the normalized one would not see it — which is how a
+	// database restored without its content, or a host mid-migration, would
+	// recreate a post that is already published on disk. That is the exact
+	// failure this guard was added for.
+	const names = [p.slug, input.slug].filter(
+		(n, i, all) => all.indexOf(n) === i,
+	);
 	for (const status of ["published", "rejected"] as const) {
 		if (status === "published" && opts.replacePublished) continue;
-		const onDisk = join(DIR_BY_STATUS[status], `${p.slug}.md`);
-		if (existsSync(join(ROOT, onDisk))) {
-			return { id: null, filePath: onDisk, outcome: "skipped" };
+		for (const name of names) {
+			const onDisk = join(DIR_BY_STATUS[status], `${name}.md`);
+			if (existsSync(join(ROOT, onDisk))) {
+				return { id: null, filePath: onDisk, outcome: "skipped" };
+			}
 		}
 	}
 

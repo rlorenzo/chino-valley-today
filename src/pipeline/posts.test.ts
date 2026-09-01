@@ -7,9 +7,12 @@ import { validateDraft } from "../gates/validators.ts";
 import { ROOT } from "../store.ts";
 import {
 	createPost,
+	getPost,
 	glossaryFor,
 	type NewPost,
+	normalizeSlug,
 	renderPostFile,
+	transitionPost,
 } from "./posts.ts";
 
 const SOURCE =
@@ -260,6 +263,133 @@ describe("createPost respects a terminal post on disk with no DB row", () => {
 			assert.ok(typeof res.id === "number");
 		} finally {
 			rmSync(queued, { force: true });
+		}
+	});
+});
+
+// The site publishes a post at Astro's collection id, which its glob loader
+// derives by lowercasing the filename. An ISO-week slug (2026-W36-news-digest)
+// therefore published at an address the pipeline never recorded, and the daily
+// brief, which links by stored slug, linked to a 404. createPost() owning the
+// normalization is what keeps the row, the file and the URL one string.
+describe("slug normalization", () => {
+	const draft: NewPost = {
+		slug: "2026-W36-news-digest",
+		postType: "news_digest",
+		tier: "A",
+		title: "Chino Valley News Digest — 2026-W36",
+		bodyMd: "- [Item](https://example.test/a) — 2026-08-27 (Chino)",
+		sources: ["https://example.test/a"],
+	};
+	const lower = "2026-w36-news-digest";
+
+	test("files and records an uppercase slug lowercased", () => {
+		const db = openDb(":memory:");
+		const queued = join(ROOT, "content", "queue", `${lower}.md`);
+		try {
+			const res = createPost(db, draft);
+			assert.equal(res.outcome, "created");
+			assert.equal(res.filePath, join("content", "queue", `${lower}.md`));
+			assert.equal(getPost(db, lower)?.slug, lower);
+		} finally {
+			rmSync(queued, { force: true });
+		}
+	});
+
+	test("re-running the generator updates in place instead of duplicating", () => {
+		const db = openDb(":memory:");
+		const queued = join(ROOT, "content", "queue", `${lower}.md`);
+		try {
+			createPost(db, draft);
+			// The second run is the one that mattered: a normalized write plus an
+			// un-normalized lookup would have missed the row and made a twin.
+			const again = createPost(db, { ...draft, bodyMd: "- second run" });
+			assert.equal(again.outcome, "updated");
+			const rows = db.raw
+				.prepare("SELECT COUNT(*) c FROM posts")
+				.get() as unknown as { c: number };
+			assert.equal(rows.c, 1);
+		} finally {
+			rmSync(queued, { force: true });
+		}
+	});
+
+	test("a caller holding the pre-normalization slug still finds the post", () => {
+		const db = openDb(":memory:");
+		const queued = join(ROOT, "content", "queue", `${lower}.md`);
+		const published = join(ROOT, "content", "published", `${lower}.md`);
+		try {
+			createPost(db, draft);
+			// tiera/run.ts transitions using the generator's own string.
+			const row = transitionPost(db, draft.slug, "published");
+			assert.equal(row.slug, lower);
+			assert.equal(row.file_path, join("content", "published", `${lower}.md`));
+		} finally {
+			rmSync(queued, { force: true });
+			rmSync(published, { force: true });
+		}
+	});
+
+	test("leaves an already-lowercase slug alone", () => {
+		assert.equal(normalizeSlug(lower), lower);
+	});
+
+	// Between deploying normalization and running the migration, rows written
+	// earlier are still stored mixed-case. The digest generator re-runs the
+	// current week's slug every morning, so a lookup that missed the legacy row
+	// would insert a second one the very next day.
+	test("finds a row still stored under its pre-migration mixed-case slug", () => {
+		const db = openDb(":memory:");
+		const legacy = join(ROOT, "content", "queue", `${draft.slug}.md`);
+		try {
+			// Written the way the pipeline wrote it before normalization existed.
+			db.raw
+				.prepare(
+					`INSERT INTO posts (slug, post_type, tier, status, file_path, source_count, created_at)
+					 VALUES (?, 'news_digest', 'A', 'queued', ?, 1, '2026-08-31T00:00:00.000Z')`,
+				)
+				.run(draft.slug, join("content", "queue", `${draft.slug}.md`));
+
+			assert.equal(getPost(db, lower)?.slug, draft.slug);
+
+			const res = createPost(db, draft);
+			assert.equal(res.outcome, "updated", "must not insert a second row");
+			// Updated at the path it already has; the migration renames it later.
+			assert.equal(res.filePath, join("content", "queue", `${draft.slug}.md`));
+			const count = db.raw
+				.prepare("SELECT COUNT(*) c FROM posts")
+				.get() as unknown as { c: number };
+			assert.equal(count.c, 1);
+		} finally {
+			rmSync(legacy, { force: true });
+		}
+	});
+
+	// The published artifact is the FILE. A terminal post written before
+	// normalization sits at its mixed-case filename on a case-sensitive
+	// filesystem, and probing only the normalized name would recreate it.
+	test("sees a terminal file left under the pre-migration filename", () => {
+		const db = openDb(":memory:");
+		const rel = join("content", "published", `${draft.slug}.md`);
+		const abs = join(ROOT, rel);
+		mkdirSync(dirname(abs), { recursive: true });
+		writeFileSync(abs, "the published post, at its legacy name\n");
+		try {
+			const res = createPost(db, draft);
+			assert.equal(res.outcome, "skipped");
+			assert.equal(res.id, null);
+			// Which SPELLING comes back depends on the filesystem: a
+			// case-insensitive one (macOS) matches the normalized probe against
+			// the mixed-case file and reports that, while the droplet's
+			// case-sensitive one only matches the legacy name. Both are correct,
+			// and the property under test is that neither recreates the post.
+			assert.equal(res.filePath.toLowerCase(), rel.toLowerCase());
+			assert.equal(
+				readFileSync(abs, "utf8"),
+				"the published post, at its legacy name\n",
+			);
+		} finally {
+			rmSync(abs, { force: true });
 		}
 	});
 });

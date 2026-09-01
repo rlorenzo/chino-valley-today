@@ -50,6 +50,7 @@ import {
 import {
 	createPost,
 	type NewPost,
+	normalizeSlug,
 	type PostRow,
 	transitionPost,
 } from "./posts.ts";
@@ -1341,7 +1342,13 @@ export function assembleBrief(
 	if (newPosts.length > 0 || licenses.length > 0 || isDegraded("record")) {
 		recordLines.push("## New on the record", "");
 		for (const p of newPosts) {
-			recordLines.push(`- [${mdEscape(titleFor(p))}](/posts/${p.slug}/)`);
+			// normalizeSlug, not p.slug: the site publishes a post at its
+			// lowercased slug, and this link is built from the stored one. They
+			// agree for rows written since createPost() started normalizing; this
+			// keeps the link right for any row written before it.
+			recordLines.push(
+				`- [${mdEscape(titleFor(p))}](/posts/${normalizeSlug(p.slug)}/)`,
+			);
 		}
 		for (const row of licenses) {
 			recordLines.push(
