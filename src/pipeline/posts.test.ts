@@ -333,4 +333,63 @@ describe("slug normalization", () => {
 	test("leaves an already-lowercase slug alone", () => {
 		assert.equal(normalizeSlug(lower), lower);
 	});
+
+	// Between deploying normalization and running the migration, rows written
+	// earlier are still stored mixed-case. The digest generator re-runs the
+	// current week's slug every morning, so a lookup that missed the legacy row
+	// would insert a second one the very next day.
+	test("finds a row still stored under its pre-migration mixed-case slug", () => {
+		const db = openDb(":memory:");
+		const legacy = join(ROOT, "content", "queue", `${draft.slug}.md`);
+		try {
+			// Written the way the pipeline wrote it before normalization existed.
+			db.raw
+				.prepare(
+					`INSERT INTO posts (slug, post_type, tier, status, file_path, source_count, created_at)
+					 VALUES (?, 'news_digest', 'A', 'queued', ?, 1, '2026-08-31T00:00:00.000Z')`,
+				)
+				.run(draft.slug, join("content", "queue", `${draft.slug}.md`));
+
+			assert.equal(getPost(db, lower)?.slug, draft.slug);
+
+			const res = createPost(db, draft);
+			assert.equal(res.outcome, "updated", "must not insert a second row");
+			// Updated at the path it already has; the migration renames it later.
+			assert.equal(res.filePath, join("content", "queue", `${draft.slug}.md`));
+			const count = db.raw
+				.prepare("SELECT COUNT(*) c FROM posts")
+				.get() as unknown as { c: number };
+			assert.equal(count.c, 1);
+		} finally {
+			rmSync(legacy, { force: true });
+		}
+	});
+
+	// The published artifact is the FILE. A terminal post written before
+	// normalization sits at its mixed-case filename on a case-sensitive
+	// filesystem, and probing only the normalized name would recreate it.
+	test("sees a terminal file left under the pre-migration filename", () => {
+		const db = openDb(":memory:");
+		const rel = join("content", "published", `${draft.slug}.md`);
+		const abs = join(ROOT, rel);
+		mkdirSync(dirname(abs), { recursive: true });
+		writeFileSync(abs, "the published post, at its legacy name\n");
+		try {
+			const res = createPost(db, draft);
+			assert.equal(res.outcome, "skipped");
+			assert.equal(res.id, null);
+			// Which SPELLING comes back depends on the filesystem: a
+			// case-insensitive one (macOS) matches the normalized probe against
+			// the mixed-case file and reports that, while the droplet's
+			// case-sensitive one only matches the legacy name. Both are correct,
+			// and the property under test is that neither recreates the post.
+			assert.equal(res.filePath.toLowerCase(), rel.toLowerCase());
+			assert.equal(
+				readFileSync(abs, "utf8"),
+				"the published post, at its legacy name\n",
+			);
+		} finally {
+			rmSync(abs, { force: true });
+		}
+	});
 });
