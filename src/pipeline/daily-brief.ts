@@ -13,6 +13,8 @@
 //   is included whole. Each city's Alert Center (chino-news-rss,
 //   chinohills-news-rss — item_type 'alert' only; their news_release items
 //   stay out of this section) is included whole too, same as cvfd-news.
+//   usgs-quakes is county-wide-by-nature like sbcfire-news and is filtered
+//   to meta.chinoRelevant the same way.
 //   Nixle/sheriff sources are never queried here — Tier C.
 // - "Headlines elsewhere" does not exist until Task 4.2 lands; no stub.
 //
@@ -69,7 +71,14 @@ const CALENDAR_SOURCES = [
 	"chino-news-rss",
 	"chinohills-news-rss",
 ];
-const FIRE_SOURCES = ["sbcfire-news", "cvfd-news"];
+// usgs-quakes belongs here despite the name: an earthquake is a safety item,
+// its only item_type is 'alert', and Fire & safety already renders exactly what
+// a quake line needs — verbatim title plus source link, nothing else.
+const FIRE_SOURCES = ["sbcfire-news", "cvfd-news", "usgs-quakes"];
+// Sources whose coverage area is wider than ours, so their items are ingested
+// whole and carry meta.chinoRelevant for the assembler to filter on. The fire
+// feed is county-wide; the earthquake ring is 50 km and reaches Loma Linda.
+const COUNTYWIDE_FIRE_SOURCES = new Set(["sbcfire-news", "usgs-quakes"]);
 // Queried separately from FIRE_SOURCES (itemTypes: ["alert"] only). The city
 // scrapers also produce 'news_release' and 'event' items, and FIRE_SOURCES'
 // query pulls news_release + alert together, so folding the city keys into
@@ -80,6 +89,7 @@ const FIRE_LABEL: Record<string, string> = {
 	"cvfd-news": "Chino Valley Fire District",
 	"chino-news-rss": "City of Chino",
 	"chinohills-news-rss": "City of Chino Hills",
+	"usgs-quakes": "U.S. Geological Survey",
 };
 const AGENDA_SOURCES = [
 	"chino-legistar",
@@ -229,6 +239,7 @@ export const OPTIONAL_PREREQUISITE_SOURCES = [
 	"cvfd-news",
 	"chino-news-rss",
 	"chinohills-news-rss",
+	"usgs-quakes",
 	// Daily group (05:40 PT)
 	"chino-legistar",
 	"chino-agendacenter",
@@ -241,7 +252,7 @@ export const OPTIONAL_PREREQUISITE_SOURCES = [
 	"abc-licenses",
 ] as const;
 
-// The union. Membership is unchanged — the check still inspects all 15, it
+// The union. The check inspects every one of them, it
 // just acts differently per tier.
 export const DAILY_BRIEF_PREREQUISITE_SOURCES = [
 	...BLOCKING_PREREQUISITE_SOURCES,
@@ -257,6 +268,7 @@ export const PREREQUISITE_SECTIONS: Record<string, readonly BriefSection[]> = {
 	"cvfd-news": ["fire"],
 	"chino-news-rss": ["fire", "today"],
 	"chinohills-news-rss": ["fire", "today"],
+	"usgs-quakes": ["fire"],
 	"chino-legistar": ["today"],
 	"chino-agendacenter": ["today"],
 	"chinohills-agendas": ["today"],
@@ -275,6 +287,7 @@ export const PREREQUISITE_LABEL: Record<string, string> = {
 	"cvfd-news": "Chino Valley Fire District",
 	"chino-news-rss": "City of Chino",
 	"chinohills-news-rss": "City of Chino Hills",
+	"usgs-quakes": "USGS earthquake feed",
 	"chino-legistar": "Chino city meeting agendas",
 	"chino-agendacenter": "Chino agenda center",
 	"chinohills-agendas": "Chino Hills city meeting agendas",
@@ -556,7 +569,7 @@ export function selectFireSafety(fireItems: ItemRow[], now: Date): ItemRow[] {
 	const inWindow = fireItems.filter((row) => {
 		if (!cleanTitle(row.title)) return false;
 		if (!withinLastDays(row.occurred_at, now, 1)) return false;
-		if (row.source_key === "sbcfire-news") {
+		if (COUNTYWIDE_FIRE_SOURCES.has(row.source_key)) {
 			return parseMeta(row.meta).chinoRelevant === true;
 		}
 		return true;

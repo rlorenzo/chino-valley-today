@@ -45,4 +45,6 @@ export const SCRAPERS: Record<string, string> = {
 	// Minutes are ingested from a hand-dropped directory, not fetched: the
 	// Laserfiche host that publishes them disallows automated retrieval.
 	"chinohills-minutes": "./scrapers/chinohills-minutes.ts",
+	// Earthquakes (2026-09-02). Federal, public domain, no robots.txt.
+	"usgs-quakes": "./scrapers/usgs-quakes.ts",
 };

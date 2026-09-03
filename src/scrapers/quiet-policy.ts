@@ -78,6 +78,10 @@ export const QUIET_IS_HEALTHY: Record<string, string | null> = {
 	"donlugo-sports": "no fixtures fall in the window between seasons",
 	"chinohills-sports": "no fixtures fall in the window between seasons",
 
+	// --- Seismic. ---
+	"usgs-quakes":
+		"the 50 km ring averages 27 events a year, so an empty 7-day window is the ordinary state and a busy one is the alarming case",
+
 	// --- Hand-dropped minutes. ---
 	"chinohills-minutes":
 		"the drop directory is empty between hand-pulls, which is its normal state",

@@ -916,8 +916,8 @@ describe("buildDailyBrief: city Alert Center query split", () => {
 });
 
 describe("DAILY_BRIEF_PREREQUISITE_SOURCES", () => {
-	test("contains exactly the 15 canonical prerequisite source keys", () => {
-		assert.equal(DAILY_BRIEF_PREREQUISITE_SOURCES.length, 15);
+	test("contains exactly the 16 canonical prerequisite source keys", () => {
+		assert.equal(DAILY_BRIEF_PREREQUISITE_SOURCES.length, 16);
 		assert.deepEqual(
 			[...DAILY_BRIEF_PREREQUISITE_SOURCES],
 			[
@@ -927,6 +927,7 @@ describe("DAILY_BRIEF_PREREQUISITE_SOURCES", () => {
 				"cvfd-news",
 				"chino-news-rss",
 				"chinohills-news-rss",
+				"usgs-quakes",
 				"chino-legistar",
 				"chino-agendacenter",
 				"chinohills-agendas",

@@ -353,6 +353,50 @@ no Home Campus site and is a separate source.
   (same treatment as the SNO student papers) and is tracked in
   `SOURCE_TOS_REGISTRY` for drift.
 
+### usgs-quakes — USGS earthquakes near the Chino Valley
+
+- **Added 2026-09-02** after a M3.4 near Ontario reached every phone in town at
+  05:37 PT and this site said nothing: the registry had no seismic source.
+- **Method:** USGS FDSN event web service,
+  `earthquake.usgs.gov/fdsnws/event/1/query?format=geojson`, radius query around
+  the midpoint of the two city centers (33.97, -117.71). Public domain (a US
+  Government work), no auth, no key, no registration.
+- **No robots.txt at all** (`/robots.txt` 404s, checked 2026-09-02), so unlike
+  api.weather.gov this source needs no `skipRobots` justification.
+- **Thresholds are measured, not guessed.** Search M2.5+ within 50 km; flag
+  `meta.chinoRelevant` within 25 km of either city center, or at M4.0+ any
+  distance in the ring. Checked against all 65 M2.0+ events in the ring in the
+  year to 2026-09-02: magnitude alone is a bad filter, because the ring's east
+  side is the Loma Linda/Redlands swarm 45 km out (eight M2.5+ events, four
+  above M3) which is San Bernardino news, not ours. Distance is the signal. All
+  four M2.5+ events within 25 km drew 128 or more "Did You Feel It" reports
+  (128, 151, 402, 549); not one was noise. Net: ~27 events/yr ingested, ~4/yr
+  flagged relevant. The M4.0+ clause never fired in that year and exists so a
+  genuinely large quake outside 25 km cannot be dropped by thresholds tuned on
+  small ones.
+- **County-wide-by-nature, handled like sbcfire-news:** everything in the ring
+  is ingested, relevance is flagged in meta, and the daily brief filters on the
+  flag. Filtering at ingest would discard the record of a quake the region felt.
+- **Magnitudes get revised.** The 2026-09-02 event was pushed to phones as
+  M3.36 and settled at M3.2 `status: reviewed` eleven hours later. Titles read
+  "Preliminary M x.x ..." until USGS marks the event reviewed, and the 7-day
+  query window plus in-place item identity means a revision rewrites the item
+  rather than being missed.
+- **`place` is nearest-city and never says Chino** ("6 km SE of Ontario, CA").
+  Distance from Chino is computed here and presented as ours; USGS's wording is
+  quoted verbatim in the parenthetical.
+- **Archive noise:** the response embeds a fresh `metadata.generated` epoch on
+  every request, so the scraper passes a `stripVolatile` that replaces it with
+  a `STRIPPED-BY-CHINO-VALLEY-TODAY` sentinel, following stripCsrfToken's
+  precedent that a redaction in the archive must be visible as one. Without the
+  stripper an hourly timer would mint 24 identical archive files a day.
+- **Link-back depth:** item-level
+  (`earthquake.usgs.gov/earthquakes/eventpage/<id>`), a real reader-facing page.
+  Strongest tier in the registry, and unlike nws-alerts there is no need for the
+  archive-page citation workaround.
+- **Reliability guess:** high (federal instrument network, stable documented
+  API).
+
 ### chinohills-sports — Chino Hills HS athletics (CIF-SS widget)
 
 Chino Hills (school id 104) has no Home Campus site, so it cannot ride the
