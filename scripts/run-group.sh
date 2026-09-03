@@ -31,7 +31,7 @@ case "$group" in
 	# sources' politeness budget, and the fire Alert Center is exactly the
 	# feed that must not wait a day.
 	frequent)
-		keys=(chino-news-rss chinohills-news-rss nws-alerts nws-forecast sbcfire-news cvfd-news sbsheriff-news sbsheriff-nixle-mail)
+		keys=(chino-news-rss chinohills-news-rss nws-alerts nws-forecast sbcfire-news cvfd-news sbsheriff-news sbsheriff-nixle-mail usgs-quakes)
 		;;
 	# Agenda systems, listings, event calendars, and high school athletics.
 	# These change when a clerk or staff member posts something, which is a
