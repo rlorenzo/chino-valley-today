@@ -1,6 +1,7 @@
 // Polite fetcher: custom UA with contact, robots.txt respect, per-host rate
 // limit, conditional GET support. All scraper HTTP goes through politeFetch.
 
+import { isIP } from "node:net";
 import { errorMessage } from "./utils/errors.ts";
 
 // Sent to every host we fetch, and this repo is public, so the address here is
@@ -19,6 +20,9 @@ export interface FetchOpts {
 	skipRobots?: boolean;
 	failClosedRobots?: boolean;
 	allowedHosts?: string[];
+	// Redirects are now always inspected hop by hop, so this is a no-op kept
+	// only so scraper fetchDefaults and the context.ts invariant keep reading
+	// as onboarding terms. ponytail: delete once fetchDefaults drop it.
 	manualRedirect?: boolean;
 	maxRedirectHops?: number;
 	// A JSON request body turns the request into a POST. Added for Home Campus
@@ -215,8 +219,45 @@ function assertOnlineAllowed(url: string): void {
 	}
 }
 
+// Loopback, private, link-local and unspecified IP literals (v4, v6, and
+// v4-mapped v6). A source redirecting here is pointing us at the droplet's own
+// network — the cloud metadata endpoint is 169.254.169.254 — and the response
+// would be archived as a document. Hostnames that resolve to such addresses
+// are not covered (DNS rebinding); every scraper fetches fixed civic hosts.
+function isPrivateAddress(hostname: string): boolean {
+	const h = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+	if (h === "localhost") return true;
+	if (isIP(h) === 4) {
+		const [a, b] = h.split(".").map(Number);
+		return (
+			a === 0 ||
+			a === 10 ||
+			a === 127 ||
+			(a === 169 && b === 254) ||
+			(a === 172 && b >= 16 && b <= 31) ||
+			(a === 192 && b === 168)
+		);
+	}
+	if (isIP(h) === 6) {
+		return (
+			h === "::" ||
+			h === "::1" ||
+			h.startsWith("::ffff:") ||
+			/^f[cd]/.test(h) ||
+			/^fe[89ab]/.test(h)
+		);
+	}
+	return false;
+}
+
 function validateHostAndProtocol(url: string, allowedHosts?: string[]): URL {
 	const u = new URL(url);
+	if (u.protocol !== "https:" && u.protocol !== "http:") {
+		throw new Error(`Unsupported protocol rejected: ${u.protocol}`);
+	}
+	if (isPrivateAddress(u.hostname)) {
+		throw new Error(`Private or loopback address rejected: ${u.hostname}`);
+	}
 	if (allowedHosts && allowedHosts.length > 0) {
 		if (u.protocol !== "https:") {
 			throw new Error(`Insecure protocol rejected: ${u.protocol}`);
@@ -233,7 +274,7 @@ function validateHostAndProtocol(url: string, allowedHosts?: string[]): URL {
 async function attempt(
 	url: string,
 	headers: Record<string, string>,
-	redirect: "follow" | "manual" = "follow",
+	redirect: "follow" | "manual",
 	body?: string,
 ): Promise<Response> {
 	assertOnlineAllowed(url);
@@ -278,27 +319,15 @@ export async function politeFetch(
 			if (opts.lastModified) headers["if-modified-since"] = opts.lastModified;
 		}
 
-		// Redirects are inspected hop by hop whenever letting the runtime follow
-		// them silently would skip a check this function is responsible for.
-		//
-		// A BODY, because redirect:"follow" replays a POST body on 307/308 at a
-		// location we never validated.
-		//
-		// An ALLOW-LIST, because validateHostAndProtocol runs at the top of this
-		// loop and nowhere else. Under redirect:"follow" the runtime resolves the
-		// chain internally, so a cross-host redirect escapes both the allow-list
-		// and the robots check for the host it lands on — which makes
-		// `allowedHosts` advisory exactly when a source starts behaving oddly,
-		// the moment it most needs to mean what it says.
+		// Redirects are always inspected hop by hop. validateHostAndProtocol
+		// runs at the top of this loop and nowhere else; under redirect:"follow"
+		// the runtime resolves the chain internally, so a hop to a private
+		// address or outside the allow-list would escape it, and the robots
+		// check for the host it lands on with it. (redirect:"follow" also
+		// replays a POST body on 307/308 at a location we never validated.)
 		//
 		// Same-host redirects still resolve normally: the loop validates and
-		// continues. Only a hop outside the allow-list now fails, which is the
-		// intent of passing one.
-		const inspectRedirects =
-			opts.manualRedirect ||
-			reqBody !== undefined ||
-			(opts.allowedHosts?.length ?? 0) > 0;
-		const redirectMode = inspectRedirects ? "manual" : "follow";
+		// continues.
 		// A GET may always be retried. A POST may not, unless the caller has said
 		// its body carries no side effects: a transport error leaves us unable to
 		// tell a request that never arrived from one that arrived and whose
@@ -306,10 +335,10 @@ export async function politeFetch(
 		const mayRetry = reqBody === undefined || opts.bodyIsIdempotent === true;
 		let res: Response;
 		try {
-			res = await attempt(currentUrl, headers, redirectMode, reqBody);
+			res = await attempt(currentUrl, headers, "manual", reqBody);
 			if (res.status >= 500 && mayRetry) {
 				await sleep(RETRY_PAUSE_MS);
-				res = await attempt(currentUrl, headers, redirectMode, reqBody);
+				res = await attempt(currentUrl, headers, "manual", reqBody);
 			}
 		} catch (err) {
 			// A refusal to go online is a decision, not a transient failure; a
@@ -321,11 +350,11 @@ export async function politeFetch(
 			if (opts.failClosedRobots) throw err;
 			if (!mayRetry) throw err;
 			await sleep(RETRY_PAUSE_MS);
-			res = await attempt(currentUrl, headers, redirectMode, reqBody);
+			res = await attempt(currentUrl, headers, "manual", reqBody);
 		}
 
 		// Handle manual redirect inspect loop
-		if (inspectRedirects && [301, 302, 303, 307, 308].includes(res.status)) {
+		if ([301, 302, 303, 307, 308].includes(res.status)) {
 			// A redirected POST is refused, not followed.
 			//
 			// Following one correctly means rewriting the method: 303 MUST become
@@ -374,7 +403,7 @@ export async function politeFetch(
 			etag: res.headers.get("etag"),
 			lastModified: res.headers.get("last-modified"),
 			contentType: res.headers.get("content-type"),
-			finalUrl: inspectRedirects ? currentUrl : res.url || currentUrl,
+			finalUrl: currentUrl,
 		};
 	}
 }

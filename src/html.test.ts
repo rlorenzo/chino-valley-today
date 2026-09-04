@@ -33,6 +33,10 @@ describe("esc", () => {
 		assert.equal(esc(payload).includes('"'), false);
 	});
 
+	test("a single-quoted attribute cannot be broken out of either", () => {
+		assert.equal(esc("' onerror='alert(1)"), "&#39; onerror=&#39;alert(1)");
+	});
+
 	test("null and undefined render as empty, not as the words", () => {
 		assert.equal(esc(null), "");
 		assert.equal(esc(undefined), "");

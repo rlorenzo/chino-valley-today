@@ -124,9 +124,12 @@ export function truncateTeaser(s: string, max = 140): string {
 
 // Escapes markdown control characters in DB-sourced text so it can never
 // alter document structure (e.g. an agenda title containing "]" breaking a
-// link, or "*"/"_" creating unintended emphasis).
+// link, or "*"/"_" creating unintended emphasis). "<" and ">" are included
+// because Astro renders raw HTML in markdown unsanitised: a scraped title
+// containing a tag would otherwise land on the public site as live markup.
+// CommonMark treats a backslash-escaped "<" as literal text, never as HTML.
 export function mdEscape(s: string): string {
-	return s.replace(/[\\`*_[\]]/g, (c) => `\\${c}`);
+	return s.replace(/[\\`*_[\]<>]/g, (c) => `\\${c}`);
 }
 
 export function mdLink(text: string, url: string): string {
