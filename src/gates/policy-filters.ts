@@ -226,7 +226,7 @@ const COMMON_WORDS = new Set([
 /**
  * Normalizes a name or entity for comparison (lowercased, alphanumeric and spaces only).
  */
-function normalizeEntity(s: string): string {
+export function normalizeEntity(s: string): string {
 	return (
 		s
 			.toLowerCase()
