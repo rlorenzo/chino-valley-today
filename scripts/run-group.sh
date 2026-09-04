@@ -47,7 +47,7 @@ case "$group" in
 	# nothing. Two requests per school per day: the schedule API, plus the nav
 	# page the per-sport citations are resolved from.
 	daily)
-		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses sbclib-events sbparks-events cbwcd-events yanksair-events chinohigh-sports ayala-sports donlugo-sports chinohills-sports chinohills-minutes)
+		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses sbclib-events sbparks-events cbwcd-events yanksair-events planesoffame-events cvusd-calendar chinotheatre-events chinohigh-sports ayala-sports donlugo-sports chinohills-sports chinohills-minutes)
 		;;
 	# Video and captions. Expensive in time and bandwidth, and captions do not
 	# exist until well after a meeting ends, so this runs the morning after.

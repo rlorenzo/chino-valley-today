@@ -7,7 +7,14 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!**/*.astro", "!site/dist", "!site/.astro", "!.claude"]
+		"includes": [
+			"**",
+			"!**/*.astro",
+			"!site/dist",
+			"!site/.astro",
+			"!.claude",
+			"!src/scrapers/__fixtures__"
+		]
 	},
 	"formatter": {
 		"enabled": true,

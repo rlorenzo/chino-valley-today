@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
-	laStartDate,
 	type TribeEvent,
 	tribeEventToItem,
 	tribeUtcToIso,
@@ -31,37 +30,6 @@ describe("tribeUtcToIso", () => {
 	test("returns null on missing or malformed input", () => {
 		assert.equal(tribeUtcToIso(undefined), null);
 		assert.equal(tribeUtcToIso("not a date"), null);
-	});
-});
-
-describe("laStartDate", () => {
-	test("returns the LA-local date minus lookback, as YYYY-MM-DD", () => {
-		// 2026-08-17T05:00:00Z is 2026-08-16 22:00 PDT; lookback 1 -> 08-15.
-		assert.equal(
-			laStartDate(new Date("2026-08-17T05:00:00Z"), 1),
-			"2026-08-15",
-		);
-		// Same instant, no lookback -> the LA date itself, not the UTC date.
-		assert.equal(
-			laStartDate(new Date("2026-08-17T05:00:00Z"), 0),
-			"2026-08-16",
-		);
-	});
-
-	test("calendar-day arithmetic survives DST transitions near midnight", () => {
-		// 2026-03-10T07:30:00Z is Mar 10 00:30 PDT, two days after the spring-
-		// forward. Fixed-86400s subtraction landed on Mar 7; two calendar days
-		// back is Mar 8.
-		assert.equal(
-			laStartDate(new Date("2026-03-10T07:30:00Z"), 2),
-			"2026-03-08",
-		);
-		// 2026-11-02T07:30:00Z is Nov 1 23:30 PST, late on the fall-back day.
-		// Fixed-86400s subtraction stayed on Nov 1 (a zero-day lookback).
-		assert.equal(
-			laStartDate(new Date("2026-11-02T07:30:00Z"), 1),
-			"2026-10-31",
-		);
 	});
 });
 

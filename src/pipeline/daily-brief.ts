@@ -73,6 +73,9 @@ const CALENDAR_SOURCES = [
 	"yanksair-events",
 	"chino-news-rss",
 	"chinohills-news-rss",
+	"planesoffame-events",
+	"cvusd-calendar",
+	"chinotheatre-events",
 ];
 // usgs-quakes belongs here despite the name: an earthquake is a safety item,
 // its only item_type is 'alert', and Fire & safety already renders exactly what
@@ -252,6 +255,9 @@ export const OPTIONAL_PREREQUISITE_SOURCES = [
 	"sbparks-events",
 	"cbwcd-events",
 	"yanksair-events",
+	"planesoffame-events",
+	"cvusd-calendar",
+	"chinotheatre-events",
 	"abc-licenses",
 ] as const;
 
@@ -280,6 +286,9 @@ export const PREREQUISITE_SECTIONS: Record<string, readonly BriefSection[]> = {
 	"sbparks-events": ["today"],
 	"cbwcd-events": ["today"],
 	"yanksair-events": ["today"],
+	"planesoffame-events": ["today"],
+	"cvusd-calendar": ["today"],
+	"chinotheatre-events": ["today"],
 	"abc-licenses": ["record"],
 };
 
@@ -299,6 +308,9 @@ export const PREREQUISITE_LABEL: Record<string, string> = {
 	"sbparks-events": "San Bernardino County Parks events",
 	"cbwcd-events": "Chino Basin Water Conservation District events",
 	"yanksair-events": "Yanks Air Museum events",
+	"planesoffame-events": "Planes of Fame Air Museum events",
+	"cvusd-calendar": "CVUSD district and school calendars",
+	"chinotheatre-events": "Chino Community Theatre season",
 	"abc-licenses": "ABC license filings",
 };
 
@@ -596,13 +608,21 @@ export interface TodayEvent {
 	occurredAt: string;
 }
 
-// A calendar event row that passed selection: titled, and not a CBWCD
-// "District Holiday" office-closure notice (a closure is not an event).
+// A calendar event row that passed selection: titled, not a CBWCD "District
+// Holiday" office-closure notice (a closure is not an event), and not something
+// a source flagged as happening somewhere other than the Chino Valley.
 function isRenderableEvent(row: ItemRow): boolean {
 	const title = cleanTitle(row.title);
 	if (!title) return false;
 	if (row.source_key === "cbwcd-events" && /^district holiday/i.test(title))
 		return false;
+	// meta.offsite is the scrapers' way of saying "we ingested this, but it does
+	// not happen here". Planes of Fame is the current producer: it lists its
+	// appearances at other people's airshows alongside its own on-site
+	// programming, and an airshow in Santa Maria is not something a Chino Valley
+	// reader can go to today. The row is still stored, so the archive stays
+	// complete; it just does not reach Today.
+	if (parseMeta(row.meta).offsite === true) return false;
 	return true;
 }
 
@@ -639,7 +659,11 @@ export function selectTodayEvents(
 	const todays = eventItems.filter(
 		(row) => isRenderableEvent(row) && laDateOf(row.occurred_at) === laToday,
 	);
-	return dedupeByKey(todays, (r) => r.source_url)
+	// external_id first, source_url only as the fallback (same rule as the
+	// forecast and ABC-licence selectors): a season page links every one of its
+	// performances to the same URL, so keying on the URL alone would drop the
+	// matinee of a matinee-plus-evening day.
+	return dedupeByKey(todays, (r) => r.external_id ?? r.source_url)
 		.map(eventRowToEntry)
 		.sort(byStartThenTitle);
 }
@@ -664,7 +688,8 @@ export function railTimeLabel(label: string | null): string | null {
 }
 
 // The month ahead, exclusive of today (today's events live in the brief
-// body): LA days (today, today + horizonDays], deduped by source_url.
+// body): LA days (today, today + horizonDays], deduped by external_id
+// (falling back to source_url) — see selectTodayEvents.
 // Rendered by the site from frontmatter, not by the markdown body — the
 // calendar page shows the first week openly and the rest behind a native
 // disclosure, so the horizon here is coverage, not page length.
@@ -681,7 +706,7 @@ export function selectUpcomingEvents(
 		const day = laDateOf(row.occurred_at);
 		return day !== null && day > laToday && day <= horizon;
 	});
-	return dedupeByKey(ahead, (r) => r.source_url)
+	return dedupeByKey(ahead, (r) => r.external_id ?? r.source_url)
 		.map((row) => ({
 			...eventRowToEntry(row),
 			date: laDateOf(row.occurred_at) as string,

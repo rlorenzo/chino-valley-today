@@ -9,7 +9,8 @@
 // Recurring events return one entry per occurrence; occurrence ids were not
 // verified to be globally unique across occurrences, so external_id is
 // `<id>:<utc_start_date>` — stable under either id behaviour.
-import { stripHtml } from "./civicplus-rss.ts";
+import { setTimeout as sleep } from "node:timers/promises";
+import { laDateOffset, stripHtml } from "./civicplus-rss.ts";
 import { resolveDocumentId } from "./document-linkage.ts";
 import type { NewItemInput, ScraperContext } from "./types.ts";
 
@@ -50,24 +51,6 @@ export function tribeUtcToIso(s: string | undefined): string | null {
 	return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
-// Today's date in America/Los_Angeles minus lookbackDays, as YYYY-MM-DD.
-// Takes `now` explicitly so tests are deterministic. Calendar-day arithmetic
-// (LA date first, then subtract days) rather than a fixed 86400s offset — a
-// 23/25-hour DST day plus a near-midnight run could otherwise shift the
-// window start by a day (review finding, PR #12).
-export function laStartDate(now: Date, lookbackDays: number): string {
-	const la = new Intl.DateTimeFormat("en-CA", {
-		timeZone: "America/Los_Angeles",
-		year: "numeric",
-		month: "2-digit",
-		day: "2-digit",
-	}).format(now); // en-CA formats as YYYY-MM-DD
-	const [y, m, d] = la.split("-").map(Number);
-	return new Date(Date.UTC(y, m - 1, d - lookbackDays))
-		.toISOString()
-		.slice(0, 10);
-}
-
 // Pure mapping from an API event to an item, exported for tests. Titles and
 // descriptions carry HTML entities/markup (&#8211; etc.); stripHtml decodes.
 export function tribeEventToItem(
@@ -96,13 +79,11 @@ export function tribeEventToItem(
 	};
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
 export async function runTribeEvents(
 	ctx: ScraperContext,
 	cfg: TribeSourceConfig,
 ): Promise<void> {
-	const startDate = laStartDate(new Date(), cfg.lookbackDays ?? 1);
+	const startDate = laDateOffset(new Date(), -(cfg.lookbackDays ?? 1));
 	const maxPages = cfg.maxPages ?? 3;
 	const queries = cfg.venues?.length
 		? cfg.venues.map((v) => ({ venue: v, qs: `&venue=${v.id}` }))

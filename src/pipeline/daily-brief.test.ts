@@ -427,6 +427,62 @@ describe("selectTodayEvents", () => {
 		assert.equal(out[0].title, "Garden class");
 	});
 
+	test("a matinee and an evening show sharing one season URL both survive", () => {
+		// chinotheatre-events cites the season page for every performance, so
+		// source_url alone cannot tell two same-day performances apart.
+		const rows = [
+			item({
+				source_key: "chinotheatre-events",
+				title: "THE GHOST TRAIN",
+				source_url: "https://sites.google.com/view/chinocommunitytheatre/2026",
+				external_id: "2026-08-17-1400-the-ghost-train",
+				occurred_at: "2026-08-17T21:00:00.000Z",
+			}),
+			item({
+				source_key: "chinotheatre-events",
+				title: "THE GHOST TRAIN",
+				source_url: "https://sites.google.com/view/chinocommunitytheatre/2026",
+				external_id: "2026-08-17-1930-the-ghost-train",
+				occurred_at: "2026-08-18T02:30:00.000Z",
+			}),
+		];
+		const out = selectTodayEvents(rows, NOW);
+		assert.deepEqual(
+			out.map((e) => e.timeLabel),
+			["2:00 PM", "7:30 PM"],
+		);
+	});
+
+	test("events flagged meta.offsite are archived but never rendered", () => {
+		// Planes of Fame lists its appearances at other people's airshows next to
+		// its own programming; a Santa Maria airshow is not a Chino Valley event.
+		const rows = [
+			item({
+				source_key: "planesoffame-events",
+				title: "Central Coast AirFest, Santa Maria, CA",
+				source_url: "https://www.centralcoastairfest.com/",
+				occurred_at: "2026-08-17T18:00:00.000Z",
+				meta: JSON.stringify({ venue: null, allDay: true, offsite: true }),
+			}),
+			item({
+				source_key: "planesoffame-events",
+				title: "Hangar Talk",
+				source_url: "https://planesoffame.org/events-calendar2/Hangar-Talk-8",
+				occurred_at: "2026-08-17T18:00:00.000Z",
+				meta: JSON.stringify({
+					venue: "Planes of Fame Air Museum",
+					allDay: false,
+					offsite: false,
+				}),
+			}),
+		];
+		const out = selectTodayEvents(rows, NOW);
+		assert.deepEqual(
+			out.map((e) => e.title),
+			["Hangar Talk"],
+		);
+	});
+
 	test("CivicPlus times normalize and venues decode entities", () => {
 		const rows = [
 			item({
@@ -483,6 +539,21 @@ describe("selectUpcomingEvents", () => {
 			selectUpcomingEvents(rows, NOW).map((e) => e.title),
 			["Day 8", "Day 30"],
 		);
+	});
+
+	test("a whole show run sharing one season URL keeps every performance", () => {
+		// 7:30 PM PDT on Sept 3, 10 and 15 (the next UTC day each time), all
+		// inside the 30-day horizon from NOW.
+		const rows = ["04", "11", "16"].map((utcDay) =>
+			item({
+				source_key: "chinotheatre-events",
+				title: "THE GHOST TRAIN",
+				source_url: "https://sites.google.com/view/chinocommunitytheatre/2026",
+				external_id: `2026-09-${utcDay}-1930-the-ghost-train`,
+				occurred_at: `2026-09-${utcDay}T02:30:00.000Z`,
+			}),
+		);
+		assert.equal(selectUpcomingEvents(rows, NOW).length, 3);
 	});
 
 	test("the window is (today, today+horizon] in LA days; closures stay filtered", () => {
@@ -916,8 +987,8 @@ describe("buildDailyBrief: city Alert Center query split", () => {
 });
 
 describe("DAILY_BRIEF_PREREQUISITE_SOURCES", () => {
-	test("contains exactly the 16 canonical prerequisite source keys", () => {
-		assert.equal(DAILY_BRIEF_PREREQUISITE_SOURCES.length, 16);
+	test("contains exactly the 19 canonical prerequisite source keys", () => {
+		assert.equal(DAILY_BRIEF_PREREQUISITE_SOURCES.length, 19);
 		assert.deepEqual(
 			[...DAILY_BRIEF_PREREQUISITE_SOURCES],
 			[
@@ -936,6 +1007,9 @@ describe("DAILY_BRIEF_PREREQUISITE_SOURCES", () => {
 				"sbparks-events",
 				"cbwcd-events",
 				"yanksair-events",
+				"planesoffame-events",
+				"cvusd-calendar",
+				"chinotheatre-events",
 				"abc-licenses",
 			],
 		);
@@ -992,7 +1066,7 @@ describe("assertPrerequisitesFresh", () => {
 		return db;
 	}
 
-	test("passes when all 15 sources succeeded and fetched today", () => {
+	test("passes when all 19 sources succeeded and fetched today", () => {
 		const db = createAllFreshDb();
 		const res = assertPrerequisitesFresh(db, NOW);
 		assert.equal(res.fresh, true);
@@ -2397,7 +2471,7 @@ describe("prerequisite tiers", () => {
 		);
 	});
 
-	test("the tiers partition the canonical 15 with no overlap", () => {
+	test("the tiers partition the canonical 19 with no overlap", () => {
 		assert.equal(
 			BLOCKING_PREREQUISITE_SOURCES.length +
 				OPTIONAL_PREREQUISITE_SOURCES.length,

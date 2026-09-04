@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
+	laDateOffset,
 	localDateTimeToIso,
 	parseRssItems,
 	rfc2822ToIso,
@@ -152,5 +153,41 @@ describe("localDateTimeToIso", () => {
 	test("returns null on an unrecognized date rather than guessing", () => {
 		assert.equal(localDateTimeToIso("18 August 2026"), null);
 		assert.equal(localDateTimeToIso("Notamonth 5, 2026"), null);
+	});
+});
+
+describe("laDateOffset", () => {
+	test("returns the LA-local date shifted by whole days, as YYYY-MM-DD", () => {
+		// 2026-08-17T05:00:00Z is 2026-08-16 22:00 PDT; one day back -> 08-15.
+		assert.equal(
+			laDateOffset(new Date("2026-08-17T05:00:00Z"), -1),
+			"2026-08-15",
+		);
+		// Same instant, no shift -> the LA date itself, not the UTC date.
+		assert.equal(
+			laDateOffset(new Date("2026-08-17T05:00:00Z"), 0),
+			"2026-08-16",
+		);
+		// Forward, and across a year boundary (the CVUSD lookahead window).
+		assert.equal(
+			laDateOffset(new Date("2026-09-04T18:00:00Z"), 120),
+			"2027-01-02",
+		);
+	});
+
+	test("calendar-day arithmetic survives DST transitions near midnight", () => {
+		// 2026-03-10T07:30:00Z is Mar 10 00:30 PDT, two days after the spring-
+		// forward. Fixed-86400s subtraction landed on Mar 7; two calendar days
+		// back is Mar 8.
+		assert.equal(
+			laDateOffset(new Date("2026-03-10T07:30:00Z"), -2),
+			"2026-03-08",
+		);
+		// 2026-11-02T07:30:00Z is Nov 1 23:30 PST, late on the fall-back day.
+		// Fixed-86400s subtraction stayed on Nov 1 (a zero-day lookback).
+		assert.equal(
+			laDateOffset(new Date("2026-11-02T07:30:00Z"), -1),
+			"2026-10-31",
+		);
 	});
 });
