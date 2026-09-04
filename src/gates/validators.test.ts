@@ -613,3 +613,31 @@ describe("edge cases", () => {
 		}
 	});
 });
+
+// ---------------------------------------------------------------------------
+// Gate 1d — markup
+// ---------------------------------------------------------------------------
+
+describe("Gate 1d — markup", () => {
+	test("fails: an HTML tag in the body, even in an otherwise clean draft", () => {
+		const report = validateDraft({
+			bodyMd: HAPPY_BODY.replace(
+				"Ayala Park",
+				'Ayala Park <a href="https://phish.example">see details</a>',
+			),
+			allowedUrls: [MEETING_URL, ITEM_URL],
+			inputCorpus: HAPPY_CORPUS,
+		});
+		assert.equal(report.pass, false);
+		assert.equal(failuresFor(report.failures, "markup").length, 1);
+	});
+
+	test("a bare less-than comparison is not markup", () => {
+		const report = validateDraft({
+			bodyMd: HAPPY_BODY.replace("Ayala Park", "Ayala Park (< 40 acres)"),
+			allowedUrls: [MEETING_URL, ITEM_URL],
+			inputCorpus: HAPPY_CORPUS,
+		});
+		assert.equal(failuresFor(report.failures, "markup").length, 0);
+	});
+});

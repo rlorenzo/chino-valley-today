@@ -14,7 +14,7 @@ export interface GateInput {
 }
 
 export interface GateFailure {
-	gate: "citations" | "numeric" | "proper_names";
+	gate: "citations" | "numeric" | "proper_names" | "markup";
 	detail: string;
 	excerpt?: string;
 }
@@ -145,6 +145,7 @@ const PURE_LINK_ITEM_RE = /^\[[^\]]*\]\([^)]+\)[.,;:]?$/;
 // `---` divider inside genuine draft prose does not silently exempt
 // everything after it from every gate. See "Footer detection" in the report.
 const FOOTER_MARKER_RE = /generated from public records|corrections:/i;
+const HTML_TAG_RE = /<[a-z!/?]/i;
 
 // A markdown list arrives as ONE blank-line-delimited chunk, but each item is
 // gated separately — a bullet stating a fact needs its own citation. Continuation
@@ -1079,10 +1080,27 @@ export function validateDraft(input: GateInput): GateReport {
 	const numeric = runNumericGate(scanText, input.inputCorpus);
 	const names = runProperNamesGate(scanText, input.inputCorpus);
 
+	// Astro renders raw HTML in markdown unsanitised, so a tag in a draft body
+	// would reach the public site as live markup. Tier A escapes at the
+	// template (mdEscape); this is the equivalent boundary for LLM output.
+	// "<" followed by a letter, "/", "!" or "?" is what opens a tag; a bare
+	// "< 40" comparison does not match.
+	const markup = HTML_TAG_RE.exec(input.bodyMd);
+	const markupFailures: GateFailure[] = markup
+		? [
+				{
+					gate: "markup",
+					detail: "body contains an HTML tag",
+					excerpt: input.bodyMd.slice(markup.index, markup.index + 40),
+				},
+			]
+		: [];
+
 	const failures = [
 		...citations.failures,
 		...numeric.failures,
 		...names.failures,
+		...markupFailures,
 	];
 	const stats: Record<string, number> = {
 		...citations.stats,

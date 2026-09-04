@@ -123,6 +123,38 @@ test("politeFetch host and protocol allowlisting", async (t) => {
 		);
 	});
 
+	await t.test(
+		"rejects non-http(s) schemes even without an allowlist",
+		async () => {
+			await assert.rejects(() => politeFetch("ftp://good.example/news"), {
+				message: /Unsupported protocol rejected: ftp:/,
+			});
+		},
+	);
+
+	await t.test("rejects private and loopback IP literals", async () => {
+		for (const host of [
+			"169.254.169.254",
+			"127.0.0.1",
+			"10.0.0.1",
+			"172.16.0.1",
+			"192.168.1.1",
+			"0x7f000001",
+			"localhost",
+			"[::1]",
+			"[fd00::1]",
+			"[fe80::1]",
+			"[::ffff:169.254.169.254]",
+		]) {
+			await assert.rejects(
+				() => politeFetch(`http://${host}/latest/meta-data`),
+				{
+					message: /Private or loopback address rejected/,
+				},
+			);
+		}
+	});
+
 	await t.test("rejects http when an allowlist is in force", async () => {
 		await assert.rejects(
 			() =>
@@ -187,6 +219,30 @@ test("politeFetch manual redirect handling", async (t) => {
 			},
 		);
 	});
+
+	// Without an allowlist the old code let the runtime follow redirects
+	// internally, so a source could steer a fetch at the droplet's own network
+	// and archive the answer. Every hop is now validated.
+	await t.test(
+		"refuses a redirect to a private address even without an allowlist",
+		async () => {
+			await withStubbedFetch(
+				{
+					"https://hop-meta.example/robots.txt": { body: ALLOW_ALL },
+					"https://hop-meta.example/a": {
+						status: 302,
+						headers: { location: "http://169.254.169.254/latest/meta-data" },
+					},
+				},
+				async () => {
+					await assert.rejects(
+						() => politeFetch("https://hop-meta.example/a"),
+						{ message: /Private or loopback address rejected/ },
+					);
+				},
+			);
+		},
+	);
 
 	await t.test("gives up once maxRedirectHops is exceeded", async () => {
 		await withStubbedFetch(

@@ -2,11 +2,14 @@
 // queue, audit queue, pipeline health), form-posted actions. See
 // reports/notes/phase1-admin.md for the full spec-to-implementation mapping.
 //
-// CSRF is explicitly out of scope: this binds 127.0.0.1 only and will sit
-// behind Caddy basic auth in a later phase (PLAN.md Phase 1 Mechanics).
+// Loopback binding is not a CSRF defence: the operator reaches this through a
+// browser over an SSH tunnel, and any page that browser visits can auto-submit
+// a form to http://127.0.0.1:8788/posts/<slug>/approve. Hono's csrf() rejects
+// form posts whose Origin does not match the request host.
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { Hono } from "hono";
+import { csrf } from "hono/csrf";
 import type { Db } from "../db/index.ts";
 import {
 	getPost,
@@ -278,6 +281,7 @@ function renderPipelineHealth(db: Db): string {
 
 export function createApp(db: Db) {
 	const app = new Hono();
+	app.use(csrf());
 
 	app.get("/", (c) => {
 		const body = `

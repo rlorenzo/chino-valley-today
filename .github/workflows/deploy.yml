@@ -64,14 +64,12 @@ jobs:
           # Pin the host key rather than accepting whatever answers. Without
           # this, a DNS or routing compromise could feed the runner a different
           # host, and the deploy key would be handed straight to it.
-          if [ -n "${KNOWN_HOSTS:-}" ]; then
-            printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
-            chmod 600 ~/.ssh/known_hosts
-            strict=yes
-          else
-            echo "::warning::CVT_DEPLOY_KNOWN_HOSTS not set — host key is not pinned"
-            strict=accept-new
+          if [ -z "${KNOWN_HOSTS:-}" ]; then
+            echo "::error::CVT_DEPLOY_KNOWN_HOSTS secret is required (ssh-keyscan the droplet)"
+            exit 1
           fi
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
 
           # The command sent here is IGNORED: the authorized_keys entry forces
           # `scripts/deploy.sh host-update`. It is written out anyway so the
@@ -89,7 +87,7 @@ jobs:
           # installing units remains a root step in `deploy.sh code`.
           ssh -i ~/.ssh/id_ed25519 \
               -o BatchMode=yes \
-              -o StrictHostKeyChecking=$strict \
+              -o StrictHostKeyChecking=yes \
               -o ConnectTimeout=20 \
               "$DEPLOY_HOST" 'deploy-site' 2>&1 | tee deploy.log
 

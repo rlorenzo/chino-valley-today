@@ -8,6 +8,7 @@ import {
 	alertPostSlugHashOf,
 	dedupeAlertIssuances,
 	dropSupersededAlerts,
+	mdEscape,
 } from "./util.ts";
 
 // NWS re-issues an advisory as a series of Updates: same event, same end
@@ -208,6 +209,24 @@ describe("superseded alert suppression", () => {
 		const out = dropSupersededAlerts(rows);
 		assert.equal(out.length, 1);
 		assert.equal(out[0].id, 2);
+	});
+});
+
+describe("mdEscape", () => {
+	// Astro passes raw HTML in markdown straight through, so a scraped agenda
+	// title carrying a tag would render as live markup on the public site.
+	test("neutralises HTML tags from scraped text", () => {
+		assert.equal(
+			mdEscape('<img src=x onerror="alert(1)"> Parks & Rec'),
+			'\\<img src=x onerror="alert(1)"\\> Parks & Rec',
+		);
+	});
+
+	test("still escapes markdown structure characters", () => {
+		assert.equal(
+			mdEscape("a [b] *c* _d_ `e` \\"),
+			"a \\[b\\] \\*c\\* \\_d\\_ \\`e\\` \\\\",
+		);
 	});
 });
 
