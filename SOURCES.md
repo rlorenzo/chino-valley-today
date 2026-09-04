@@ -205,6 +205,141 @@ whenever a source changes behavior.
 - **Reliability guess:** high (county sites match the proven sheriff/library
   infra); medium for yanksair (small-org WordPress).
 
+### chinotheatre-events — Chino Community Theatre (season page)
+
+- **Added 2026-09-04.** 52 performances across 6 shows on the first run. The
+  theatre's own domain 301-redirects into a **Google Sites** site; the season
+  page is the only machine-readable surface (no API, no RSS, no iCal).
+- **Method:** HTML over
+  `https://sites.google.com/view/chinocommunitytheatre/2026-season`
+  (the `?authuser=0` Google appends is droppable).
+- **Quirks — read these before touching this scraper:**
+  - Google Sites class names (`zfr3Q`, `C9DxTc`, …) are **auto-generated hashes
+    that change on every page edit**, so nothing selects on them. Titles are
+    found by an inline-style fingerprint (a span that is italic AND
+    `font-weight:700`) whose *own* text is all-caps; dates by text pattern.
+  - Two real traps that a simpler rule falls into, both found in live markup:
+    an `AUDIENCE ADVISORY:` paragraph is bold-but-not-italic and would be read
+    as a new show, swallowing The Full Monty's dates; and POTUS's title
+    paragraph is mixed-case once its subtitle is included, so a
+    whole-paragraph-uppercase rule misses it.
+  - **Date formats are inconsistent on one page**: `January 16, 17, 23, 24, 30,
+    31 at 7:30pm` vs `Sept 18, 19, 25, 26, Oct 2, 3 @ 7:30pm`. A single clause
+    can switch months mid-list, and one paragraph can hold two clauses joined
+    by `;`.
+  - **"Theatre on the Edge" is a festival banner, not a show.** Its two
+    one-acts (Dead Man's Cell Phone, POTUS) carry their own date lists and run
+    on alternating dates. The banner correctly produces zero items.
+  - Each date expands to **one item per performance**, and evening/matinee on
+    the same date are distinguished by time in the `external_id`
+    (`2026-01-24-1930-…` vs `2026-01-24-1430-…`).
+  - **The year is read from the page `<title>`** ("… 2026 Season") and applied
+    to every date. This is the most fragile thing here and it fails *silently*:
+    a season crossing a calendar-year boundary, or this URL reused for a new
+    season without a title update, produces wrong years rather than an error.
+    A missing `<year> Season` marker does throw.
+- **robots.txt:** `sites.google.com` disallows `/feeds` and `/*/_/` (with
+  `Allow` for `/*/_/rsrc/` and `/_/atari/*`). The season path contains no `/_/`
+  segment and is permitted. Verified 2026-09-04.
+- **Ticket site (probed 2026-09-04, NOT ingested):** the theatre sells through
+  SeatYourself (`search.seatyourself.biz/webstore/accounts/chinocommunitytheatre`),
+  whose robots.txt is fully open. One public JSON endpoint exists —
+  `/legacy/index/event-info/chinocommunitytheatre` returns performance ids
+  mapped to show titles — but it carries **no dates**. Dates live behind DWR, a
+  stateful Java RPC; its debug interface is 404 and `/legacy/accounts/` and
+  `/legacy/index/price-codes/` both 303 to a login. Useful later only as an
+  on-sale cross-check, not as a date source.
+- **Link-back depth:** page-level (the season page). Individual performances
+  have no permalink of their own.
+- **Reliability guess:** LOW. A volunteer theatre's hand-edited Google Sites
+  page is the highest-churn source in this repo; expect to re-diagnose it
+  within a season or two.
+
+### cvusd-calendar — CVUSD district + high school calendars
+
+- **Added 2026-09-04.** Five calendars behind one scrape key: the district plus
+  Chino High, Don Lugo, Ayala and Chino Hills High. This is the source that
+  reaches **school performing arts** — Ayala's Madrigal Feast (4 performances),
+  Winter and Jazz concerts, ITS Showcase, Music in Motion; Don Lugo's Fall
+  Theater Production (3 performances). Nothing else the brief reads carries any
+  of it. First run: 147 events.
+- **Method:** API. Unauthenticated first-party JSON on the district's own
+  domain:
+  `GET https://<host>/api/calendars/<id>/events?start_date=&end_date=&view_source=event-slider`
+  → `{ success, data: { events: [...] } }`. No auth, no cookie, no token.
+- **Endpoint discovery (this is the useful part):** the calendar page renders an
+  EMPTY container and populates it client-side, so the HTML is worthless, and
+  every feed convention 404s (`/rss`, `/feed`, `/site/RSS.aspx`, `/ical`,
+  `/calendar.ics`, `/events.ics`, `/api/calendar`, `/api/events`;
+  `/calendar/feed` 302s to a login). The endpoint came from reading the page's
+  own bundled JS at `/dist/assets/EventsRepository-*.js`. **There is no public
+  ParentSquare API** — this is the district's SmartSites backend, not
+  parentsquare.com.
+- **Calendar ids** (from each site's `data-calendar=` / `calID=`, verified live):
+  district 134999, Chino High 135000, Don Lugo 135001, Ayala 135002, Chino Hills
+  135003.
+- **Quirks:**
+  - **Board of Education meetings are dropped from the district feed** (4 on the
+    first run). `cvusd-board` already ingests them with agendas, minutes and
+    video; ingesting both would double every board meeting in a brief.
+  - **Chino Hills High was empty for the fall on 2026-09-04** while a full-year
+    query returned 31 events ending 2026-08-10 — the school had not posted its
+    fall calendar yet. An empty calendar is a note; only *every* calendar
+    failing throws.
+  - Timed events carry a correct DST-aware offset in `start_datetime`
+    (`-07:00` in September, `-08:00` in December) and are trusted verbatim.
+    All-day events give a bare date and are resolved to LA midnight.
+  - Multi-day all-day spans are expanded by the API into **one row per day**, so
+    "Winter Break" arrives as ~20 items sharing one `source_url`. They dedupe to
+    one per day in `selectTodayEvents`; the archive is chattier than the brief.
+  - `external_id` is `<event id>:<start_date>` — the numeric id is per-event,
+    not per-occurrence, so a recurring event would collide on id alone.
+- **robots.txt:** disallows only `/admin`, `/*lesson_plan`, `/userFiles`;
+  `Crawl-delay: 5`, honored with a 3s gap on top of politeFetch's 2s floor.
+  `/api/` is unrestricted. Identical on every school subdomain. The asset host
+  `files.smartsites.parentsquare.com` is `Disallow: /` and is never touched.
+- **Link-back depth:** item-level (`/event_view?event_id=…&calIDref=…`).
+- **Reliability guess:** medium-high — a real JSON API with a stable envelope,
+  but undocumented and discovered from shipped JS, so it carries no contract.
+  Calendar ids are data values rather than content-hashed asset names, so they
+  are plausibly stable; unproven over time.
+
+### planesoffame-events — Planes of Fame Air Museum (events calendar)
+
+- **Added 2026-09-04.** The second Chino Airport museum after yanksair-events,
+  and the only museum in the Chino Valley museum survey with a machine-readable
+  public calendar. **Not WordPress** — `/wp-json` and the Tribe events endpoint
+  both 404, and there is no RSS or iCal anywhere on the site — so this is a
+  hand-written parser over the server-rendered listing at `/events-calendar`,
+  not a `tribe-events.ts` client. First run: 5 events.
+- **Method:** HTML. One `.nice-shadow` block per event; date in
+  `.bold.center` as `5<sup>th</sup> of September, 2026`, title and permalink in
+  `a.block.h3`, blurb in `.overflow-hidden`.
+- **Quirks:**
+  - The date header carries **no time**. Start times appear only in body prose
+    ("… Saturday, September 5, 2026 at 10:30am"), so `extractTime` recovers
+    them and an event with no time in the prose is stored `allDay`.
+  - The museum lists **off-site appearances** at other people's airshows
+    (Central Coast AirFest, Santa Maria) with the anchor pointing at that
+    show's own domain. These are ingested whole but flagged `meta.offsite`,
+    and `isRenderableEvent` in the daily brief drops them from Today — an
+    airshow 200 miles away is not a Chino Valley event.
+  - Wall-clock times are America/Los_Angeles and converted via
+    `localDateTimeToIso` (shared with the CivicPlus scrapers), so the PDT/PST
+    boundary is handled: Oct 3 10:30 → 17:30Z, Nov 7 10:30 → 18:30Z.
+  - Zero parsed blocks **throws**. The Hangar Talk series runs monthly and the
+    page always lists months ahead, so an empty parse means the markup moved
+    (chinohills-swagit precedent).
+- **robots.txt:** disallows `/doc/`, `/install/`, `/lib/`, `/modules/`,
+  `/module_custom/`, `/plugins/`, `/scripts/`, `/tmp/`, `/assets/`, with
+  `Allow` re-opening `/assets/css|images|sitemaps|themes/`. `/events-calendar`
+  is unrestricted. Verified 2026-09-04.
+- **Link-back depth:** item-level (`/events-calendar2/Hangar-Talk-<n>`);
+  off-site events link to the host show's own site.
+- **Volume:** ~1-2/month (monthly Hangar Talk + occasional special flights).
+- **Reliability guess:** medium — small-org custom CMS, no API contract, and
+  the parser depends on presentational class names that a redesign would move.
+
 ### champion-news — The Champion Newspapers (TownNews Blox CMS)
 
 - **STOPPED 2026-08-26 — not ingested, pending written permission.** The

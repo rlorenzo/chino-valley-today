@@ -47,4 +47,12 @@ export const SCRAPERS: Record<string, string> = {
 	"chinohills-minutes": "./scrapers/chinohills-minutes.ts",
 	// Earthquakes (2026-09-02). Federal, public domain, no robots.txt.
 	"usgs-quakes": "./scrapers/usgs-quakes.ts",
+	// Second Chino Airport museum (2026-09-04). No API; server-rendered listing.
+	"planesoffame-events": "./scrapers/planesoffame-events.ts",
+	// CVUSD district + high school calendars (2026-09-04). The CMS's own JSON
+	// API, found in its bundled JS; this is where school performing arts live.
+	"cvusd-calendar": "./scrapers/cvusd-calendar.ts",
+	// Community theatre season page (2026-09-04). Google Sites, no API; the
+	// most churn-prone source here — expect a re-diagnose within a season or two.
+	"chinotheatre-events": "./scrapers/chinotheatre-events.ts",
 };

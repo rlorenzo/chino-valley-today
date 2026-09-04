@@ -59,6 +59,9 @@ export const QUIET_IS_HEALTHY: Record<string, string | null> = {
 	"sbparks-events": null,
 	"cbwcd-events": null,
 	"yanksair-events": null,
+	"planesoffame-events": null,
+	"cvusd-calendar": null,
+	"chinotheatre-events": null,
 
 	// --- Secondary press. The two dailies/weeklies must produce; the student
 	// papers and NBC4 are quiet by design. ---

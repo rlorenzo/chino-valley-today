@@ -55,6 +55,25 @@ export function laOffsetMinutes(approxUtcMs: number): number {
 	);
 }
 
+// The America/Los_Angeles calendar date `days` away from `now`, as YYYY-MM-DD,
+// for building the query windows event APIs want. Takes `now` explicitly so
+// tests are deterministic. Calendar-day arithmetic (resolve the LA date first,
+// then add days) rather than a fixed 86400s offset — a 23/25-hour DST day plus
+// a near-midnight run could otherwise shift the window by a day (review
+// finding, PR #12). Moved here from tribe-events.ts (2026-09-04) when
+// cvusd-calendar.ts became the second caller; nothing about it is Tribe- or
+// CivicPlus-specific.
+export function laDateOffset(now: Date, days: number): string {
+	const la = new Intl.DateTimeFormat("en-CA", {
+		timeZone: "America/Los_Angeles",
+		year: "numeric",
+		month: "2-digit",
+		day: "2-digit",
+	}).format(now); // en-CA formats as YYYY-MM-DD
+	const [y, m, d] = la.split("-").map(Number);
+	return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+}
+
 const MONTHS = [
 	"january",
 	"february",

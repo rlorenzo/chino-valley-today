@@ -31,7 +31,7 @@ if CVT_DB="$TEST_DB" node src/pipeline/daily-brief.ts --check-prereqs >/dev/null
 fi
 echo "OK: Failed as expected on empty database."
 
-echo "2. Populating all 15 prerequisite sources with fresh successful runs..."
+echo "2. Populating every prerequisite source with a fresh successful run..."
 # shellcheck disable=SC2016
 CVT_DB="$TEST_DB" node --input-type=module -e '
 import { openDb } from "./src/db/index.ts";
