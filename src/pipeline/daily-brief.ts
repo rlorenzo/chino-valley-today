@@ -23,7 +23,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
-import { filterHeadlineEligibility } from "../gates/policy-filters.ts";
+import {
+	filterHeadlineEligibility,
+	normalizeEntity,
+} from "../gates/policy-filters.ts";
 import { esc } from "../html.ts";
 import {
 	CHAMPION_ARTICLE_PATH_RE,
@@ -375,13 +378,16 @@ export function selectWeather(
 		forecastItems,
 		(r) => r.external_id ?? r.source_url,
 	);
-	const byCity = new Map<string, ItemRow[]>();
+	// Parse each row's meta once; the grouping, day/night split and period
+	// build below all read from it.
+	type Parsed = { row: ItemRow; meta: Record<string, unknown> };
+	const byCity = new Map<string, Parsed[]>();
 	for (const row of deduped) {
 		const meta = parseMeta(row.meta);
 		const city = metaString(meta, "city");
 		if (!city || laDateOf(row.occurred_at) !== laToday) continue;
 		const list = byCity.get(city) ?? [];
-		list.push(row);
+		list.push({ row, meta });
 		byCity.set(city, list);
 	}
 	const out: CityForecast[] = [];
@@ -389,17 +395,18 @@ export function selectWeather(
 		const rows = byCity.get(city) ?? [];
 		const latestBy = (daytime: boolean) =>
 			rows
-				.filter((r) => parseMeta(r.meta).isDaytime === daytime)
+				.filter((r) => r.meta.isDaytime === daytime)
 				.sort((a, b) =>
-					(a.occurred_at ?? "").localeCompare(b.occurred_at ?? ""),
+					(a.row.occurred_at ?? "").localeCompare(b.row.occurred_at ?? ""),
 				)
 				.at(-1);
 		const day = latestBy(true);
 		const night = latestBy(false);
 		const periods: CityForecast["periods"] = [];
-		for (const row of [day, night]) {
-			if (!row?.body?.trim()) continue;
-			const meta = parseMeta(row.meta);
+		for (const parsed of [day, night]) {
+			if (!parsed) continue;
+			const { row, meta } = parsed;
+			if (!row.body?.trim()) continue;
 			const name = metaString(meta, "periodName");
 			if (!name) continue;
 			periods.push({
@@ -411,7 +418,7 @@ export function selectWeather(
 				shortForecast: metaString(meta, "shortForecast"),
 			});
 		}
-		const sourceUrl = (day ?? night)?.source_url;
+		const sourceUrl = (day ?? night)?.row.source_url;
 		if (periods.length === 0 || !sourceUrl) continue;
 		out.push({ city, sourceUrl, periods });
 	}
@@ -937,18 +944,12 @@ const DEDUP_STOP_WORDS = new Set([
 ]);
 
 export function titleTokens(title: string): Set<string> {
-	const words = title
-		.toLowerCase()
-		// \w is ASCII-only, so an accented headline tokenised badly and two
-		// outlets covering the same story stopped looking similar. Same bug
-		// class as the name-extraction fix in this branch. Diacritics are then
-		// folded, because the case this dedup exists for is two papers writing
-		// up one event — and one of them spelling it "Jose" where the other
-		// writes "José" must not read as two different stories.
-		.normalize("NFD")
-		.replace(/\p{M}+/gu, "")
-		.replace(/[^\p{L}\p{N}\s]/gu, " ")
-		.split(/\s+/)
+	// Same Unicode-aware, diacritic-folding normalization the policy gates use
+	// for names: the case this dedup exists for is two papers writing up one
+	// event, and one of them spelling it "Jose" where the other writes "José"
+	// must not read as two different stories.
+	const words = normalizeEntity(title)
+		.split(" ")
 		.filter((w) => w.length > 2 && !DEDUP_STOP_WORDS.has(w));
 	return new Set(words);
 }

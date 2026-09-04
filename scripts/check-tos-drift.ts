@@ -606,18 +606,24 @@ export function rebaselineSource(
 	};
 }
 
+/** The per-source flags all take a source key as their one argument. */
+function requireSourceKey(args: string[]): string {
+	const key = args[1];
+	if (!key) {
+		console.error(
+			`Usage: node scripts/check-tos-drift.ts ${args[0]} <source_key>`,
+		);
+		process.exit(1);
+	}
+	return key;
+}
+
 async function main() {
 	const args = process.argv.slice(2);
 	const db = openDb();
 
 	if (args[0] === "--diff") {
-		const targetKey = args[1];
-		if (!targetKey) {
-			console.error(
-				"Usage: node scripts/check-tos-drift.ts --diff <source_key>",
-			);
-			process.exit(1);
-		}
+		const targetKey = requireSourceKey(args);
 		// requireConfig throws on a key that is not in the registry. Caught here
 		// so an operator's typo gets the same one-line answer --reset gives,
 		// rather than a stack trace.
@@ -635,13 +641,7 @@ async function main() {
 	}
 
 	if (args[0] === "--attest" || args[0] === "--rebaseline") {
-		const targetKey = args[1];
-		if (!targetKey) {
-			console.error(
-				`Usage: node scripts/check-tos-drift.ts ${args[0]} <source_key>`,
-			);
-			process.exit(1);
-		}
+		const targetKey = requireSourceKey(args);
 		try {
 			const res =
 				args[0] === "--attest"
@@ -661,13 +661,7 @@ async function main() {
 	}
 
 	if (args[0] === "--reset") {
-		const targetKey = args[1];
-		if (!targetKey) {
-			console.error(
-				"Usage: node scripts/check-tos-drift.ts --reset <source_key>",
-			);
-			process.exit(1);
-		}
+		const targetKey = requireSourceKey(args);
 		console.log(`Attempting operator reset for ToS status on ${targetKey}...`);
 		try {
 			const res = await resetSingleSourceTos(targetKey, { db });
