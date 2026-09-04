@@ -83,7 +83,11 @@ describe("parseEvents", () => {
 		const e = events[1];
 		assert.equal(e.offsite, true);
 		assert.equal(e.dateText, "September 12, 2026");
-		assert.match(e.url, /centralcoastairfest\.com/);
+		// Exact URL, not a substring match on the host: an unanchored /host\.com/
+		// also matches https://evil.example/centralcoastairfest.com, so it would
+		// not actually prove the off-site link was carried through intact.
+		assert.equal(e.url, "https://www.centralcoastairfest.com/");
+		assert.equal(new URL(e.url).host, "www.centralcoastairfest.com");
 	});
 
 	test("returns nothing rather than throwing when the markup changes", () => {
