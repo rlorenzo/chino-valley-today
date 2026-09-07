@@ -64,6 +64,12 @@ export interface BriefEventAhead {
 	title: string;
 	venue: string | null;
 	url: string; // the event's source_url — provenance, like every claim
+	// Set only on a consolidated holiday-closure entry, where `title` is the
+	// holiday and this is who is closed that day, one entry per calendar that
+	// posted a notice. The site renders a link per name, so a folded notice
+	// keeps its own listing; `url` is the first of them, so anything reading
+	// only the flat shape still lands on a real calendar page.
+	closed?: { label: string; url: string }[];
 }
 
 const DIR_BY_STATUS: Record<PostStatus, string> = {
@@ -194,6 +200,15 @@ export function renderPostFile(p: NewPost, createdAt: string): string {
 						`    title: ${y(e.title)}`,
 						`    venue: ${e.venue === null ? "null" : y(e.venue)}`,
 						`    url: ${y(e.url)}`,
+						...(e.closed?.length
+							? [
+									"    closed:",
+									...e.closed.flatMap((c) => [
+										`      - label: ${y(c.label)}`,
+										`        url: ${y(c.url)}`,
+									]),
+								]
+							: []),
 					]),
 				]
 			: []),

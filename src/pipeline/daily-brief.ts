@@ -59,6 +59,7 @@ import {
 	withinLastDays,
 } from "../tiera/util.ts";
 import {
+	type BriefEventAhead,
 	createPost,
 	type NewPost,
 	normalizeSlug,
@@ -865,6 +866,61 @@ export function selectUpcomingEvents(
 		.sort(byStartThenTitle);
 }
 
+// The rail's rows, one per line the site will draw: the same consolidation the
+// brief body does, applied per calendar day. A holiday closes the city, the
+// district and every school on the SAME date, so without this the calendar page
+// repeats it five times on that day exactly as the brief used to. Nothing is
+// dropped — a folded notice keeps its own link inside the row, because
+// /calendar/ promises every entry links to its calendar listing.
+//
+// `cite` is passed in rather than imported so this stays pure and the caller
+// keeps one union of source URLs (same seam as renderWeatherLine).
+export function railEntries(
+	upcoming: UpcomingEvent[],
+	cite: (url: string) => string,
+): BriefEventAhead[] {
+	// selectUpcomingEvents sorts by start instant, so a day's events are
+	// already adjacent and the days come out in order.
+	const byDate = new Map<string, UpcomingEvent[]>();
+	for (const e of upcoming) {
+		const day = byDate.get(e.date) ?? [];
+		day.push(e);
+		byDate.set(e.date, day);
+	}
+	const entries: BriefEventAhead[] = [];
+	for (const [date, dayEvents] of byDate) {
+		const { closures, rest } = groupHolidayClosures(dayEvents);
+		for (const c of closures) {
+			const closed = c.closed.map((place) => ({
+				label: place.label,
+				url: cite(place.url),
+			}));
+			// Folded notices carry no link of their own here either, and are
+			// cited for the same reason: the row rests on them.
+			for (const url of c.foldedUrls) cite(url);
+			entries.push({
+				date,
+				// A closure frames the day rather than starting at an hour of it.
+				time: null,
+				title: c.holiday,
+				venue: null,
+				url: closed[0].url,
+				closed,
+			});
+		}
+		for (const e of rest) {
+			entries.push({
+				date,
+				time: railTimeLabel(e.timeLabel),
+				title: e.title,
+				venue: e.venue,
+				url: cite(e.sourceUrl),
+			});
+		}
+	}
+	return entries;
+}
+
 export interface TodayMeeting {
 	title: string;
 	url: string;
@@ -1531,14 +1587,13 @@ export function assembleBrief(
 	// rail. Not rendered into the body — the body is today's brief; the rail
 	// is layout. Their source URLs still join the post's provenance union.
 	const upcoming = selectUpcomingEvents(inputs.calendarEvents, now);
-	const eventsAhead = upcoming.map((e) => ({
-		date: e.date,
-		time: railTimeLabel(e.timeLabel),
-		title: e.title,
-		venue: e.venue,
-		url: cite(e.sourceUrl),
-	}));
-	notes.push(`coming up: ${upcoming.length} event(s) in the next 30 days`);
+	const eventsAhead = railEntries(upcoming, cite);
+	notes.push(
+		`coming up: ${upcoming.length} event(s) in the next 30 days` +
+			(eventsAhead.length !== upcoming.length
+				? `, rendered as ${eventsAhead.length} row(s) after folding holiday closures`
+				: ""),
+	);
 
 	// New on the record: posts published since the previous brief (internal
 	// links — their provenance lives on the posts themselves), plus fresh

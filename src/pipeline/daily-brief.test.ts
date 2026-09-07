@@ -1181,6 +1181,123 @@ describe("assembleBrief", () => {
 		assert.match(file, /"Tomorrow's craft corner"/);
 	});
 
+	test("a holiday ahead is one rail row, and every notice keeps its link", () => {
+		const inputs = quietInputs();
+		inputs.calendarEvents = [
+			// Tomorrow is the holiday: the city posts it twice, the district and
+			// one school once each.
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Veterans Day",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=11",
+				occurred_at: "2026-08-18T07:00:00.000Z",
+				meta: JSON.stringify({ eventTimes: "12:00 AM" }),
+			}),
+			item({
+				source_key: "chino-news-rss",
+				title: "Veterans Day - City Facilities Closed",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=12",
+				occurred_at: "2026-08-18T14:30:00.000Z",
+				meta: JSON.stringify({ eventTimes: "07:30 AM - 05:30 PM" }),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Veterans Day (CVUSD offices and school sites are closed)",
+				source_url: "https://www.chino.k12.ca.us/event_view?event_id=11",
+				occurred_at: "2026-08-18T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "CVUSD District Calendar",
+					allDay: true,
+				}),
+			}),
+			// Same day, an ordinary event: untouched.
+			item({
+				source_key: "sbclib-events",
+				title: "Preschool Storytime",
+				source_url: "https://library.sbcounty.gov/event/storytime",
+				occurred_at: "2026-08-18T18:00:00.000Z",
+				meta: JSON.stringify({ venue: "Chino Branch Library" }),
+			}),
+			// A different day's closure is a different row — days never merge.
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Thanksgiving",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=21",
+				occurred_at: "2026-08-25T07:00:00.000Z",
+				meta: JSON.stringify({ eventTimes: "12:00 AM" }),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Thanksgiving (No School)",
+				source_url: "https://ayala.chino.k12.ca.us/event_view?event_id=21",
+				occurred_at: "2026-08-25T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "Ruben S. Ayala High School",
+					allDay: true,
+				}),
+			}),
+		];
+		const { post: p } = assembleBrief(inputs, NOW);
+		assert.deepEqual(p.eventsAhead, [
+			{
+				date: "2026-08-18",
+				time: null,
+				title: "Veterans Day",
+				venue: null,
+				url: "https://www.cityofchino.org/Calendar.aspx?EID=11",
+				closed: [
+					{
+						label: "City of Chino",
+						url: "https://www.cityofchino.org/Calendar.aspx?EID=11",
+					},
+					{
+						label: "CVUSD",
+						url: "https://www.chino.k12.ca.us/event_view?event_id=11",
+					},
+				],
+			},
+			{
+				date: "2026-08-18",
+				time: "11:00 AM",
+				title: "Preschool Storytime",
+				venue: "Chino Branch Library",
+				url: "https://library.sbcounty.gov/event/storytime",
+			},
+			{
+				date: "2026-08-25",
+				time: null,
+				title: "Thanksgiving",
+				venue: null,
+				url: "https://www.cityofchino.org/Calendar.aspx?EID=21",
+				closed: [
+					{
+						label: "City of Chino",
+						url: "https://www.cityofchino.org/Calendar.aspx?EID=21",
+					},
+					{
+						label: "Ruben S. Ayala High School",
+						url: "https://ayala.chino.k12.ca.us/event_view?event_id=21",
+					},
+				],
+			},
+		]);
+		// The city's second Veterans Day notice has no row and no link of its
+		// own, and is still in the record.
+		assert.ok(
+			new Set(p.sources).has(
+				"https://www.cityofchino.org/Calendar.aspx?EID=12",
+			),
+		);
+		// The rail is still layout, not body.
+		assert.doesNotMatch(p.bodyMd, /Veterans Day/);
+		// And it serializes as a nested list the site schema can validate.
+		const file = renderPostFile(p, "2026-08-17T13:05:00.000Z");
+		assert.match(
+			file,
+			/ {4}closed:\n {6}- label: "City of Chino"\n {8}url: "https:\/\/www\.cityofchino\.org\/Calendar\.aspx\?EID=11"/,
+		);
+	});
+
 	test("the farmers market line renders on Wednesdays only, with its source", () => {
 		const monday = assembleBrief(quietInputs(), NOW);
 		assert.doesNotMatch(monday.post.bodyMd, /Heritage Farmers Market/);
