@@ -61,6 +61,15 @@ const posts = defineCollection({
 						title: z.string(),
 						venue: z.string().nullable(),
 						url: z.string().url(),
+						// Present only on a consolidated holiday closure, where
+						// `title` is the holiday: who is closed that day, one entry
+						// per calendar that posted a notice. The page links each of
+						// them, so folding five identical notices into one row still
+						// leaves every notice reachable at its own listing.
+						closed: z
+							.array(z.object({ label: z.string(), url: z.string().url() }))
+							.nonempty()
+							.optional(),
 					}),
 				)
 				.optional(),

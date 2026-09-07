@@ -19,7 +19,9 @@ import {
 	DAILY_BRIEF_PREREQUISITE_SOURCES,
 	decodeEntities,
 	dropAlertPostsShownAsActive,
+	groupHolidayClosures,
 	HEADLINES_SOURCES,
+	holidayClosureName,
 	isLaWednesday,
 	jaccardSimilarity,
 	laTimeOf,
@@ -514,6 +516,213 @@ describe("selectTodayEvents", () => {
 	});
 });
 
+describe("holidayClosureName", () => {
+	test("a title has to name a holiday AND say it is a closure", () => {
+		assert.equal(holidayClosureName("Closure - Labor Day"), "Labor Day");
+		assert.equal(
+			holidayClosureName(
+				"Labor Day (CVUSD offices and school sites are closed)",
+			),
+			"Labor Day",
+		);
+		assert.equal(
+			holidayClosureName("Labor Day Holiday (No School)"),
+			"Labor Day",
+		);
+		// A holiday with no closure in it is an event; a closure naming no
+		// holiday is somebody's one-off and stays in its source's words.
+		assert.equal(holidayClosureName("Labor Day Parade"), null);
+		assert.equal(holidayClosureName("Pool closed for maintenance"), null);
+	});
+
+	test("school breaks close the same calendars and group the same way", () => {
+		assert.equal(
+			holidayClosureName("Winter Recess (No School)"),
+			"Winter Break",
+		);
+		assert.equal(
+			holidayClosureName("Spring Break - No School"),
+			"Spring Break",
+		);
+	});
+});
+
+describe("groupHolidayClosures", () => {
+	// The five bullets Labor Day 2026 actually put in the brief, as their rows.
+	function laborDayRows(): ItemRow[] {
+		return [
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Labor Day",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=1",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({
+					eventTimes: "12:00 AM",
+					location: "13220 Central AvenueChino, CA 91710",
+				}),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Labor Day (CVUSD offices and school sites are closed)",
+				source_url: "https://www.chino.k12.ca.us/event_view?event_id=1",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "CVUSD District Calendar",
+					venue: "CVUSD District Calendar",
+					allDay: true,
+				}),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Labor Day (No School)",
+				source_url: "https://donlugo.chino.k12.ca.us/event_view?event_id=2",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "Don Antonio Lugo High School",
+					venue: "Don Antonio Lugo High School",
+					allDay: true,
+				}),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Labor Day Holiday (No School)",
+				source_url: "https://ayala.chino.k12.ca.us/event_view?event_id=3",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "Ruben S. Ayala High School",
+					venue: "Ruben S. Ayala High School",
+					allDay: true,
+				}),
+			}),
+			item({
+				source_key: "chino-news-rss",
+				title: "Labor Day - City Facilities Closed",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=2",
+				occurred_at: "2026-08-17T14:30:00.000Z",
+				meta: JSON.stringify({
+					eventTimes: "07:30 AM - 05:30 PM",
+					location: "13220 Central AvenueChino, CA 91710",
+				}),
+			}),
+		];
+	}
+
+	test("one holiday's notices become one line naming who is closed", () => {
+		const { closures, rest } = groupHolidayClosures(
+			selectTodayEvents(laborDayRows(), NOW),
+		);
+		assert.equal(rest.length, 0);
+		assert.equal(closures.length, 1);
+		assert.equal(closures[0].holiday, "Labor Day");
+		assert.deepEqual(
+			closures[0].closed.map((c) => c.label),
+			[
+				"City of Chino",
+				"CVUSD",
+				"Don Antonio Lugo High School",
+				"Ruben S. Ayala High School",
+			],
+		);
+		// The city's second notice folds into the city's link — and is still a
+		// source the line rests on.
+		assert.deepEqual(closures[0].foldedUrls, [
+			"https://www.cityofchino.org/Calendar.aspx?EID=2",
+		]);
+	});
+
+	test("a holiday event a reader can attend keeps its own line", () => {
+		const rows = [
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Memorial Day",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Memorial Day (No School)",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({ calendar: "Chino High School", allDay: true }),
+			}),
+			// Names the holiday, says nothing about closing: an event, not a notice.
+			item({
+				source_key: "chino-news-rss",
+				title: "Memorial Day Ceremony",
+				occurred_at: "2026-08-17T17:00:00.000Z",
+			}),
+		];
+		const { closures, rest } = groupHolidayClosures(
+			selectTodayEvents(rows, NOW),
+		);
+		assert.equal(closures.length, 1);
+		assert.deepEqual(
+			closures[0].closed.map((c) => c.label),
+			["City of Chino", "Chino High School"],
+		);
+		assert.deepEqual(
+			rest.map((e) => e.title),
+			["Memorial Day Ceremony"],
+		);
+	});
+
+	test("a lone closure notice is not a repetition, so it keeps its own words", () => {
+		const rows = [
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Veterans Day",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+			}),
+		];
+		const { closures, rest } = groupHolidayClosures(
+			selectTodayEvents(rows, NOW),
+		);
+		assert.equal(closures.length, 0);
+		assert.deepEqual(
+			rest.map((e) => e.title),
+			["Closure - Veterans Day"],
+		);
+	});
+
+	test("the specific holiday wins: Christmas Eve is not Christmas", () => {
+		const rows = [
+			item({
+				source_key: "chino-news-rss",
+				title: "Christmas Eve - City Facilities Closed",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Christmas Eve (No School)",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({ calendar: "Chino High School", allDay: true }),
+			}),
+		];
+		const { closures } = groupHolidayClosures(selectTodayEvents(rows, NOW));
+		assert.equal(closures.length, 1);
+		assert.equal(closures[0].holiday, "Christmas Eve");
+	});
+
+	test("a notice from a calendar with no reader-facing name stays its own line", () => {
+		const rows = [
+			item({
+				source_key: "some-new-calendar",
+				title: "Labor Day - Offices Closed",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+			}),
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Labor Day",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+			}),
+		];
+		const { closures, rest } = groupHolidayClosures(
+			selectTodayEvents(rows, NOW),
+		);
+		// One attributable notice left: not a repetition either.
+		assert.equal(closures.length, 0);
+		assert.equal(rest.length, 2);
+	});
+});
+
 describe("selectUpcomingEvents", () => {
 	test("the default horizon is 30 LA days, exclusive of today", () => {
 		const rows = [
@@ -874,6 +1083,69 @@ describe("assembleBrief", () => {
 		);
 	});
 
+	test("a holiday renders as one Today line, and every notice stays cited", () => {
+		const inputs = quietInputs();
+		inputs.calendarEvents = [
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Labor Day",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=1",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({ eventTimes: "12:00 AM" }),
+			}),
+			item({
+				source_key: "chino-news-rss",
+				title: "Labor Day - City Facilities Closed",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=2",
+				occurred_at: "2026-08-17T14:30:00.000Z",
+				meta: JSON.stringify({ eventTimes: "07:30 AM - 05:30 PM" }),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Labor Day (CVUSD offices and school sites are closed)",
+				source_url: "https://www.chino.k12.ca.us/event_view?event_id=1",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "CVUSD District Calendar",
+					allDay: true,
+				}),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Labor Day (No School)",
+				source_url: "https://donlugo.chino.k12.ca.us/event_view?event_id=2",
+				occurred_at: "2026-08-17T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "Don Antonio Lugo High School",
+					allDay: true,
+				}),
+			}),
+			// An ordinary event on the holiday still gets its own line.
+			item({
+				source_key: "sbclib-events",
+				title: "Preschool Storytime",
+				source_url: "https://library.sbcounty.gov/event/storytime",
+				occurred_at: "2026-08-17T18:00:00.000Z",
+				meta: JSON.stringify({ venue: "Chino Branch Library" }),
+			}),
+		];
+		const { post: p } = assembleBrief(inputs, NOW);
+		assert.match(
+			p.bodyMd,
+			/- \*\*Labor Day\*\* — closed: \[City of Chino\]\(https:\/\/www\.cityofchino\.org\/Calendar\.aspx\?EID=1\), \[CVUSD\]\(https:\/\/www\.chino\.k12\.ca\.us\/event_view\?event_id=1\), \[Don Antonio Lugo High School\]\(https:\/\/donlugo\.chino\.k12\.ca\.us\/event_view\?event_id=2\)\n/,
+		);
+		// One line, not four: the sources' own wordings are gone from the body.
+		assert.doesNotMatch(p.bodyMd, /No School/);
+		assert.doesNotMatch(p.bodyMd, /City Facilities Closed/);
+		assert.equal((p.bodyMd.match(/Labor Day/g) ?? []).length, 1);
+		// The folded second city notice is still in the record.
+		assert.ok(
+			new Set(p.sources).has("https://www.cityofchino.org/Calendar.aspx?EID=2"),
+		);
+		// The rest of the day is untouched.
+		assert.match(p.bodyMd, /11:00 AM — \[Preschool Storytime\]/);
+	});
+
 	test("week-ahead events ship as frontmatter, not body, and join sources", () => {
 		const inputs = quietInputs();
 		inputs.calendarEvents = [
@@ -907,6 +1179,123 @@ describe("assembleBrief", () => {
 		const file = renderPostFile(p, "2026-08-17T13:05:00.000Z");
 		assert.match(file, /events_ahead:\n {2}- date: "2026-08-18"/);
 		assert.match(file, /"Tomorrow's craft corner"/);
+	});
+
+	test("a holiday ahead is one rail row, and every notice keeps its link", () => {
+		const inputs = quietInputs();
+		inputs.calendarEvents = [
+			// Tomorrow is the holiday: the city posts it twice, the district and
+			// one school once each.
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Veterans Day",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=11",
+				occurred_at: "2026-08-18T07:00:00.000Z",
+				meta: JSON.stringify({ eventTimes: "12:00 AM" }),
+			}),
+			item({
+				source_key: "chino-news-rss",
+				title: "Veterans Day - City Facilities Closed",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=12",
+				occurred_at: "2026-08-18T14:30:00.000Z",
+				meta: JSON.stringify({ eventTimes: "07:30 AM - 05:30 PM" }),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Veterans Day (CVUSD offices and school sites are closed)",
+				source_url: "https://www.chino.k12.ca.us/event_view?event_id=11",
+				occurred_at: "2026-08-18T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "CVUSD District Calendar",
+					allDay: true,
+				}),
+			}),
+			// Same day, an ordinary event: untouched.
+			item({
+				source_key: "sbclib-events",
+				title: "Preschool Storytime",
+				source_url: "https://library.sbcounty.gov/event/storytime",
+				occurred_at: "2026-08-18T18:00:00.000Z",
+				meta: JSON.stringify({ venue: "Chino Branch Library" }),
+			}),
+			// A different day's closure is a different row — days never merge.
+			item({
+				source_key: "chino-news-rss",
+				title: "Closure - Thanksgiving",
+				source_url: "https://www.cityofchino.org/Calendar.aspx?EID=21",
+				occurred_at: "2026-08-25T07:00:00.000Z",
+				meta: JSON.stringify({ eventTimes: "12:00 AM" }),
+			}),
+			item({
+				source_key: "cvusd-calendar",
+				title: "Thanksgiving (No School)",
+				source_url: "https://ayala.chino.k12.ca.us/event_view?event_id=21",
+				occurred_at: "2026-08-25T07:00:00.000Z",
+				meta: JSON.stringify({
+					calendar: "Ruben S. Ayala High School",
+					allDay: true,
+				}),
+			}),
+		];
+		const { post: p } = assembleBrief(inputs, NOW);
+		assert.deepEqual(p.eventsAhead, [
+			{
+				date: "2026-08-18",
+				time: null,
+				title: "Veterans Day",
+				venue: null,
+				url: "https://www.cityofchino.org/Calendar.aspx?EID=11",
+				closed: [
+					{
+						label: "City of Chino",
+						url: "https://www.cityofchino.org/Calendar.aspx?EID=11",
+					},
+					{
+						label: "CVUSD",
+						url: "https://www.chino.k12.ca.us/event_view?event_id=11",
+					},
+				],
+			},
+			{
+				date: "2026-08-18",
+				time: "11:00 AM",
+				title: "Preschool Storytime",
+				venue: "Chino Branch Library",
+				url: "https://library.sbcounty.gov/event/storytime",
+			},
+			{
+				date: "2026-08-25",
+				time: null,
+				title: "Thanksgiving",
+				venue: null,
+				url: "https://www.cityofchino.org/Calendar.aspx?EID=21",
+				closed: [
+					{
+						label: "City of Chino",
+						url: "https://www.cityofchino.org/Calendar.aspx?EID=21",
+					},
+					{
+						label: "Ruben S. Ayala High School",
+						url: "https://ayala.chino.k12.ca.us/event_view?event_id=21",
+					},
+				],
+			},
+		]);
+		// The city's second Veterans Day notice has no row and no link of its
+		// own, and is still in the record.
+		assert.ok(
+			new Set(p.sources).has(
+				"https://www.cityofchino.org/Calendar.aspx?EID=12",
+			),
+		);
+		// The rail is still layout, not body.
+		assert.doesNotMatch(p.bodyMd, /Veterans Day/);
+		// And it serializes as a nested list the site schema can validate.
+		const file = renderPostFile(p, "2026-08-17T13:05:00.000Z");
+		assert.match(
+			file,
+			/ {4}closed:\n {6}- label: "City of Chino"\n {8}url: "https:\/\/www\.cityofchino\.org\/Calendar\.aspx\?EID=11"/,
+		);
 	});
 
 	test("the farmers market line renders on Wednesdays only, with its source", () => {

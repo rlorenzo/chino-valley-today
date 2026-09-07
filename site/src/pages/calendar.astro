@@ -83,10 +83,29 @@ const farLastDate = farEvents.at(-1)?.date ?? null;
 										{day.items.map((e) => (
 											<li class="cal__item">
 												{e.time && <span class="mark cal__time">{e.time}</span>}
-												<a href={e.url} rel="noopener noreferrer">
-													{e.title}
-												</a>
-												{e.venue && <span class="cal__venue">{e.venue}</span>}
+												{e.closed ? (
+													<Fragment>
+														<span class="cal__holiday">{e.title}</span>
+														<span class="cal__closed">
+															closed:{" "}
+															{e.closed.map((place, i) => (
+																<Fragment>
+																	{i > 0 && ", "}
+																	<a href={place.url} rel="noopener noreferrer">
+																		{place.label}
+																	</a>
+																</Fragment>
+															))}
+														</span>
+													</Fragment>
+												) : (
+													<Fragment>
+														<a href={e.url} rel="noopener noreferrer">
+															{e.title}
+														</a>
+														{e.venue && <span class="cal__venue">{e.venue}</span>}
+													</Fragment>
+												)}
 											</li>
 										))}
 									</ul>
@@ -141,10 +160,29 @@ const farLastDate = farEvents.at(-1)?.date ?? null;
 										{day.items.map((e) => (
 											<li class="cal__item">
 												{e.time && <span class="mark cal__time">{e.time}</span>}
-												<a href={e.url} rel="noopener noreferrer">
-													{e.title}
-												</a>
-												{e.venue && <span class="cal__venue">{e.venue}</span>}
+												{e.closed ? (
+													<Fragment>
+														<span class="cal__holiday">{e.title}</span>
+														<span class="cal__closed">
+															closed:{" "}
+															{e.closed.map((place, i) => (
+																<Fragment>
+																	{i > 0 && ", "}
+																	<a href={place.url} rel="noopener noreferrer">
+																		{place.label}
+																	</a>
+																</Fragment>
+															))}
+														</span>
+													</Fragment>
+												) : (
+													<Fragment>
+														<a href={e.url} rel="noopener noreferrer">
+															{e.title}
+														</a>
+														{e.venue && <span class="cal__venue">{e.venue}</span>}
+													</Fragment>
+												)}
 											</li>
 										))}
 									</ul>
@@ -293,5 +331,25 @@ const farLastDate = farEvents.at(-1)?.date ?? null;
 		grid-column: 2;
 		font-size: 0.78rem;
 		color: var(--muted);
+	}
+	/*
+	  A consolidated holiday closure. The holiday sits exactly where a title
+	  sits, and who is closed reads underneath it in the venue's place — which
+	  is what it is: not one event at one address, but a day several calendars
+	  each posted a closure for. Every name keeps its own link, so folding five
+	  notices into one row costs a reader none of the five listings.
+	*/
+	.cal__holiday {
+		grid-column: 2;
+		grid-row: 1;
+		color: var(--stencil);
+	}
+	.cal__closed {
+		grid-column: 2;
+		font-size: 0.78rem;
+		color: var(--muted);
+	}
+	.cal__closed a {
+		color: var(--crate);
 	}
 </style>

@@ -16,6 +16,12 @@
 //   usgs-quakes is county-wide-by-nature like sbcfire-news and is filtered
 //   to meta.chinoRelevant the same way.
 //   Nixle/sheriff sources are never queried here — Tier C.
+// - Today folds a holiday's closure notices into ONE line naming who is
+//   closed. The city, the district and each school post the same closure in
+//   their own words, and five bullets all reading "Labor Day" are not a
+//   schedule. Only a title that BOTH names a holiday and says it is a closure
+//   is folded, so a Memorial Day ceremony stays an event; every notice folded
+//   in is still cited.
 // - "Headlines elsewhere" does not exist until Task 4.2 lands; no stub.
 //
 // Usage: node src/pipeline/daily-brief.ts
@@ -53,6 +59,7 @@ import {
 	withinLastDays,
 } from "../tiera/util.ts";
 import {
+	type BriefEventAhead,
 	createPost,
 	type NewPost,
 	normalizeSlug,
@@ -77,6 +84,20 @@ const CALENDAR_SOURCES = [
 	"cvusd-calendar",
 	"chinotheatre-events",
 ];
+// What each calendar speaks for, in the reader's words — the agency behind the
+// scrape key, never the key itself (same idiom as FIRE_LABEL). Used only by the
+// holiday-closure line, which has to name who is closed; the CVUSD feeds carry
+// their own per-school label in meta.calendar and are read off the row instead.
+const CALENDAR_OWNER: Record<string, string> = {
+	"chino-news-rss": "City of Chino",
+	"chinohills-news-rss": "City of Chino Hills",
+	"sbclib-events": "San Bernardino County Library",
+	"sbparks-events": "San Bernardino County Parks",
+	"cbwcd-events": "Chino Basin Water Conservation District",
+	"yanksair-events": "Yanks Air Museum",
+	"planesoffame-events": "Planes of Fame Air Museum",
+	"chinotheatre-events": "Chino Community Theatre",
+};
 // usgs-quakes belongs here despite the name: an earthquake is a safety item,
 // its only item_type is 'alert', and Fire & safety already renders exactly what
 // a quake line needs — verbatim title plus source link, nothing else.
@@ -606,6 +627,10 @@ export interface TodayEvent {
 	timeLabel: string | null;
 	venue: string | null;
 	occurredAt: string;
+	// Whose calendar posted it, in the reader's words — null when the source
+	// has no reader-facing name here. Only the holiday-closure line uses it;
+	// every other line quotes the source's own title instead.
+	postedBy: string | null;
 }
 
 // A calendar event row that passed selection: titled, not a CBWCD "District
@@ -626,6 +651,17 @@ function isRenderableEvent(row: ItemRow): boolean {
 	return true;
 }
 
+// The name to put on a closure this row posted. A CVUSD feed labels itself
+// ("Ruben S. Ayala High School", "CVUSD District Calendar"); the rest are named
+// by scrape key. The district's label names its CALENDAR, and a calendar is not
+// what closes — "CVUSD" is — so a trailing "[District] Calendar" comes off.
+function postedBy(row: ItemRow, meta: Record<string, unknown>): string | null {
+	const calendar = metaString(meta, "calendar");
+	if (!calendar) return CALENDAR_OWNER[row.source_key] ?? null;
+	const trimmed = calendar.replace(/\s*(district\s+)?calendar$/i, "").trim();
+	return trimmed || calendar;
+}
+
 function eventRowToEntry(row: ItemRow): TodayEvent {
 	const meta = parseMeta(row.meta);
 	const allDay = meta.allDay === true;
@@ -642,6 +678,7 @@ function eventRowToEntry(row: ItemRow): TodayEvent {
 		timeLabel,
 		venue: venueRaw ? decodeEntities(venueRaw) : null,
 		occurredAt: row.occurred_at ?? "",
+		postedBy: postedBy(row, meta),
 	};
 }
 
@@ -666,6 +703,121 @@ export function selectTodayEvents(
 	return dedupeByKey(todays, (r) => r.external_id ?? r.source_url)
 		.map(eventRowToEntry)
 		.sort(byStartThenTitle);
+}
+
+// --- Today: holiday closures -------------------------------------------------
+
+// A public holiday closes the city, the district and every school on it, and
+// each of those calendars posts its own notice. Labor Day 2026 reached the
+// brief as five bullets — a city closure, the same closure again as "City
+// Facilities Closed", the district, Don Lugo and Ayala — all saying the same
+// thing in different words. Every one of them is true, so none can be dropped;
+// what they can be is one line naming the holiday and who is closed.
+//
+// Consolidation is deliberately narrow. A title has to BOTH name a holiday
+// these calendars observe AND say it is a closure, so a Memorial Day ceremony
+// or a Fourth of July concert — things a reader can actually go to — stays its
+// own line. The specific name is always tested before the general one, or
+// "Christmas Eve" would consolidate as Christmas and land the wrong day's name
+// on the line.
+const HOLIDAYS: { name: string; pattern: RegExp }[] = [
+	{ name: "New Year's Eve", pattern: /new\s*year'?s?\s*eve/i },
+	{ name: "New Year's Day", pattern: /new\s*year'?s?(\s*day)?/i },
+	{
+		name: "Martin Luther King Jr. Day",
+		pattern: /martin\s+luther\s+king|\bmlk\b/i,
+	},
+	{ name: "Lincoln's Birthday", pattern: /lincoln'?s?\s+birthday/i },
+	{
+		name: "Presidents Day",
+		pattern: /presidents?'?s?\s+day|washington'?s?\s+birthday/i,
+	},
+	{ name: "Cesar Chavez Day", pattern: /c[eé]sar\s+ch[aá]vez/i },
+	{ name: "Memorial Day", pattern: /memorial\s+day/i },
+	{ name: "Juneteenth", pattern: /juneteenth/i },
+	{
+		name: "Independence Day",
+		pattern: /independence\s+day|fourth\s+of\s+july|july\s+4(th)?\b/i,
+	},
+	{ name: "Labor Day", pattern: /labor\s+day/i },
+	{
+		name: "Indigenous Peoples' Day",
+		pattern: /indigenous\s+peoples?'?s?\s+day|columbus\s+day/i,
+	},
+	{ name: "Veterans Day", pattern: /veterans?'?s?\s+day/i },
+	{ name: "Day after Thanksgiving", pattern: /day\s+after\s+thanksgiving/i },
+	{ name: "Thanksgiving Break", pattern: /thanksgiving\s+(break|recess)/i },
+	{ name: "Thanksgiving", pattern: /thanksgiving/i },
+	{ name: "Christmas Eve", pattern: /christmas\s+eve/i },
+	{ name: "Christmas", pattern: /christmas/i },
+	// School breaks are not public holidays, but they close the same set of
+	// calendars for a fortnight at a time and repeat identically on every one
+	// of those days.
+	{ name: "Winter Break", pattern: /winter\s+(break|recess)/i },
+	{ name: "Spring Break", pattern: /spring\s+(break|recess)/i },
+	{ name: "Fall Break", pattern: /fall\s+(break|recess)/i },
+];
+
+// What makes a calendar entry a closure notice rather than something to attend.
+// The words the sources actually use: "Closure - Labor Day", "Labor Day - City
+// Facilities Closed", "Labor Day (No School)", "Labor Day (CVUSD offices and
+// school sites are closed)". "Holiday" on its own is not enough — a Christmas
+// holiday concert is a concert.
+const CLOSURE_MARKER =
+	/\b(closed|closure|closing|no school|non[-\s]?student)\b/i;
+
+// The holiday a closure notice is about, or null if the title is not both.
+export function holidayClosureName(title: string): string | null {
+	if (!CLOSURE_MARKER.test(title)) return null;
+	return HOLIDAYS.find((h) => h.pattern.test(title))?.name ?? null;
+}
+
+export interface HolidayClosure {
+	holiday: string;
+	// One entry per closed agency, in the order the notices sorted. The first
+	// notice from an agency wins the link.
+	closed: { label: string; url: string }[];
+	// Notices folded into a label that already had a link — the city posting
+	// its closure twice. They are cited with the rest, never dropped.
+	foldedUrls: string[];
+}
+
+// Splits today's events into consolidated holiday-closure lines and everything
+// else, preserving the caller's order in both. A holiday with only ONE notice
+// is not a repetition, so it stays in `rest` and keeps the source's own words:
+// this rewrites the framing only where the framing was the problem.
+export function groupHolidayClosures(events: TodayEvent[]): {
+	closures: HolidayClosure[];
+	rest: TodayEvent[];
+} {
+	// A notice we cannot attribute cannot be folded into a line whose whole
+	// content is who is closed.
+	const holidayOf = (e: TodayEvent): string | null =>
+		e.postedBy ? holidayClosureName(e.title) : null;
+	const counts = new Map<string, number>();
+	for (const e of events) {
+		const holiday = holidayOf(e);
+		if (holiday) counts.set(holiday, (counts.get(holiday) ?? 0) + 1);
+	}
+	const closures = new Map<string, HolidayClosure>();
+	const rest: TodayEvent[] = [];
+	for (const e of events) {
+		const holiday = holidayOf(e);
+		if (!holiday || (counts.get(holiday) ?? 0) < 2) {
+			rest.push(e);
+			continue;
+		}
+		const group = closures.get(holiday) ?? {
+			holiday,
+			closed: [],
+			foldedUrls: [],
+		};
+		if (group.closed.some((c) => c.label === e.postedBy))
+			group.foldedUrls.push(e.sourceUrl);
+		else group.closed.push({ label: e.postedBy as string, url: e.sourceUrl });
+		closures.set(holiday, group);
+	}
+	return { closures: [...closures.values()], rest };
 }
 
 // YYYY-MM-DD plus N calendar days, same UTC-field arithmetic as laStartDate
@@ -712,6 +864,61 @@ export function selectUpcomingEvents(
 			date: laDateOf(row.occurred_at) as string,
 		}))
 		.sort(byStartThenTitle);
+}
+
+// The rail's rows, one per line the site will draw: the same consolidation the
+// brief body does, applied per calendar day. A holiday closes the city, the
+// district and every school on the SAME date, so without this the calendar page
+// repeats it five times on that day exactly as the brief used to. Nothing is
+// dropped — a folded notice keeps its own link inside the row, because
+// /calendar/ promises every entry links to its calendar listing.
+//
+// `cite` is passed in rather than imported so this stays pure and the caller
+// keeps one union of source URLs (same seam as renderWeatherLine).
+export function railEntries(
+	upcoming: UpcomingEvent[],
+	cite: (url: string) => string,
+): BriefEventAhead[] {
+	// selectUpcomingEvents sorts by start instant, so a day's events are
+	// already adjacent and the days come out in order.
+	const byDate = new Map<string, UpcomingEvent[]>();
+	for (const e of upcoming) {
+		const day = byDate.get(e.date) ?? [];
+		day.push(e);
+		byDate.set(e.date, day);
+	}
+	const entries: BriefEventAhead[] = [];
+	for (const [date, dayEvents] of byDate) {
+		const { closures, rest } = groupHolidayClosures(dayEvents);
+		for (const c of closures) {
+			const closed = c.closed.map((place) => ({
+				label: place.label,
+				url: cite(place.url),
+			}));
+			// Folded notices carry no link of their own here either, and are
+			// cited for the same reason: the row rests on them.
+			for (const url of c.foldedUrls) cite(url);
+			entries.push({
+				date,
+				// A closure frames the day rather than starting at an hour of it.
+				time: null,
+				title: c.holiday,
+				venue: null,
+				url: closed[0].url,
+				closed,
+			});
+		}
+		for (const e of rest) {
+			entries.push({
+				date,
+				time: railTimeLabel(e.timeLabel),
+				title: e.title,
+				venue: e.venue,
+				url: cite(e.sourceUrl),
+			});
+		}
+	}
+	return entries;
 }
 
 export interface TodayMeeting {
@@ -1317,13 +1524,18 @@ export function assembleBrief(
 	}
 	notes.push(`fire & safety: ${fire.length} item(s) in the last 24h`);
 
-	// Today: meetings first, then events, then the Wednesday market line.
+	// Today: meetings first, then holiday closures, then events, then the
+	// Wednesday market line.
 	const meetings = selectTodayMeetings(
 		inputs.agendaItems,
 		inputs.cvusdEvents,
 		now,
 	);
 	const events = selectTodayEvents(inputs.calendarEvents, now);
+	// A holiday's closure notices arrive one per calendar and say the same
+	// thing; they render as one line naming who is closed. Everything else
+	// keeps its own line and its source's own words.
+	const { closures, rest: singleEvents } = groupHolidayClosures(events);
 	const marketDay = isLaWednesday(now);
 	if (
 		meetings.length > 0 ||
@@ -1336,7 +1548,20 @@ export function assembleBrief(
 			const time = m.timeLabel ? ` — ${m.timeLabel}` : "";
 			todayLines.push(`- **Meeting:** ${mdLink(m.title, cite(m.url))}${time}`);
 		}
-		for (const e of events) {
+		// Ahead of the timed lines: a closure frames the whole day rather than
+		// happening at an hour of it, so it carries no time label — the notices
+		// disagree about the hours anyway (midnight, all day, 7:30 AM–5:30 PM),
+		// and those are the office's hours, not the closure's.
+		for (const c of closures) {
+			const closed = c.closed
+				.map((place) => mdLink(place.label, cite(place.url)))
+				.join(", ");
+			// A second notice from an office already named is folded into that
+			// office's link, but it is still a source this line rests on.
+			for (const url of c.foldedUrls) cite(url);
+			todayLines.push(`- **${mdEscape(c.holiday)}** — closed: ${closed}`);
+		}
+		for (const e of singleEvents) {
 			const time = e.timeLabel ? `${e.timeLabel} — ` : "";
 			const venue = e.venue ? ` at ${mdEscape(e.venue)}` : "";
 			todayLines.push(`- ${time}${mdLink(e.title, cite(e.sourceUrl))}${venue}`);
@@ -1350,20 +1575,25 @@ export function assembleBrief(
 			todayLines.push("");
 		todayLines.push(...degradedNote("today"));
 	}
-	notes.push(`today: ${meetings.length} meeting(s), ${events.length} event(s)`);
+	notes.push(
+		`today: ${meetings.length} meeting(s), ${events.length} event(s)` +
+			(closures.length > 0
+				? `, ${events.length - singleEvents.length} holiday closure notice(s) ` +
+					`consolidated into ${closures.length} line(s)`
+				: ""),
+	);
 
 	// The week ahead, as structured frontmatter for the site's "coming up"
 	// rail. Not rendered into the body — the body is today's brief; the rail
 	// is layout. Their source URLs still join the post's provenance union.
 	const upcoming = selectUpcomingEvents(inputs.calendarEvents, now);
-	const eventsAhead = upcoming.map((e) => ({
-		date: e.date,
-		time: railTimeLabel(e.timeLabel),
-		title: e.title,
-		venue: e.venue,
-		url: cite(e.sourceUrl),
-	}));
-	notes.push(`coming up: ${upcoming.length} event(s) in the next 30 days`);
+	const eventsAhead = railEntries(upcoming, cite);
+	notes.push(
+		`coming up: ${upcoming.length} event(s) in the next 30 days` +
+			(eventsAhead.length !== upcoming.length
+				? `, rendered as ${eventsAhead.length} row(s) after folding holiday closures`
+				: ""),
+	);
 
 	// New on the record: posts published since the previous brief (internal
 	// links — their provenance lives on the posts themselves), plus fresh

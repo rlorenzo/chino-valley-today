@@ -114,11 +114,30 @@ const marks = TOPICS.map((t) => {
 											{e.time && (
 												<span class="mark today__rail-time">{e.time}</span>
 											)}
-											<a href={e.url} rel="noopener noreferrer">
-												{e.title}
-											</a>
-											{e.venue && (
-												<span class="today__rail-venue">{e.venue}</span>
+											{e.closed ? (
+												<Fragment>
+													<span class="today__rail-holiday">{e.title}</span>
+													<span class="today__rail-closed">
+														closed:{" "}
+														{e.closed.map((place, i) => (
+															<Fragment>
+																{i > 0 && ", "}
+																<a href={place.url} rel="noopener noreferrer">
+																	{place.label}
+																</a>
+															</Fragment>
+														))}
+													</span>
+												</Fragment>
+											) : (
+												<Fragment>
+													<a href={e.url} rel="noopener noreferrer">
+														{e.title}
+													</a>
+													{e.venue && (
+														<span class="today__rail-venue">{e.venue}</span>
+													)}
+												</Fragment>
 											)}
 										</li>
 									))}
@@ -355,6 +374,24 @@ const marks = TOPICS.map((t) => {
 		grid-column: 2;
 		font-size: 0.78rem;
 		color: var(--muted);
+	}
+	/*
+	  A consolidated holiday closure, rendered exactly as /calendar/ renders
+	  one: the holiday where a title goes, who is closed where a venue goes,
+	  every name still linking to the calendar that posted its notice.
+	*/
+	.today__rail-holiday {
+		grid-column: 2;
+		grid-row: 1;
+		color: var(--stencil);
+	}
+	.today__rail-closed {
+		grid-column: 2;
+		font-size: 0.78rem;
+		color: var(--muted);
+	}
+	.today__rail-closed a {
+		color: var(--crate);
 	}
 	.today__rail-more {
 		display: inline-block;
