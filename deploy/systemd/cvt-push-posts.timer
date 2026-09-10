@@ -1,0 +1,16 @@
+[Unit]
+Description=Push published posts to GitHub for Chino Valley Today
+
+[Timer]
+# Hourly at :20. Posts arrive by two routes on different clocks — Tier A at
+# 05:50 and the brief at 06:00, both unattended, and dashboard approvals at any
+# hour — so this follows neither and simply sweeps. :20 keeps it clear of the
+# :00 and :50 units rather than competing with them for a small droplet.
+OnCalendar=*-*-* *:20:00 America/Los_Angeles
+# A missed run (reboot, droplet resize) executes once on the next boot. Posts
+# would otherwise wait for the next hour, and a reboot during the morning run
+# is exactly when there is something to push.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

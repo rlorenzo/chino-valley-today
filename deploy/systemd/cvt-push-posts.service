@@ -1,0 +1,48 @@
+[Unit]
+Description=Chino Valley Today — commit and push published posts to GitHub
+Documentation=https://github.com/rlorenzo/chino-valley-today
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+ExecStart=/usr/bin/env bash scripts/push-posts.sh
+
+# No EnvironmentFile: this unit needs no pipeline secrets. Its only credential
+# is the write deploy key, which git finds through the checkout's own
+# core.sshCommand — see deploy/README.md step 3c.
+
+# Same shared-droplet discipline as the scrape units. A git commit and push is
+# far cheaper than a scrape, so the ceiling is low.
+MemoryHigh=128M
+MemoryMax=256M
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# The whole checkout, not just .git.
+#
+# An earlier version listed only .git, on the reasoning that this unit reads
+# published posts and should never alter them. That reasoning was wrong about
+# what git does: `git rebase` updates the WORKING TREE to origin/main before
+# replaying local commits, and --autostash restores worktree state afterwards.
+# With the tree read-only, every run after an upstream commit would have died
+# mid-rebase without pushing — and upstream moves on every merge, so that is
+# the normal case, not an edge one.
+ReadWritePaths=/srv/chino-valley-today
+
+# A hung push must not sit on the timer forever.
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

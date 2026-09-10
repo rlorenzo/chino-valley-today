@@ -66,6 +66,41 @@ KEY
 chown cvtoday:cvtoday /srv/chino-valley-today/.ssh/authorized_keys
 chmod 600 /srv/chino-valley-today/.ssh/authorized_keys
 
+# 3c. Write-back deploy key, for cvt-push-posts. Posts are written HERE — Tier
+#     A publishes unattended at 05:50, dashboard approvals land at any hour —
+#     and nothing sent them back, so git held an incomplete copy of what the
+#     site had published and every frontmatter migration had to run twice.
+#
+#     A GitHub DEPLOY KEY, not an account key: it grants write to this one
+#     repository and nothing else, so a compromise of this shared host cannot
+#     reach the account or the co-tenant projects. Generate it here so the
+#     private half never travels:
+sudo -u cvtoday ssh-keygen -t ed25519 -N '' -C cvt-droplet-push \
+	-f /srv/chino-valley-today/.ssh/id_ed25519_push
+cat /srv/chino-valley-today/.ssh/id_ed25519_push.pub
+#     Add that public key at Settings -> Deploy keys, WITH write access.
+
+#     Pin GitHub's host keys from the TLS-authenticated meta endpoint rather
+#     than ssh-keyscan, which trusts whatever answers on the day.
+curl -fsS https://api.github.com/meta \
+	| python3 -c 'import json,sys; [print("github.com", k) for k in json.load(sys.stdin)["ssh_keys"]]' \
+	| sudo -u cvtoday tee /srv/chino-valley-today/.ssh/known_hosts_github >/dev/null
+
+#     Point THIS checkout's git at that key. Repo-local, so nothing else on the
+#     host inherits it.
+sudo -u cvtoday git -C /srv/chino-valley-today config core.sshCommand \
+	'ssh -i /srv/chino-valley-today/.ssh/id_ed25519_push -o IdentitiesOnly=yes -o UserKnownHostsFile=/srv/chino-valley-today/.ssh/known_hosts_github -o StrictHostKeyChecking=yes'
+
+#     The remote must be SSH: a deploy key cannot authenticate over HTTPS.
+#     Do this only AFTER the key is registered on GitHub — host-code-update.sh
+#     fetches through this same remote, so switching first breaks CI deploys.
+sudo -u cvtoday git -C /srv/chino-valley-today remote set-url origin \
+	git@github.com:rlorenzo/chino-valley-today.git
+
+#     An identity for the commits. Without it `git commit` fails outright.
+sudo -u cvtoday git -C /srv/chino-valley-today config user.name 'Chino Valley Today (droplet)'
+sudo -u cvtoday git -C /srv/chino-valley-today config user.email 'cvt-droplet@users.noreply.github.com'
+
 # 4. rclone, for the offsite backup. Already present on this host for the
 #    other projects' backups; listed for a clean rebuild.
 apt-get update && apt-get install -y rclone
@@ -236,6 +271,18 @@ the site from whatever code the host already had and never shipped pipeline
 changes at all. Nothing reported the gap; the droplet ran two merges behind for
 a day. If that entry is ever reset to `local`, code deploys silently stop again
 and only `cvt-drift-watch` will say so.
+
+**The droplet pushes published posts, and only those.** `cvt-push-posts.timer`
+runs `scripts/push-posts.sh` hourly at :20. It stages `content/published/` with
+`--ignore-removal`, so a post vanishing from this host never commits a deletion
+to the record, and gitignored daily briefs never leave. It rebases onto
+`origin/main` before pushing and never force-pushes: this account may add to
+the history, never rewrite it. A rebase conflict — git and this host both
+changed the same published post, which is what a visible correction looks like
+— stops at exit 75 with the commit intact rather than picking a side.
+
+That unpushed commit is safe: `host-code-update.sh` already refuses to reset
+over a local commit upstream lacks, so a deploy will not quietly discard it.
 
 **Never run `local` or `host-update` as root.** Both build inside
 `/srv/chino-valley-today/site` and publish into `/var/www/chinovalley.today`,
