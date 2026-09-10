@@ -4,7 +4,9 @@ import type { Post } from "../lib/record.ts";
 import {
 	TOPICS,
 	formatDateLong,
+	formatDuration,
 	isBrief,
+	isPodcast,
 	sourceHost,
 	topicsFor,
 	typeLabel,
@@ -45,6 +47,8 @@ const sources = post.data.sources.map((url) => {
 	};
 });
 const hasArchived = sources.some((s) => s.archived);
+const podcast = isPodcast(post);
+const chapters = post.data.chapters ?? [];
 ---
 
 <article>
@@ -61,6 +65,11 @@ const hasArchived = sources.some((s) => s.archived);
 				<time datetime={post.data.date.toISOString()}>
 					Published {formatDateLong(post.data.date)}
 				</time>
+				{
+					podcast && post.data.duration_sec !== undefined && (
+						<span>{formatDuration(post.data.duration_sec)}</span>
+					)
+				}
 			</p>
 			{
 				topics.length > 0 && (
@@ -78,6 +87,31 @@ const hasArchived = sources.some((s) => s.archived);
 			}
 		</div>
 	</header>
+
+	{
+		podcast && post.data.audio_url && (
+			<div class="shell podcast-player">
+				<audio
+					controls
+					preload="none"
+					src={post.data.audio_url}
+					style="width:100%"
+				/>
+				{chapters.length > 0 && (
+					<ol class="podcast-chapters mark">
+						{chapters.map((c) => (
+							<li>
+								<span class="podcast-chapters__time">
+									{formatDuration(c.start_sec)}
+								</span>{" "}
+								{c.title}
+							</li>
+						))}
+					</ol>
+				)}
+			</div>
+		)
+	}
 
 	<div class="reading body">
 		<div class="prose">
@@ -267,6 +301,27 @@ const hasArchived = sources.some((s) => s.archived);
 
 	.body {
 		padding-block: 2.4rem 1rem;
+	}
+
+	.podcast-player {
+		max-width: var(--measure);
+		padding-top: 1.6rem;
+	}
+	.podcast-chapters {
+		list-style: none;
+		margin: 1rem 0 0;
+		padding: 0;
+		border-top: 1px solid var(--galv-edge);
+	}
+	.podcast-chapters li {
+		padding-block: 0.5rem;
+		border-bottom: 1px solid var(--galv-edge);
+		font-size: 0.88rem;
+	}
+	.podcast-chapters__time {
+		display: inline-block;
+		min-width: 3.6rem;
+		color: var(--muted);
 	}
 
 	.inspection {

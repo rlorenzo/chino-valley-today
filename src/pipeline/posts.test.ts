@@ -393,3 +393,81 @@ describe("slug normalization", () => {
 		}
 	});
 });
+
+describe("podcast audio frontmatter", () => {
+	function episode(audio?: NewPost["audio"]): string {
+		return renderPostFile(
+			{
+				slug: "2026-w37-podcast",
+				postType: "podcast",
+				tier: "B",
+				title: "Week in Review: September 7, 2026",
+				bodyMd: "## Cold open\n\n**Maya:** Good morning.",
+				meetingDate: "2026-09-07",
+				sources: [SOURCE],
+				...(audio ? { audio } : {}),
+			},
+			"2026-09-07T14:00:00Z",
+		);
+	}
+
+	const AUDIO: NewPost["audio"] = {
+		url: "https://chinovalley.today/audio/2026-w37.mp3",
+		bytes: 8_412_160,
+		durationSec: 1042,
+		chapters: [
+			{ title: "Cold open", startSec: 0 },
+			{ title: "Last week", startSec: 47 },
+		],
+	};
+
+	test("emits the episode's url, size, duration and chapters", () => {
+		const fm = episode(AUDIO).split(/^---$/m)[1];
+		assert.match(
+			fm,
+			/\naudio_url: "https:\/\/chinovalley\.today\/audio\/2026-w37\.mp3"\n/,
+		);
+		assert.match(fm, /\naudio_bytes: 8412160\n/);
+		assert.match(fm, /\nduration_sec: 1042\n/);
+		assert.match(
+			fm,
+			/\nchapters:\n {2}- title: "Cold open"\n {4}start_sec: 0\n/,
+		);
+		assert.match(fm, /\n {2}- title: "Last week"\n {4}start_sec: 47\n/);
+	});
+
+	test("audio keys sit above sources, inside the frontmatter block", () => {
+		const fm = episode(AUDIO).split(/^---$/m)[1];
+		assert.ok(fm.indexOf("audio_url:") < fm.indexOf("\nsources:"));
+		assert.ok(fm.indexOf("chapters:") < fm.indexOf("\nsources:"));
+	});
+
+	test("a title with a quote or colon stays a valid YAML scalar", () => {
+		const fm = episode({
+			...AUDIO,
+			chapters: [{ title: 'Week ahead: "the big one"', startSec: 3 }],
+		}).split(/^---$/m)[1];
+		assert.match(fm, /- title: "Week ahead: \\"the big one\\""/);
+	});
+
+	test("omits every audio key on a post that has none", () => {
+		const file = episode();
+		assert.doesNotMatch(file, /audio_url:/);
+		assert.doesNotMatch(file, /chapters:/);
+		assert.doesNotMatch(file, /duration_sec:/);
+	});
+
+	test("omits chapters rather than emitting a null one", () => {
+		// A bare `chapters:` is YAML null, and null is not an empty array to a
+		// schema expecting one — the site would fail to build the episode page.
+		const fm = episode({ ...AUDIO, chapters: [] }).split(/^---$/m)[1];
+		assert.match(fm, /audio_url:/);
+		assert.doesNotMatch(fm, /chapters:/);
+	});
+
+	test("classifyTopics files a podcast without throwing", () => {
+		// A podcast digests the whole week, so it earns no topic — but it must
+		// not blow up the one function every write path runs.
+		assert.doesNotMatch(episode(AUDIO), /^topics:/m);
+	});
+});

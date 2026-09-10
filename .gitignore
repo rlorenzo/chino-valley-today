@@ -18,6 +18,11 @@ site/dist/
 site/.astro/
 site/node_modules/
 
+# Episode audio is written on the host by the podcast pipeline and copied into
+# each release by the build (astro build copies site/public/*), so it never
+# needs to be tracked. It is backed up instead (see scripts/backup-b2.sh).
+site/public/audio/
+
 # Local screenshot scratch from design review tooling
 .playwright-mcp/
 

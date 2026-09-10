@@ -1,0 +1,35 @@
+---
+import { getCollection } from "astro:content";
+import PostArticle from "../../components/PostArticle.astro";
+import Base from "../../layouts/Base.astro";
+import { podcastsOnly } from "../../lib/record.ts";
+
+export async function getStaticPaths() {
+	const episodes = podcastsOnly(await getCollection("posts"));
+	return episodes.map((post) => ({ params: { slug: post.id }, props: { post } }));
+}
+
+const { post } = Astro.props;
+---
+
+<Base
+	title={`${post.data.title} — Chino Valley Today`}
+	description={`The Chino Valley Today podcast: ${post.data.title}. Every story linked to its source.`}
+	current="record"
+>
+	<PostArticle post={post} />
+	<p class="shell podcast-feedlink">
+		<a href="/podcast.xml">Subscribe to the podcast feed</a>
+	</p>
+</Base>
+
+<style>
+	.podcast-feedlink {
+		max-width: var(--measure);
+		padding-block: 0 2.4rem;
+		font-size: 0.85rem;
+	}
+	.podcast-feedlink a {
+		color: var(--crate);
+	}
+</style>

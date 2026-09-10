@@ -16,6 +16,7 @@
 		"recap": "node src/pipeline/recap.ts",
 		"brief": "node src/pipeline/daily-brief.ts",
 		"tracker": "node src/pipeline/business-tracker.ts",
+		"podcast": "node src/podcast/run.ts",
 		"admin": "node src/admin/server.ts",
 		"backup": "bash scripts/interim-backup.sh",
 		"test": "node --test \"src/**/*.test.ts\" \"scripts/**/*.test.ts\"",

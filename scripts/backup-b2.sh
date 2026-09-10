@@ -72,7 +72,12 @@ gzip -f "$SNAP"
 
 # The content/ tree is small (markdown) and carries the human-reviewed queue,
 # held drafts and published posts, so it rides along with the database.
-tar -czf "$BACKUP_DIR/cvtoday-content-$STAMP.tar.gz" -C "$ROOT" content
+# site/public/audio holds the podcast episode MP3s — gitignored (see
+# .gitignore) because they're written on the host, not tracked — so this
+# tarball is their only backup.
+tar_extra=(content)
+[ -d "$ROOT/site/public/audio" ] && tar_extra+=(site/public/audio)
+tar -czf "$BACKUP_DIR/cvtoday-content-$STAMP.tar.gz" -C "$ROOT" "${tar_extra[@]}"
 
 # Rotate: keep 14 days locally.
 find "$BACKUP_DIR" -name 'cvtoday-*.db.gz' -mtime +14 -delete

@@ -329,6 +329,8 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 | `cvt-tiera` | 05:50 | *not a scrape* — generates + publishes Tier A posts, rebuilds the site |
 | `cvt-scrape-media` | 07:30 | Swagit video, YouTube captions |
 | `cvt-brief` | 06:00 | daily brief assembly + site rebuild (no scraping) |
+| `cvt-podcast` | Mon 06:30, 09:30, 12:30 | weekly podcast episode (idempotent, see the timer) |
+| `cvt-podcast-watch` | Mon 14:00 | flips `/health` if that week's episode is missing |
 | `cvt-brief-watch` | 08:00 | flips `/health` to `pipeline=stale` if today's brief is missing |
 | `cvt-drift-watch` | hourly at :47 | flips `/health` if the checkout is not running `origin/main` |
 | `cvt-backup` | 02:20 | rclone → B2 |
@@ -349,13 +351,43 @@ run missed during a reboot fires once afterwards instead of being skipped.
 systemctl enable --now cvt-scrape-frequent.timer cvt-scrape-daily.timer \
                        cvt-tiera.timer cvt-scrape-media.timer cvt-brief.timer \
                        cvt-drift-watch.timer \
-                       cvt-brief-watch.timer cvt-backup.timer
+                       cvt-brief-watch.timer cvt-backup.timer cvt-podcast.timer \
+                       cvt-podcast-watch.timer
 systemctl enable --now cvt-admin.service
 
 systemctl list-timers 'cvt-*'
 journalctl -u cvt-scrape-daily -n 50
 systemctl start cvt-scrape-daily.service   # run one now, without waiting
 ```
+
+## Podcast
+
+The weekly episode (`src/podcast/run.ts`, `scripts/run-podcast.sh`) needs
+`ffmpeg` on the host to assemble the TTS chunks into one MP3:
+
+```bash
+apt install ffmpeg
+```
+
+Add the two Gemini keys to `.env` (see `.env.example` for what each is for):
+`GEMINI_API_KEY` and `GEMINI_API_KEY_BACKUP`.
+
+The audio directory is gitignored and written by the pipeline, not deployed by
+the checkout, so it has to be created once:
+
+```bash
+install -d -o cvtoday -g cvtoday /srv/chino-valley-today/site/public/audio
+```
+
+Then enable both timers as part of the block above:
+`systemctl enable --now cvt-podcast.timer cvt-podcast-watch.timer`. The second
+is the Monday-14:00 watchdog that flips `/health` if that week's episode is
+missing — same idea as `cvt-brief-watch`, one week later in cadence.
+
+No Caddy change is needed — the MP3 and its `.chapters.json` sidecar live
+under `site/public/audio`, so every `astro build` copies them into the new
+release and Caddy already serves everything under the release root at
+`/audio/...`.
 
 ## Admin dashboard
 
