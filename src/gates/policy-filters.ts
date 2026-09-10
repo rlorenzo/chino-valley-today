@@ -45,6 +45,15 @@ const AGE_RE = /\b(\d{1,2})[-\s]years?[-\s]old\b/gi;
 // carries real signal ("the boy was found safe").
 const PLACE_NAME_RE =
 	/\bboys\s+republic\b|\bboys\s*(?:&|and)\s*girls\s+club\b/gi;
+// A team category is not an identified minor either. "Varsity girls flag
+// football defeats Mission College Prep" is the team-level score EDITORIAL.md's
+// sports rule allows; leaving "girls" in scope there made every girls' and
+// boys' team result unpublishable. Scrubbed only when the word is followed by
+// a sport or "team", so "the girl was found safe" still binds.
+// A noun for one person after the sport ("girls volleyball player found")
+// is an individual minor, not a team, and keeps the word in scope.
+const TEAM_CATEGORY_RE =
+	/\b(?:varsity\s+|jv\s+)?(?:girls|boys)['’]?\s+(?:varsity\s+|jv\s+)?(?:flag\s+football|football|soccer|basketball|volleyball|water\s+polo|tennis|golf|cross\s+country|track(?:\s+and\s+field)?|wrestling|softball|baseball|swim(?:ming)?|lacrosse|team)\b(?!\s+(?:player|athlete|student|captain|standout|star|goalie|quarterback|runner|pitcher|coach)s?\b)/gi;
 
 const CRIME_RE =
 	/\b(?:arrest(?:ed|s|ing)?|suspect(?:s)?|homicide|murder|shooting|shot|stabbed|stabbing|robbery|burglary|assault|dui|manslaughter|felony|indict(?:ed|ment)?|theft|stolen|vandal(?:ism)?|crash|collision|hit-and-run|fatal(?:ity|ities)?)\b/i;
@@ -132,6 +141,24 @@ const CIVIC_ENTITY_SCRUB_RE = new RegExp(
 );
 
 // Dictionary stop words that should not be treated as person names when appearing in titles/teasers
+// Words no person is named with. One of these inside a capitalized run makes
+// it a phrase — a weekday or an organisation, venue, team or sport noun —
+// however many other tokens surround it. Months a person can be named for
+// (April, May, June, August, March) are deliberately absent: "Jane May Doe"
+// is a name.
+const NEVER_IN_NAME = new Set(
+	"monday tuesday wednesday thursday friday saturday sunday january february july september october november december club college university association federation foundation league academy prep stadium arena team varsity football soccer basketball volleyball baseball softball girls boys".split(
+		" ",
+	),
+);
+// A function word cannot open a name, only the sentence a name sits in:
+// "On Friday, September 4, Ayala hosted" reads as "On Friday" to NAME_PATTERN.
+const FUNCTION_WORDS = new Set(
+	"the a an in on at for to with from by about into over after and but or nor as if when while".split(
+		" ",
+	),
+);
+
 const COMMON_WORDS = new Set([
 	"the",
 	"a",
@@ -310,7 +337,9 @@ export function isPublicFigure(name: string): boolean {
 export function mentionsMinor(text: string): boolean {
 	// Replaced with a space, not "": removing the place name outright can weld
 	// its neighbours into a word the guard then misreads.
-	const scrubbed = text.replace(PLACE_NAME_RE, " ");
+	const scrubbed = text
+		.replace(PLACE_NAME_RE, " ")
+		.replace(TEAM_CATEGORY_RE, " ");
 	if (EXPLICIT_MINOR_RE.test(scrubbed)) return true;
 	for (const m of scrubbed.matchAll(AGE_RE)) {
 		const age = Number.parseInt(m[1], 10);
@@ -418,11 +447,33 @@ export function hasUnvettedPrivatePerson(text: string): boolean {
 		const candidate = match[0].trim();
 		const tokens = candidate.split(/\s+/);
 
+		const lower = tokens.map((t) => t.toLowerCase().replace(/['’]s$/, ""));
+
+		// Drop the function words a sentence opens with; a run that is only
+		// "On Friday" has no name left in it.
+		let from = 0;
+		while (from < lower.length && FUNCTION_WORDS.has(lower[from])) from++;
+		if (lower.length - from < 2) continue;
+
 		// Skip if every word in the candidate is a common dictionary stop word
-		const isAllCommon = tokens.every((t) =>
-			COMMON_WORDS.has(t.toLowerCase().replace(/[^a-z]/g, "")),
-		);
-		if (isAllCommon) continue;
+		if (lower.every((w) => COMMON_WORDS.has(w))) continue;
+
+		// "Club Rush", "Mission College Prep Royals", "American Water Works
+		// Association", "Varsity Girls": a word no one is named with makes the
+		// run a phrase. Dictionary words that ARE surnames (Field, Park, May)
+		// are not on that list, so "Mark Field" still fails closed.
+		if (lower.some((w) => NEVER_IN_NAME.has(w))) continue;
+
+		// An acronym beside a title-case word is an organisation or a team
+		// ("AWWA Starting", "UCLA Bruins"), not a person. Three letters or
+		// more: "AJ Smith" and "LI Wei" are names.
+		// A shouted headline ("JANE DOE NAMED IN COUNCIL FILING") has no
+		// title-case word, so it is scanned as a whole.
+		if (
+			tokens.some((t) => /^\p{Lu}{3,}$/u.test(t)) &&
+			tokens.some((t) => /^\p{Lu}\p{Ll}/u.test(t))
+		)
+			continue;
 
 		// If it's a known civic entity, landmark, school, or development -> allowed
 		if (isCivicEntity(candidate)) continue;

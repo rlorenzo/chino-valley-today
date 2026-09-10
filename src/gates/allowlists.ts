@@ -28,6 +28,8 @@ export const CIVIC_ENTITIES_ALLOWLIST: readonly string[] = [
 	"Chino Hills",
 	"Chino Valley",
 	"San Bernardino",
+	"Los Angeles",
+	"San Luis Obispo",
 	"San Bernardino County",
 	"Inland Empire",
 	"Southern California",

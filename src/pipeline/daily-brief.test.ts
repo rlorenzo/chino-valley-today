@@ -1968,12 +1968,23 @@ describe("headlines elsewhere deduplication and selection", () => {
 			"Chino Airport runway resurfacing begins in September",
 			"Chino Hills library extends Peyton Drive branch hours",
 		];
+		// The Daily Bulletin rows need their own stories: a title that only
+		// appends a word to a Champion title is the same story to the dedup
+		// step, and a fixture that leans on dedup is not testing the caps.
+		const bulletinTitles = [
+			"Chino council weighs Pipeline Avenue warehouse appeal",
+			"Chino Hills trims Grand Avenue median watering",
+			"Chino Valley Unified adds bus route to Boys Republic",
+			"Chino Hills State Park reopens its canyon trailhead",
+			"Chino fair board picks September carnival dates",
+			"Chino Hills seeks bids for Los Serranos sidewalk gaps",
+		];
 		const rows = titles.flatMap((title, i) => [
 			headline({ title, occurred_at: `2026-08-1${i % 6}T00:00:00.000Z` }),
 			headline({
 				source_key: "dailybulletin-news",
 				source_url: `https://www.dailybulletin.com/2026/08/16/story-${i}/`,
-				title: `${title} downtown`,
+				title: bulletinTitles[i],
 				occurred_at: "2026-08-16T00:00:00.000Z",
 			}),
 		]);
