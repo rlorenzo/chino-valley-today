@@ -31,12 +31,15 @@
 		"check": "npm run typecheck && npm run lint && npm run lint:md && npm run lint:sh && npx fallow dead-code && npm test && npm run test:integration",
 		"prepare": "git config core.hooksPath .githooks"
 	},
+	"overrides": {
+		"smol-toml": "1.8.0"
+	},
 	"dependencies": {
 		"cheerio": "^1.2.0",
 		"fast-xml-parser": "^5.10.1",
 		"hono": "^4.13.5",
 		"imapflow": "^1.6.5",
-		"mailparser": "^3.9.16",
+		"mailparser": "^3.9.20",
 		"pdf-parse": "^2.4.5",
 		"rtf-stream-parser": "4.0.0",
 		"undici": "^8.10.0"
