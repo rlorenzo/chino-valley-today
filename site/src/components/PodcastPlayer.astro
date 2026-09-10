@@ -1,0 +1,206 @@
+---
+/**
+ * THE EPISODE PLAYER, and the only client JS the site ships.
+ *
+ * Split out of PostArticle for exactly that reason. Astro hoists a component's
+ * <script> into every page that renders the component, so while this lived in
+ * PostArticle the chapter handlers were inlined into all 43 pages to serve the
+ * one with an <audio> element — crossing the policy in astro.config.mjs, that
+ * zero client JS is a product decision for a civic record read on phones over
+ * patchy connections. A post with no audio does not render this component, so
+ * it now costs those pages nothing.
+ */
+import { formatDuration } from "../lib/record.ts";
+
+interface Props {
+	audioUrl: string;
+	chapters: { title: string; start_sec: number }[];
+}
+
+const { audioUrl, chapters } = Astro.props;
+---
+
+<div class="shell podcast-player">
+	<audio controls preload="none" src={audioUrl} style="width:100%"></audio>
+	{
+		chapters.length > 0 && (
+			<ol class="podcast-chapters mark">
+				{chapters.map((c) => (
+					// No id matching the fragment, deliberately. It would make the
+					// browser scroll the clicked row to the top of the viewport,
+					// pushing the player the reader just used off the screen — and
+					// what it buys with JS off is a jump to the row already under the
+					// cursor. A fragment that resolves to nothing scrolls nothing.
+					<li>
+						<a class="podcast-chapters__jump" href={`#t=${c.start_sec}`}>
+							<span class="podcast-chapters__time">
+								{formatDuration(c.start_sec)}
+							</span>
+							<span class="podcast-chapters__title">{c.title}</span>
+						</a>
+					</li>
+				))}
+			</ol>
+		)
+	}
+</div>
+
+<script>
+	// Chapters are #t=<seconds> links, so a chapter is shareable on its own and
+	// the row keeps link semantics (keyboard, copy link address) for free. The
+	// handlers below turn that hash into a seek instead of a jump to nowhere.
+	//
+	// One player per page — a post has at most one episode — so this reads the
+	// document directly rather than looping over players.
+	const audio = document.querySelector("audio");
+	const links = [
+		...document.querySelectorAll<HTMLAnchorElement>(".podcast-chapters__jump"),
+	];
+
+	// The seconds live in the href and nowhere else. A link's .hash is the same
+	// string shape as location.hash, so one parser reads both and the URL format
+	// has a single definition.
+	const secondsIn = (hash: string) => {
+		const m = hash.match(/^#t=(\d+)$/);
+		return m ? Number(m[1]) : null;
+	};
+
+	if (audio && links.length > 0) {
+		// The player is preload="none", so a seek may land before the audio has
+		// any metadata to seek against; wait for it, otherwise go straight away.
+		//
+		// `pending` is what keeps a second click from calling load() again: that
+		// aborts the in-flight media fetch and starts it over, which is the cost
+		// a patchy phone connection can least afford. The queued handler reads
+		// the latest target instead.
+		let pending: { at: number; play: boolean } | null = null;
+		const seek = (at: number, play: boolean) => {
+			if (audio.readyState > 0) {
+				audio.currentTime = at;
+				// Autoplay policy, or a seek landing on top of the request,
+				// rejects this promise. Nothing here can act on that, and an
+				// unhandled rejection is just console noise on a page whose
+				// audio simply did not start.
+				if (play) audio.play().catch(() => {});
+				return;
+			}
+			const alreadyLoading = pending !== null;
+			pending = { at, play };
+			if (alreadyLoading) return;
+			// A failed load fires error, never loadedmetadata. Without this the
+			// queued seek is never cleared, `alreadyLoading` stays true forever
+			// and every later chapter click returns early — one dropped fetch
+			// on a patchy connection would kill the chapter list for good.
+			audio.addEventListener(
+				"error",
+				() => {
+					pending = null;
+				},
+				{ once: true },
+			);
+			audio.addEventListener(
+				"loadedmetadata",
+				() => {
+					const want = pending;
+					pending = null;
+					if (!want) return;
+					audio.currentTime = want.at;
+					if (want.play) audio.play().catch(() => {});
+				},
+				{ once: true },
+			);
+			audio.load();
+		};
+
+		// Arriving on a shared chapter link: cue it up, but never autoplay. The
+		// browser would block it, and a page that starts talking on load is rude.
+		const landed = secondsIn(location.hash);
+		if (landed !== null) seek(landed, false);
+
+		// Back/forward, and a click on the chapter already in the URL (which
+		// fires no hashchange) — the click handler is what covers the second.
+		addEventListener("hashchange", () => {
+			const at = secondsIn(location.hash);
+			if (at !== null) seek(at, true);
+		});
+		for (const link of links) {
+			link.addEventListener("click", (e) => {
+				// Cmd/Ctrl-click opens the chapter in a background tab. Seeking
+				// here would start the episode talking in the tab the reader is
+				// still looking at.
+				if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)
+					return;
+				// Any other chapter is already covered by the hashchange this
+				// click is about to fire; the one it does not fire is the
+				// chapter already in the URL, which is the whole job here.
+				if (link.hash !== location.hash) return;
+				const at = secondsIn(link.hash);
+				if (at !== null) seek(at, true);
+			});
+		}
+
+		// Which chapter is playing. aria-current rather than a class, so the row
+		// a sighted reader sees highlighted is the row a screen reader announces
+		// as current; the CSS hangs off the same attribute.
+		//
+		// timeupdate fires ~4x a second for the whole episode. Writing the same
+		// attribute every tick dirties the accessibility tree continuously, and
+		// some screen readers treat an aria-current change as announce-worthy —
+		// so nothing is touched unless the current chapter actually changed.
+		const starts = links.map((l) => secondsIn(l.hash) ?? 0);
+		let currentIndex = -1;
+		audio.addEventListener("timeupdate", () => {
+			let next = -1;
+			for (let i = 0; i < starts.length; i++) {
+				if (starts[i] <= audio.currentTime) next = i;
+			}
+			if (next === currentIndex) return;
+			if (currentIndex >= 0) links[currentIndex].removeAttribute("aria-current");
+			if (next >= 0) links[next].setAttribute("aria-current", "location");
+			currentIndex = next;
+		});
+	}
+</script>
+
+<style>
+	.podcast-player {
+		max-width: var(--measure);
+		padding-top: 1.6rem;
+	}
+	.podcast-chapters {
+		list-style: none;
+		margin: 1rem 0 0;
+		padding: 0;
+		border-top: 1px solid var(--galv-edge);
+	}
+	.podcast-chapters li {
+		border-bottom: 1px solid var(--galv-edge);
+		font-size: 0.88rem;
+	}
+	.podcast-chapters__jump {
+		display: flex;
+		gap: 0.4rem;
+		/* The row is the target, not just the words in it. */
+		padding: 0.5rem;
+		text-decoration: none;
+		/* Sits opposite the is-playing bar so the text does not shift when the
+		   chapter becomes current. */
+		border-left: 3px solid transparent;
+	}
+	.podcast-chapters__jump:hover .podcast-chapters__title {
+		text-decoration: underline;
+	}
+	.podcast-chapters__jump[aria-current] {
+		border-left-color: var(--crate);
+		background: var(--galv-sunk);
+		font-weight: 600;
+	}
+	.podcast-chapters__jump[aria-current] .podcast-chapters__time {
+		color: var(--crate);
+	}
+	.podcast-chapters__time {
+		flex: none;
+		min-width: 3.6rem;
+		color: var(--muted);
+	}
+</style>
