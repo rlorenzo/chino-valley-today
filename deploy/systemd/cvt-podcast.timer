@@ -1,0 +1,19 @@
+[Unit]
+Description=Weekly podcast episode for Chino Valley Today
+
+[Timer]
+# Three firings, not one: src/podcast/run.ts is idempotent, so a firing after
+# the week's episode has already published exits at once and does nothing. A
+# firing while it has not is a fresh attempt that only re-requests the audio
+# chunks that failed last time — the free Gemini TTS tier's capacity is
+# sheddable, so a chunk can be rejected on one attempt and succeed a few hours
+# later with no code path treating that as an error.
+OnCalendar=Mon *-*-* 06:30:00 America/Los_Angeles
+OnCalendar=Mon *-*-* 09:30:00 America/Los_Angeles
+OnCalendar=Mon *-*-* 12:30:00 America/Los_Angeles
+# A missed run (reboot, droplet resize) executes once on the next boot instead
+# of being silently skipped.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

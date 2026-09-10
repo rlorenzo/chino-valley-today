@@ -33,6 +33,7 @@ const posts = defineCollection({
 				"news_digest",
 				"alert",
 				"daily-brief",
+				"podcast",
 			]),
 
 			// EDITORIAL.md's routing tiers. Tier C reaching a build at all means a human
@@ -90,11 +91,41 @@ const posts = defineCollection({
 			topics: z
 				.array(z.enum(["planning", "cvusd", "business", "safety", "sports"]))
 				.optional(),
+
+			// podcast only: the pipeline writes these once the audio is rendered.
+			// The MP3 itself lands in site/public/audio/ on the host (see
+			// deploy/README.md), so the site only ever handles the URL and the
+			// numbers describing it.
+			audio_url: z.string().url().optional(),
+			audio_bytes: z.number().int().optional(),
+			duration_sec: z.number().int().optional(),
+			chapters: z
+				.array(
+					z.object({
+						title: z.string(),
+						start_sec: z.number().int(),
+					}),
+				)
+				.optional(),
 		})
 		.refine(
 			(d) => d.post_type !== "daily-brief" || d.brief_date !== undefined,
 			{
 				message: "a daily-brief post must carry brief_date",
+			},
+		)
+		// The audio IS the episode. A podcast post approved by hand while its
+		// render was still failing would otherwise build as a page with no
+		// player and a feed item with no enclosure.
+		.refine(
+			(d) =>
+				d.post_type !== "podcast" ||
+				(d.audio_url !== undefined &&
+					d.audio_bytes !== undefined &&
+					d.duration_sec !== undefined),
+			{
+				message:
+					"a podcast post must carry audio_url, audio_bytes and duration_sec",
 			},
 		),
 });

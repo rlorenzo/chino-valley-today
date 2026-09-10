@@ -1,5 +1,11 @@
 import { getCollection } from "astro:content";
-import { briefsOnly, expectedBriefDate, publishedOnly } from "../lib/record.ts";
+import {
+	briefsOnly,
+	expectedBriefDate,
+	expectedPodcastSlug,
+	podcastsOnly,
+	publishedOnly,
+} from "../lib/record.ts";
 
 // Plain-text health endpoint at /health, for an external uptime monitor.
 //
@@ -9,6 +15,15 @@ import { briefsOnly, expectedBriefDate, publishedOnly } from "../lib/record.ts";
 // served by the web server from disk. A keyword monitor hitting it proves the
 // droplet is up, the web server is running, TLS is valid and the release
 // symlink resolves. That is worth monitoring and it is what `ok` means.
+//
+// `podcast=` is a SEPARATE freshness token from `pipeline=`, deliberately: the
+// show publishes weekly, on a schedule the daily brief knows nothing about, so
+// a missing episode must never read as a missing brief (or vice versa). Ok and
+// pipeline= never depend on it. cvt-podcast-watch.timer (Monday 14:00
+// Pacific — 90 minutes after the last of the three weekly firings) rewrites
+// the LIVE file to `podcast=stale` when that week's episode is missing, and
+// flips `pipeline=stale` too, so the one existing keyword monitor still fires
+// on it (src/podcast/health.ts).
 //
 // The `pipeline=` line is the freshness half, for a keyword monitor on a
 // free plan (no heartbeat monitors): it reads `fresh` only when the latest
@@ -38,6 +53,10 @@ export async function GET() {
 	const latestBrief = briefsOnly(posts)[0]?.data.brief_date ?? null;
 	const fresh = latestBrief !== null && latestBrief >= expectedBriefDate();
 
+	const latestPodcast = podcastsOnly(posts)[0]?.id ?? null;
+	const podcastFresh =
+		latestPodcast !== null && latestPodcast >= expectedPodcastSlug();
+
 	const body = [
 		// First line is the keyword an uptime monitor matches on, alone on the
 		// line so a substring match cannot pass accidentally on other content.
@@ -46,7 +65,13 @@ export async function GET() {
 		`posts=${posts.length}`,
 		`latest_post=${latest ? latest.toISOString().slice(0, 10) : "none"}`,
 		`latest_brief=${latestBrief ?? "none"}`,
-		`pipeline=${fresh ? "fresh" : "stale"}`,
+		// The monitor watches this one token. An overdue episode stales it too,
+		// or the next morning's brief rebuild would re-stamp it fresh and clear
+		// the alarm the Monday watchdog raised while the episode is still
+		// missing. Which half is wrong is on the lines around it.
+		`pipeline=${fresh && podcastFresh ? "fresh" : "stale"}`,
+		`latest_podcast=${latestPodcast ?? "none"}`,
+		`podcast=${podcastFresh ? "fresh" : "stale"}`,
 	].join("\n");
 
 	return new Response(`${body}\n`, {

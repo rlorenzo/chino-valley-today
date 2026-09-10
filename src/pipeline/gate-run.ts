@@ -11,6 +11,7 @@
 // safety mechanism, and a fix applied to one copy but not the other would mean
 // two different definitions of "safe to publish".
 import type { Db } from "../db/index.ts";
+import type { GateFailure, GateReport } from "../gates/validators.ts";
 import { validateDraft } from "../gates/validators.ts";
 import { chat } from "../llm/client.ts";
 import type { MeetingBundle } from "./bundle.ts";
@@ -55,6 +56,44 @@ export interface GatedRunOptions {
 	// guidance here because its corpus is record-derived and fuses capitalized
 	// words more often.
 	repairGuidance?: string;
+	// Format checks Gate 1 cannot know about, folded into its report so a
+	// failure takes the same repair-then-hold path as a validator failure. The
+	// podcast's transcript contract (host turns, headings, length) rides here.
+	extraChecks?: (draftMd: string) => GateFailure[];
+	// Last step before a clean-pass publish: extra frontmatter fields to write
+	// onto the post, produced from the final draft. The podcast renders its
+	// audio here, which is why a throw holds the post rather than publishing a
+	// transcript with no episode behind it.
+	beforePublish?: (draftMd: string) => Promise<Partial<NewPost>>;
+}
+
+// Extra checks join the Gate 1 report rather than sitting beside it, so one
+// report is what the repair pass reads, what a hold records, and what the
+// dashboard renders.
+export function mergeExtraFailures(
+	report: GateReport,
+	extra: GateFailure[],
+): GateReport {
+	if (extra.length === 0) return report;
+	return { ...report, pass: false, failures: [...report.failures, ...extra] };
+}
+
+// The post as it is filed, both times it is filed: once from the draft, and
+// again with beforePublish's extra fields. Extracted so the two calls cannot
+// drift into writing different posts.
+export function gatedPostInput(o: GatedRunOptions, draftMd: string): NewPost {
+	return {
+		slug: o.slug,
+		postType: o.postType,
+		tier: o.tier,
+		title: o.title,
+		bodyMd: draftMd,
+		...(o.meetingDate ? { meetingDate: o.meetingDate } : {}),
+		sources: o.bundle.allowedUrls,
+		// The bundle knows which source it was built from; topic filing reads
+		// that rather than guessing from the recap's title.
+		sourceKeys: [o.bundle.sourceKey],
+	};
 }
 
 // Terminates the process on the hold/skip paths, exactly as the two inlined
@@ -79,11 +118,14 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 
 	// Gate 1 — deterministic validators (fail = hold, no LLM judge needed).
 	const runGate1 = () =>
-		validateDraft({
-			bodyMd: draftMd,
-			allowedUrls: bundle.allowedUrls,
-			inputCorpus: bundle.inputCorpus,
-		});
+		mergeExtraFailures(
+			validateDraft({
+				bodyMd: draftMd,
+				allowedUrls: bundle.allowedUrls,
+				inputCorpus: bundle.inputCorpus,
+			}),
+			o.extraChecks?.(draftMd) ?? [],
+		);
 	let gateReport = runGate1();
 	console.log(
 		`Gate 1: ${gateReport.pass ? "PASS" : `FAIL (${gateReport.failures.length} failures)`}`,
@@ -141,18 +183,7 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 		}
 	}
 
-	const post = createPost(db, {
-		slug: o.slug,
-		postType: o.postType,
-		tier: o.tier,
-		title: o.title,
-		bodyMd: draftMd,
-		...(o.meetingDate ? { meetingDate: o.meetingDate } : {}),
-		sources: bundle.allowedUrls,
-		// The bundle knows which source it was built from; topic filing reads
-		// that rather than guessing from the recap's title.
-		sourceKeys: [bundle.sourceKey],
-	});
+	const post = createPost(db, gatedPostInput(o, draftMd));
 	console.log(`Post ${o.slug}: ${post.outcome}`);
 	if (post.outcome === "skipped") {
 		console.log(
@@ -212,6 +243,27 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 		});
 		console.log("HELD at Gate 2.");
 	} else {
+		if (o.beforePublish) {
+			let extra: Partial<NewPost>;
+			try {
+				extra = await o.beforePublish(draftMd);
+			} catch (err) {
+				// The draft passed both gates; only the render failed. Held rather
+				// than published, because the audio IS the podcast — a transcript
+				// with no episode behind it is a broken post, not a partial one.
+				const message = err instanceof Error ? err.message : String(err);
+				transitionPost(db, o.slug, "held", {
+					heldReason: `audio: ${message}`,
+					gates: gateReport,
+					judge: verdict,
+				});
+				console.log(`HELD after Gate 2: ${message}`);
+				process.exit(0);
+			}
+			// Rewrites the queued file with the extra frontmatter before the
+			// transition moves it into content/published/.
+			createPost(db, { ...gatedPostInput(o, draftMd), ...extra });
+		}
 		transitionPost(db, o.slug, "published", {
 			gates: gateReport,
 			judge: verdict,

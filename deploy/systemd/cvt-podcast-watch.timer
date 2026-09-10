@@ -1,0 +1,15 @@
+[Unit]
+Description=Weekly-podcast watchdog for Chino Valley Today
+
+[Timer]
+# 14:00 Pacific Monday: 90 minutes after the last of cvt-podcast's three
+# weekly firings (06:30, 09:30, 12:30), enough for a slow run or a retried
+# TTS chunk to have finished.
+OnCalendar=Mon *-*-* 14:00:00 America/Los_Angeles
+# If the host was down at 14:00, check once on boot rather than skipping the
+# week — a skipped watchdog is a silent week, the exact failure it exists to
+# catch.
+Persistent=true
+
+[Install]
+WantedBy=timers.target

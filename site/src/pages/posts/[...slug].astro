@@ -2,12 +2,14 @@
 import { getCollection } from "astro:content";
 import PostArticle from "../../components/PostArticle.astro";
 import Base from "../../layouts/Base.astro";
-import { isBrief, typeLabel } from "../../lib/record.ts";
+import { isBrief, isPodcast, typeLabel } from "../../lib/record.ts";
 
 export async function getStaticPaths() {
-	// Daily briefs live at their canonical /brief/YYYY-MM-DD URL only —
-	// building them here too would publish every brief at two addresses.
-	const posts = (await getCollection("posts")).filter((p) => !isBrief(p));
+	// Daily briefs and podcast episodes each have their own canonical URL —
+	// building them here too would publish every one at two addresses.
+	const posts = (await getCollection("posts")).filter(
+		(p) => !isBrief(p) && !isPodcast(p),
+	);
 	return posts.map((post) => ({ params: { slug: post.id }, props: { post } }));
 }
 

@@ -249,7 +249,20 @@ Team-level scores/schedules/standings for the four CVUSD high schools.
 
 ## Phase 3 (outline): Podcast + newsletter + growth
 
-- TTS from published recap posts; RSS podcast feed (static XML + mp3s).
+- **Podcast: built 2026-09-09/10 (`src/podcast/`).** "Chino Valley Today, the
+  Week in Review": a two-host script generated Mondays from last week's
+  published posts plus the brief's week-ahead rail, gated by Gate 1 and Gate 2
+  unchanged (every spoken turn cites its source post), rendered with Gemini
+  3.1 Flash TTS multi-speaker (Maya `Kore`, Dan `Charon`; free tier, two keys
+  from two Google projects, chunk cache so the three Monday timer firings only
+  re-request what a 503 streak left missing), published as a `podcast` post
+  with the MP3 shipped inside the site release (`site/public/audio/`, no Caddy
+  change). Feed at `/podcast.xml` with iTunes and Podcasting 2.0 tags
+  (enclosure, chapters JSON, transcript = episode page). Watchdog
+  `cvt-podcast-watch` flips `/health` stale Mondays at 14:00 if the episode is
+  missing. Fixed intro/outro carry the AI disclosure. Kokoro-82M via
+  `kokoro-js` was tested as an offline fallback and works on a laptop, but
+  needs ~900 MB RSS, too much for the shared droplet.
 - Email: Buttondown or Listmonk-on-droplet fed by the same content. Note that
   Cloudflare Email Routing forwards only — it cannot send, so the newsletter
   needs a sending provider regardless.
@@ -265,4 +278,4 @@ Team-level scores/schedules/standings for the four CVUSD high schools.
   if prompt caching never engages (~2-3¢/recap). DO prompt caching was closed
   as not-caller-fixable in 2026-08 — the feature is opportunistic Public
   Preview and never engaged for us despite verified-deterministic prompts.
-- TTS (Phase 3): DO Gradient, ~$0.60 per recap narration at ElevenLabs rates.
+- TTS (Phase 3): Gemini 3.1 Flash TTS free tier, $0 at one episode a week; ~$0.25 per episode if billing is ever enabled. The DO Gradient audio models (Qwen3-TTS, ElevenLabs v2) are single-voice only and were not used.

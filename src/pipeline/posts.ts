@@ -34,7 +34,8 @@ export interface NewPost {
 		| "business_tracker"
 		| "alert"
 		| "news_digest"
-		| "daily-brief";
+		| "daily-brief"
+		| "podcast";
 	tier: Tier;
 	title: string;
 	bodyMd: string; // markdown body; the disclosure footer is appended automatically
@@ -43,6 +44,15 @@ export interface NewPost {
 	// daily-brief only: structured week-ahead calendar events, rendered by the
 	// site (the index's "coming up" rail) rather than by the markdown body.
 	eventsAhead?: BriefEventAhead[];
+	// podcast only: the rendered episode. The audio is the post — the markdown
+	// body is its transcript — so the file carries enough for the site to build
+	// a player and a feed entry without re-reading the audio.
+	audio?: {
+		url: string;
+		bytes: number;
+		durationSec: number;
+		chapters: { title: string; startSec: number }[];
+	};
 	sources: string[]; // source_urls backing every claim in the post
 	attributions?: string[]; // secondary press article URLs (never primary provenance)
 	// Classification signals. The pipeline owns these — they are the source
@@ -191,6 +201,24 @@ export function renderPostFile(p: NewPost, createdAt: string): string {
 		`date: ${y(createdAt)}`,
 		...(p.meetingDate ? [`meeting_date: ${y(p.meetingDate)}`] : []),
 		...(p.briefDate ? [`brief_date: ${y(p.briefDate)}`] : []),
+		...(p.audio
+			? [
+					`audio_url: ${y(p.audio.url)}`,
+					`audio_bytes: ${p.audio.bytes}`,
+					`duration_sec: ${p.audio.durationSec}`,
+					// Omitted entirely when there are none: a bare `chapters:` is YAML
+					// null, and null is not an empty array to a schema that expects one.
+					...(p.audio.chapters.length
+						? [
+								"chapters:",
+								...p.audio.chapters.flatMap((c) => [
+									`  - title: ${y(c.title)}`,
+									`    start_sec: ${c.startSec}`,
+								]),
+							]
+						: []),
+				]
+			: []),
 		...(p.eventsAhead?.length
 			? [
 					"events_ahead:",

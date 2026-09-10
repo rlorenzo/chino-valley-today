@@ -1,0 +1,38 @@
+[Unit]
+Description=Chino Valley Today — weekly podcast episode (assemble + site rebuild)
+Documentation=https://github.com/rlorenzo/chino-valley-today
+After=network-online.target cvt-scrape-frequent.service cvt-scrape-daily.service
+Wants=network-online.target cvt-scrape-frequent.service cvt-scrape-daily.service
+
+[Service]
+Type=oneshot
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+EnvironmentFile=/srv/chino-valley-today/.env
+ExecStart=/usr/bin/env bash scripts/run-podcast.sh
+
+# Same shared-droplet discipline as cvt-brief, which also rebuilds the site.
+MemoryHigh=450M
+MemoryMax=768M
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+# site/public/audio is already inside site/, listed for clarity; data/ is
+# where the pipeline tracks which chunks of an episode have already rendered.
+ReadWritePaths=/srv/chino-valley-today/data /srv/chino-valley-today/content /srv/chino-valley-today/reports /srv/chino-valley-today/site /srv/chino-valley-today/site/public/audio /var/www/chinovalley.today
+
+# The Gemini free tier's TTS capacity is sheddable, so a run can spend a while
+# retrying rejected chunks before giving up for this firing.
+TimeoutStartSec=30min
+
+[Install]
+WantedBy=multi-user.target

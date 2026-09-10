@@ -73,7 +73,10 @@ const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
 
 // Calendar sources whose 'event' items feed the Today section. cvusd-board's
 // event items are board meetings and are handled by the meetings selector.
-const CALENDAR_SOURCES = [
+// Exported for the weekly podcast, which reads the same week-ahead rail the
+// brief does (selectUpcomingEvents + railEntries) and must select the same
+// calendars to get the same events.
+export const CALENDAR_SOURCES = [
 	"sbclib-events",
 	"sbparks-events",
 	"cbwcd-events",

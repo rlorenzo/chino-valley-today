@@ -74,6 +74,7 @@ const TYPE_LABEL: Record<string, string> = {
 	news_digest: "Digest",
 	alert: "Alert",
 	"daily-brief": "Daily brief",
+	podcast: "Podcast",
 };
 
 export function typeLabel(type: string): string {
@@ -84,14 +85,23 @@ export function isBrief(post: Post): boolean {
 	return post.data.post_type === "daily-brief";
 }
 
+export function isPodcast(post: Post): boolean {
+	return post.data.post_type === "podcast";
+}
+
 /**
- * A daily brief's canonical home is its date (/brief/YYYY-MM-DD); everything
- * else lives under /posts/. One helper so no page hardcodes the split.
+ * A daily brief's canonical home is its date (/brief/YYYY-MM-DD), a podcast
+ * episode's is /podcast/<slug>; everything else lives under /posts/. One
+ * helper so no page hardcodes the split.
  */
 export function postUrl(post: Post): string {
-	return isBrief(post) && post.data.brief_date
-		? `/brief/${post.data.brief_date}/`
-		: `/posts/${post.id}/`;
+	if (isBrief(post) && post.data.brief_date) {
+		return `/brief/${post.data.brief_date}/`;
+	}
+	if (isPodcast(post)) {
+		return `/podcast/${post.id}/`;
+	}
+	return `/posts/${post.id}/`;
 }
 
 /** Daily briefs, newest brief day first. */
@@ -103,9 +113,15 @@ export function briefsOnly(posts: Post[]): Post[] {
 		);
 }
 
+/** Podcast episodes, newest first. */
+export function podcastsOnly(posts: Post[]): Post[] {
+	return posts.filter(isPodcast).sort(byNewest);
+}
+
 /**
  * The citable spine: everything except the daily briefs, which are a morning
- * assembly OF the record rather than entries IN it.
+ * assembly OF the record rather than entries IN it. Podcast episodes stay in
+ * — each is its own entry, just one that also carries audio.
  */
 export function recordOnly(posts: Post[]): Post[] {
 	return posts.filter((p) => !isBrief(p));
@@ -146,6 +162,49 @@ export function expectedBriefDate(now: Date = new Date()): string {
 	return hour >= 7 ? today : laDatePlus(today, -1);
 }
 
+/** ISO 8601 week `YYYY-wNN` for a YYYY-MM-DD date's week (the week's Thursday
+ * decides both the year and the week number, per the ISO 8601 rule). */
+function isoWeek(date: string): string {
+	const d = new Date(`${date}T00:00:00Z`);
+	const dow = d.getUTCDay() || 7; // Mon=1..Sun=7
+	d.setUTCDate(d.getUTCDate() + 4 - dow); // that week's Thursday
+	const isoYear = d.getUTCFullYear();
+	const yearStart = new Date(Date.UTC(isoYear, 0, 1));
+	const week = Math.ceil(
+		((d.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+	);
+	return `${isoYear}-w${String(week).padStart(2, "0")}`;
+}
+
+/**
+ * The podcast slug /health may fairly expect at a given build or watchdog
+ * moment: the show covers the calendar week that just ended, Monday through
+ * Sunday, and normally publishes early Monday afternoon. So the expected
+ * slug is this week's — `${isoWeek}-podcast`, e.g. `2026-w37-podcast` — from
+ * Monday 14:00 Pacific onward; before that (including all of Sunday and
+ * earlier) it is still last week's, which may legitimately not have shipped
+ * yet. Mirrors expectedBriefDate's shape; must match the pipeline
+ * watchdog's own copy of this rule (src/podcast/health.ts).
+ */
+export function expectedPodcastSlug(now: Date = new Date()): string {
+	const today = laToday(now);
+	const dow = new Date(`${today}T00:00:00Z`).getUTCDay() || 7; // Mon=1..Sun=7
+	let monday = laDatePlus(today, 1 - dow);
+
+	if (dow === 1) {
+		const hour = Number(
+			new Intl.DateTimeFormat("en-US", {
+				timeZone: "America/Los_Angeles",
+				hour: "numeric",
+				hourCycle: "h23",
+			}).format(now),
+		);
+		if (hour < 14) monday = laDatePlus(monday, -7);
+	}
+
+	return `${isoWeek(monday)}-podcast`;
+}
+
 /** "Tue, Aug 18" for a YYYY-MM-DD local calendar date. */
 export function formatLocalDateShort(date: string): string {
 	return new Date(`${date}T00:00:00Z`).toLocaleDateString("en-US", {
@@ -165,6 +224,16 @@ export function formatLocalDateLong(date: string): string {
 		day: "numeric",
 		timeZone: "UTC",
 	});
+}
+
+/** "12:34" (or "1:02:34" past an hour) for a duration given in seconds. */
+export function formatDuration(totalSec: number): string {
+	const h = Math.floor(totalSec / 3600);
+	const m = Math.floor((totalSec % 3600) / 60);
+	const s = Math.floor(totalSec % 60);
+	const mm = h > 0 ? String(m).padStart(2, "0") : String(m);
+	const ss = String(s).padStart(2, "0");
+	return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
 /**

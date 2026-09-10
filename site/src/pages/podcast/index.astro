@@ -1,0 +1,134 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import {
+	formatDate,
+	formatDuration,
+	podcastsOnly,
+	postUrl,
+	publishedOnly,
+} from "../../lib/record.ts";
+
+const episodes = podcastsOnly(publishedOnly(await getCollection("posts")));
+---
+
+<Base
+	title="Chino Valley Today, the Week in Review — podcast"
+	description="The Chino Valley Today podcast: an automated weekly recap in two synthetic voices, every story linked to its source."
+	current="record"
+>
+	<header class="podcasthead">
+		<div class="shell podcasthead__inner">
+			<h1 class="podcasthead__name mark">
+				Chino Valley Today, the Week in Review
+			</h1>
+			<p class="podcasthead__blurb">
+				An automated weekly recap of Chino and Chino Hills government, read
+				by two synthetic voices. Every story is drawn from the same record
+				published on this site, with every claim linked to its source.
+			</p>
+			<p class="podcasthead__subscribe mark">
+				Subscribe: <a href="/podcast.xml">RSS feed</a>
+			</p>
+		</div>
+	</header>
+
+	<div class="shell podcastbody">
+		{
+			episodes.length === 0 ? (
+				<p class="empty">No episodes yet.</p>
+			) : (
+				<ol class="episodes">
+					{episodes.map((post) => (
+						<li class="episode">
+							<time class="episode__date mark" datetime={post.data.date.toISOString()}>
+								{formatDate(post.data.date)}
+							</time>
+							<h2 class="episode__title">
+								<a href={postUrl(post)}>{post.data.title}</a>
+							</h2>
+							{post.data.duration_sec !== undefined && (
+								<span class="episode__duration mark">
+									{formatDuration(post.data.duration_sec)}
+								</span>
+							)}
+						</li>
+					))}
+				</ol>
+			)
+		}
+	</div>
+</Base>
+
+<style>
+	.podcasthead {
+		background: var(--crate);
+		color: #fff;
+		border-bottom: 6px solid var(--placard);
+	}
+	.podcasthead__inner {
+		padding-block: 1.8rem 2rem;
+		max-width: 44rem;
+	}
+	.podcasthead__name {
+		margin: 0;
+		font-size: clamp(1.6rem, 1.2rem + 2vw, 2.6rem);
+		letter-spacing: 0.01em;
+		line-height: 1.1;
+	}
+	.podcasthead__blurb {
+		margin: 0.9rem 0 0;
+		font-size: 1rem;
+		color: #cdd8ec;
+		max-width: 34rem;
+	}
+	.podcasthead__subscribe {
+		margin: 1.1rem 0 0;
+		font-size: 0.75rem;
+		letter-spacing: 0.08em;
+	}
+	.podcasthead__subscribe a {
+		color: var(--placard);
+	}
+	.podcastbody {
+		margin-top: 2.4rem;
+		max-width: var(--measure);
+	}
+	.episodes {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		border-top: 2px solid var(--galv-edge);
+	}
+	.episode {
+		display: grid;
+		grid-template-columns: 6.5rem 1fr auto;
+		align-items: baseline;
+		gap: 0.6rem;
+		padding-block: 0.9rem;
+		border-bottom: 1px solid var(--galv-edge);
+	}
+	.episode__date {
+		font-size: 0.72rem;
+		letter-spacing: 0.06em;
+		color: var(--muted);
+	}
+	.episode__title {
+		margin: 0;
+		font-size: 1rem;
+		font-weight: 600;
+	}
+	.episode__title a {
+		color: var(--stencil);
+	}
+	.episode__duration {
+		font-size: 0.72rem;
+		color: var(--muted);
+	}
+	.empty {
+		border: 2px dashed var(--galv-edge);
+		padding: 2.2rem;
+		color: var(--muted);
+		text-align: center;
+	}
+</style>
