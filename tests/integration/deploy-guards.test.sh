@@ -100,5 +100,24 @@ esac
 [ "$CODE" -ne 0 ] || { echo "FAIL: 'all' reported success against an unreachable host"; exit 1; }
 echo "OK: 'all' never reaches the local build path."
 
+echo "5. 'pull-data' touches nothing local when the host is unreachable..."
+# The one mode that writes to data/, and every other mode in this file refuses
+# by default. This one cannot refuse — pulling is what it is for — so the
+# property that has to hold instead is that it reaches the host BEFORE it
+# touches anything here. A run that clobbers data/cvtoday.db and only then
+# discovers it has nothing to replace it with is the failure to prevent.
+DB="$ROOT/data/cvtoday.db"
+before="absent"
+[ -f "$DB" ] && before="$(cksum <"$DB")"
+run_deploy pull-data
+[ "$CODE" -ne 0 ] || { echo "FAIL: 'pull-data' reported success against an unreachable host"; echo "$OUT"; exit 1; }
+after="absent"
+[ -f "$DB" ] && after="$(cksum <"$DB")"
+[ "$before" = "$after" ] || { echo "FAIL: 'pull-data' modified $DB despite failing"; exit 1; }
+# The staging copy is trap-cleaned; a stray one is a full database left in the
+# working tree, and data/ is gitignored so nothing else would report it.
+[ ! -f "$ROOT/data/cvtoday.db.new" ] || { echo "FAIL: 'pull-data' left data/cvtoday.db.new behind"; exit 1; }
+echo "OK: local data untouched on a failed pull."
+
 echo ""
 echo "All deploy guard tests passed!"
