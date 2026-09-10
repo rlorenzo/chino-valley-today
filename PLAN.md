@@ -68,13 +68,14 @@ summarized below; their detail is in git history and the PRs they link.
 - Student-athlete naming vs the minors rule (interim rule is team-level only;
   see EDITORIAL.md).
 - ~~Published posts live only on the droplet~~ — **decided 2026-08-23: CI
-  pulls.** A scheduled workflow copies new published posts off the host and
-  opens a PR, so the droplet needs no write credential and posts arrive as
-  reviewable commits rather than unattended pushes to `main`. Rejected:
-  auto-commit on publish (a write-capable key on a host running four unrelated
-  production sites), and committing as part of the review ritual (already
-  skipped for 7 of 7 alert posts, which publish unattended at 05:50 with no
-  human step to attach it to). Not yet built — see Task 4.11.
+  pulls. Reversed 2026-09-09: the droplet pushes.** The 08-23 rejection of
+  auto-commit rested on "a write-capable key on a host running four unrelated
+  production sites", and that was too broad: a GitHub **deploy key** is scoped
+  to a single repository, so a compromise of the host reaches this repo and
+  neither the account nor the co-tenant projects. With that objection answered,
+  pushing is the simpler mechanism — no PR to merge, no second copy of the
+  decision about what belongs in git. Accepted cost: posts land on `main`
+  unreviewed. See Task 4.11.
 
 ---
 
@@ -179,17 +180,38 @@ outside the file:
 
 ## Phase 4: open tasks
 
-### Task 4.11 - Publish posts back into git
+### Task 4.11 - Publish posts back into git — BUILT 2026-09-09
 
-CI pulls; the droplet never pushes. A scheduled workflow SSHes in over a second
-command-restricted command alongside `deploy-site`, copies anything in
-`content/published/` that git does not have, and opens a PR. The deploy key
-stays read-only in the direction that matters, and new posts land as reviewable
-commits.
+The droplet commits and pushes. `scripts/push-posts.sh` runs from
+`cvt-push-posts.timer` hourly at :20, authenticating with a write **deploy
+key** scoped to this repository alone.
 
-Backlog to clear on first run: 8 posts exist only on the host — 7 alerts and
-`2026-09-01-chino-city-council-preview`. Daily briefs are gitignored and stay
-that way; they are regenerated every morning and are not a record.
+A timer rather than a hook in the publish path: posts arrive by two routes
+(the Tier A runner, dashboard approval) that would each need the same call,
+and a sweep over the directory catches every route including later ones.
+
+Three properties, each a way the record could be corrupted rather than a way
+the script could fail. Staging uses `--ignore-removal`, so a post vanishing
+from the host never commits a deletion — `git add <path>` has staged removals
+since git 2.0, which is the sharp edge here. It rebases before pushing and
+never force-pushes. A rebase conflict means git and the host both changed the
+same published post, which is what a visible correction looks like, so it
+stops at exit 75 with the commit intact instead of picking a side;
+`host-code-update.sh` already refuses to reset over that commit.
+
+`--autostash` on the rebase is load-bearing, not tidiness: a published post
+missing from the host is an unstaged deletion, and plain `git rebase` refuses
+to start with any unstaged change, so one missing file would wedge every
+future run and report it as a conflict it is not. Caught by the test, not by
+review.
+
+Backlog on first run: **28 untracked posts** (65 published files on the host,
+24 of them gitignored briefs). Zero modified, so the first push is purely
+additive. Daily briefs stay gitignored — regenerated every morning, not a
+record.
+
+Provisioning is deploy/README.md step 3c. Not live until the public key is
+registered on GitHub with write access and the remote is switched to SSH.
 
 Why it matters beyond tidiness: the repo is currently an incomplete copy of what
 the site has published, and every frontmatter migration has to be run twice —
