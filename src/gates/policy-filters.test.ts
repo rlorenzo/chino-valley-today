@@ -47,6 +47,10 @@ test("policy-filters suite", async (t) => {
 		);
 		assert.equal(mentionsMinor("Boys soccer team opens league play"), false);
 		assert.equal(mentionsMinor("The girl was found safe"), true);
+		assert.equal(
+			mentionsMinor("Missing girls volleyball player found safe"),
+			true,
+		);
 		assert.equal(mentionsMinor("Teen volunteers at the food bank"), true);
 		assert.equal(mentionsMinor("Juvenile detained after the incident"), true);
 		assert.equal(mentionsMinor("A 17-year-old was reported missing"), true);
@@ -240,6 +244,15 @@ test("policy-filters suite", async (t) => {
 				false,
 			);
 			assert.equal(hasUnvettedPrivatePerson("UCLA Bruins win at home"), false);
+			// Dictionary-word surnames, month middle names and two-letter first
+			// names are still names.
+			assert.equal(hasUnvettedPrivatePerson("Mark Field opened a shop"), true);
+			assert.equal(
+				hasUnvettedPrivatePerson("Jane May Doe opened a shop"),
+				true,
+			);
+			assert.equal(hasUnvettedPrivatePerson("AJ Smith opened a shop"), true);
+			assert.equal(hasUnvettedPrivatePerson("LI Wei opened a shop"), true);
 			// A real name after the same kind of phrase still fails closed.
 			assert.equal(
 				hasUnvettedPrivatePerson(

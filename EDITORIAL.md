@@ -136,12 +136,13 @@ filters apply per item.
   (operator decision, 2026-09-10). "Girls flag football" or "boys soccer team"
   is a team-level result the sports rule already allows, so the minors guard
   scrubs "girls"/"boys" when a sport or "team" follows; the bare word still
-  binds. The private-person guard no longer fails closed on "On Friday",
-  "Club Rush", "UCLA Bruins" or "Mission College Prep": a capitalized run is a
-  name only when at least two of its words are neither dictionary words nor
-  initials, and an acronym beside a title-case word is an organisation. Real
-  names ("Jane Doe", "A. B. Smith", "Chino Resident Jane Doe Announces
-  Campaign") still fail closed.
+  binds, as does "girls volleyball player". The private-person guard no
+  longer fails closed on "On Friday", "Club Rush", "UCLA Bruins" or "Mission
+  College Prep": a run that opens with function words is trimmed, a word no
+  one is named with (weekdays, org/venue/team/sport nouns) makes the run a
+  phrase, and a three-letter-plus acronym beside a title-case word is an
+  organisation. Real names ("Jane Doe", "A. B. Smith", "Mark Field",
+  "Jane May Doe", "AJ Smith") still fail closed.
 - **Locality.** The high school papers (Quest News/Don Lugo, Bulldog
   Times/Ayala) are inherently local — their masthead is a Chino Valley school,
   so items carry `meta.city` at ingest. The Breeze (Chaffey College,
