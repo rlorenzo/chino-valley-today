@@ -5,6 +5,7 @@
 #   scripts/deploy.sh code     update the pipeline checkout + deps + units
 #   scripts/deploy.sh all      that, then rebuild the site ON the host
 #   scripts/deploy.sh site     build HERE and publish — guarded, see below
+#   scripts/deploy.sh pull-data  copy the host's archive down to this checkout
 #
 # `all` is the one to reach for. The site should always be built on the droplet,
 # because the droplet holds content this checkout does not: queued, held and
@@ -53,12 +54,13 @@ what="${1:-}"
 # failing on a missing CVT_DEPLOY_HOST it never needed — or on a deploy.env
 # that cannot be sourced.
 case "$what" in
-	site | code | all | local | host-update) ;;
+	site | code | all | local | host-update | pull-data) ;;
 	*)
-		echo "usage: $0 <code|all|site|local|host-update>" >&2
+		echo "usage: $0 <code|all|site|local|host-update|pull-data>" >&2
 		echo "  code  update the checkout, deps and systemd units (needs root on the host)" >&2
 		echo "  all   that, then rebuild the site on the host" >&2
 		echo "  site  build HERE and publish; guarded, see CVT_ALLOW_LOCAL_BUILD" >&2
+		echo "  pull-data  copy the host's archive DOWN to this checkout" >&2
 		echo "  local / host-update  run ON the droplet" >&2
 		exit 64
 		;;
@@ -472,6 +474,165 @@ deploy_host_update() {
 	deploy_local
 }
 
+# Pull the host's archive DOWN to this checkout. The one mode that moves data
+# backwards, and it exists because data/ is gitignored: a fresh checkout has no
+# archive at all, and a working one falls behind the moment the droplet scrapes.
+#
+# What breaks without it is the site build, and only on this machine:
+# pages/source/[hash].astro fails when a published post cites an archive
+# document this checkout does not hold, which is exactly what a `git pull`
+# produces — the droplet commits published posts back to git, the documents
+# they cite are gitignored. Deploys stay green, because the host builds from
+# its own complete archive.
+#
+# THE DATABASE IS NOT RSYNCED, and must not be. The pipeline writes to it
+# continuously and runs it in WAL mode, so the .db file is only part of the
+# state; rsync copies it mid-write and produces a torn database that transfers
+# perfectly and fails integrity_check. `sqlite3 .backup` snapshots a live
+# database consistently, and that snapshot is what comes down.
+pull_data() {
+	# Needed at BOTH ends, and both are hard requirements: the host takes the
+	# snapshot, and this machine backs up the database being replaced with the
+	# same call. A missing local sqlite3 used to only skip the verification,
+	# which quietly dropped the two things that say the pull worked.
+	command -v sqlite3 >/dev/null 2>&1 || {
+		echo "deploy: no sqlite3 on this machine — cannot back up or verify." >&2
+		exit 69
+	}
+	# NOTHING may be holding the local database open. The swap below unlinks it
+	# and deletes its WAL, and a process that had it open keeps writing through
+	# the old inode: those writes land in a file with no name left, so they are
+	# gone, and that process goes on reading a database no other reader can see.
+	# Deleting a WAL out from under a live connection can corrupt it outright.
+	#
+	# lsof catches an idle holder too, which a lock probe does not — an admin
+	# server sitting on an open connection takes no lock until it writes. Where
+	# there is no lsof this cannot be checked, and the pull proceeds: the check
+	# is a guard against the ordinary mistake, not a claim of exclusivity.
+	if command -v lsof >/dev/null 2>&1 && [ -f "$ROOT/data/cvtoday.db" ] &&
+		lsof -w -t -- "$ROOT/data/cvtoday.db" >/dev/null 2>&1; then
+		echo "deploy: data/cvtoday.db is open by another process." >&2
+		echo "  Replacing it under a live reader or writer loses that process's" >&2
+		echo "  writes and can corrupt the WAL. Stop it and run this again:" >&2
+		lsof -w -- "$ROOT/data/cvtoday.db" >&2 || true
+		exit 75
+	fi
+
+	# ssh's own failures are 255, and the remote `command -v` answers with 1.
+	# Collapsing the two told an operator with a dead key or an unreachable
+	# droplet to go install sqlite3, which is a fix for a problem they do not
+	# have.
+	local rc=0
+	ssh "$HOST" "command -v sqlite3 >/dev/null 2>&1" || rc=$?
+	if [ "$rc" -eq 255 ]; then
+		echo "deploy: cannot reach $HOST over ssh." >&2
+		exit 69
+	elif [ "$rc" -ne 0 ]; then
+		echo "deploy: no sqlite3 on $HOST — cannot snapshot the database." >&2
+		echo "  apt-get install sqlite3 there, or copy data/ down by hand." >&2
+		exit 69
+	fi
+
+	# Not `local`: an EXIT trap fires after the function's locals are gone, so
+	# the cleanup would expand $snap to nothing. Single-quoted for the same
+	# reason — the values are read when the trap runs, not when it is set.
+	#
+	# NOT /tmp, and not a name derived from this machine's pid. The droplet is
+	# shared, the snapshot is a full copy of the database — held reports,
+	# unpublished drafts and all — and a predictable path in a world-writable
+	# directory is both readable by a co-tenant and pre-emptable by a symlink
+	# that .backup would then write through. mktemp as the service account puts
+	# it in the account's own directory at 0600 with a name nobody can guess.
+	snap="$(ssh "$HOST" "sudo -u cvtoday mktemp '$APP/data/pull-snap-XXXXXXXX.db'")"
+	[ -n "$snap" ] || {
+		echo "deploy: could not stage a snapshot path on $HOST." >&2
+		exit 75
+	}
+	# The snapshot is a full copy of the database sitting on the host, and
+	# cvtoday.db.new is another one sitting here; leaving either behind on a
+	# failure is how a small disk fills up quietly. EXIT rather than RETURN:
+	# every failure below leaves the function by exiting, and a RETURN trap does
+	# not run on those.
+	# The -wal and -shm go too: the integrity check below opens the snapshot,
+	# and a WAL pair left in the service account's data directory is the kind
+	# of litter that outlives the reason for it.
+	trap 'ssh "$HOST" "rm -f '\''$snap'\'' '\''$snap'\''-wal '\''$snap'\''-shm" >/dev/null 2>&1 || true; rm -f "$ROOT/data/cvtoday.db.new" "$ROOT/data/cvtoday.db.new-wal" "$ROOT/data/cvtoday.db.new-shm"' EXIT
+
+	# As cvtoday, NOT as root, for the reason deploy_code says: this ssh lands
+	# as root, and sqlite3 opening a WAL database creates the -wal and -shm
+	# beside it. Root-owned sidecars on the live database are how the next
+	# scraper run dies on permission denied.
+	echo "==> snapshotting the database on the host"
+	local check
+	check="$(ssh "$HOST" "sudo -u cvtoday sqlite3 '$APP/data/cvtoday.db' \".backup '$snap'\" && sudo -u cvtoday sqlite3 '$snap' 'pragma integrity_check'")"
+	if [ "$check" != "ok" ]; then
+		echo "deploy: the host's database snapshot is not sound: $check" >&2
+		exit 75
+	fi
+
+	# RAW BYTES BEFORE THE DATABASE, deliberately. Interrupted between the two,
+	# this order leaves a database that knows about fewer files than are on
+	# disk, which builds fine; the reverse leaves rows pointing at files that
+	# were never fetched, which is the build failure this mode exists to fix.
+	#
+	# No --delete: a document this checkout has and the host does not is
+	# orphaned by the incoming database anyway, and --delete pointed at a
+	# half-restored host would take the local archive with it.
+	echo "==> pulling the raw archive"
+	mkdir -p "$ROOT/data/raw"
+	rsync -az -e ssh "$HOST:$APP/data/raw/" "$ROOT/data/raw/"
+
+	echo "==> pulling the database snapshot"
+	rsync -az -e ssh "$HOST:$snap" "$ROOT/data/cvtoday.db.new"
+
+	# BEFORE the swap, not after. The database this is about to replace is the
+	# only fallback if the transfer arrived torn, and a check that runs after
+	# the mv reports the corruption once there is nothing left to fall back to.
+	check="$(sqlite3 "$ROOT/data/cvtoday.db.new" 'pragma integrity_check')"
+	[ "$check" = ok ] || {
+		echo "deploy: the pulled database is not sound: $check" >&2
+		exit 75
+	}
+	# That read opens the snapshot in WAL mode; the pair it leaves would ride
+	# along under the wrong name once the .new is renamed.
+	rm -f "$ROOT/data/cvtoday.db.new-wal" "$ROOT/data/cvtoday.db.new-shm"
+
+	# Keep the outgoing database. It is the only copy of whatever this machine
+	# scraped locally, and the swap below is the one destructive step here.
+	#
+	# `.backup` rather than cp, for the same WAL reason the snapshot on the host
+	# uses it (and backup-b2.sh and interim-backup.sh both before it): cp takes
+	# the .db alone, and the -wal holding this machine's newest writes is
+	# deleted three lines down — so a cp'd backup is missing exactly the data it
+	# exists to preserve.
+	local kept=0
+	if [ -f "$ROOT/data/cvtoday.db" ]; then
+		sqlite3 "$ROOT/data/cvtoday.db" ".backup '$ROOT/data/cvtoday.db.bak'"
+		kept=1
+	fi
+
+	# The stale WAL and shm go BEFORE the new database lands. They belong to the
+	# database being replaced, and sqlite replaying one onto the other is a
+	# corruption path that looks like a working file until it does not.
+	rm -f "$ROOT/data/cvtoday.db-wal" "$ROOT/data/cvtoday.db-shm"
+	mv "$ROOT/data/cvtoday.db.new" "$ROOT/data/cvtoday.db"
+
+	# The soundness check already ran, on this same file under its old name. A
+	# rename does not change the bytes, so the count below is what is left to
+	# say: the database opens, and here is what came down in it.
+	echo "==> pulled $(sqlite3 "$ROOT/data/cvtoday.db" 'select count(*) from documents') documents"
+
+	# Those reads just recreated the sidecars deleted above — empty, but they
+	# would sit next to the database looking like live WAL state. Same cleanup
+	# backup-b2.sh and interim-backup.sh do after their own verification reads,
+	# and the .bak picks up a pair from being opened as a backup target.
+	rm -f "$ROOT/data/cvtoday.db-wal" "$ROOT/data/cvtoday.db-shm" \
+		"$ROOT/data/cvtoday.db.bak-wal" "$ROOT/data/cvtoday.db.bak-shm"
+
+	[ "$kept" -eq 1 ] && echo "    previous database kept at data/cvtoday.db.bak"
+	return 0
+}
+
 case "$what" in
 	site) deploy_site ;;
 	code) deploy_code ;;
@@ -480,8 +641,9 @@ case "$what" in
 	all) deploy_code; rebuild_on_host ;;
 	local) deploy_local ;;
 	host-update) deploy_host_update ;;
+	pull-data) pull_data ;;
 	# Unreachable: the subcommand was validated at the top, before anything
 	# that could need configuration. Kept so this dispatch cannot silently do
 	# nothing if the two lists ever fall out of step.
-	*) echo "usage: $0 <code|all|site|local|host-update>" >&2; exit 64 ;;
+	*) echo "usage: $0 <code|all|site|local|host-update|pull-data>" >&2; exit 64 ;;
 esac

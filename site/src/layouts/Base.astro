@@ -4,7 +4,6 @@ import "../styles/world.css";
 interface Props {
 	title: string;
 	description: string;
-	current?: "record" | "topics" | "about";
 	/**
 	 * Keep the page out of search indexes while leaving its links followable.
 	 * Set on the archive mirrors under /source/: they reproduce another body's
@@ -14,7 +13,7 @@ interface Props {
 	noindex?: boolean;
 }
 
-const { title, description, current, noindex } = Astro.props;
+const { title, description, noindex } = Astro.props;
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
 
 const TOPICS = [
@@ -23,6 +22,20 @@ const TOPICS = [
 	{ slug: "business", name: "Business" },
 	{ slug: "safety", name: "Safety" },
 ];
+
+/**
+ * Which nav item is current, read off the URL rather than passed in by each
+ * page: a `current` prop can disagree with the page it sits on (the podcast
+ * pages used to ask for Record), and the URL cannot.
+ *
+ * Anchored so /podcasts-of-note or /aboutus cannot pass for the real section,
+ * and tolerant of a missing trailing slash because the dev server serves both.
+ * Everything else the site publishes IS the record — briefs, posts, the
+ * calendar, the archive mirrors — so Record is the default.
+ */
+const path = Astro.url.pathname;
+const section = path.match(/^\/(about|podcast|topics)(?:\/|$)/)?.[1] ?? "record";
+const topicSlug = path.match(/^\/topics\/([^/]+)/)?.[1] ?? null;
 ---
 
 <!doctype html>
@@ -93,16 +106,26 @@ finish review, the verdict, and DESIGN.md
 					</p>
 				</div>
 				<nav class="masthead__nav mark" aria-label="Sections">
-					<a href="/" aria-current={current === "record" ? "page" : undefined}>
+					<a href="/" aria-current={section === "record" ? "page" : undefined}>
 						Record
 					</a>
 					{
 						TOPICS.map((t) => (
-							<a href={`/topics/${t.slug}/`}>{t.name}</a>
+							<a
+								href={`/topics/${t.slug}/`}
+								aria-current={t.slug === topicSlug ? "page" : undefined}
+							>
+								{t.name}
+							</a>
 						))
 					}
-					<a href="/podcast/">Podcast</a>
-					<a href="/about/" aria-current={current === "about" ? "page" : undefined}>
+					<a
+						href="/podcast/"
+						aria-current={section === "podcast" ? "page" : undefined}
+					>
+						Podcast
+					</a>
+					<a href="/about/" aria-current={section === "about" ? "page" : undefined}>
 						About
 					</a>
 				</nav>
