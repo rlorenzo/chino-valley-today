@@ -37,6 +37,16 @@ test("policy-filters suite", async (t) => {
 			true,
 		);
 		assert.equal(mentionsMinor("Fundraiser held for the elementary"), true);
+		// A team category is a team, not an identified minor (EDITORIAL.md
+		// sports rule: team-level scores are fine). The bare word still binds.
+		assert.equal(
+			mentionsMinor(
+				"Ayala’s Varsity Girls flag football team conquered the Mission College Prep Royals",
+			),
+			false,
+		);
+		assert.equal(mentionsMinor("Boys soccer team opens league play"), false);
+		assert.equal(mentionsMinor("The girl was found safe"), true);
 		assert.equal(mentionsMinor("Teen volunteers at the food bank"), true);
 		assert.equal(mentionsMinor("Juvenile detained after the incident"), true);
 		assert.equal(mentionsMinor("A 17-year-old was reported missing"), true);
@@ -210,6 +220,33 @@ test("policy-filters suite", async (t) => {
 
 			// Folding must not turn a stranger into an allowlisted official.
 			assert.equal(isPublicFigure("Random Stranger"), false);
+		},
+	);
+
+	await t.test(
+		"hasUnvettedPrivatePerson ignores phrases, acronyms and team names in teasers",
+		() => {
+			// Bulldog Times teasers of 2026-09-09, all blocked by the old rule.
+			assert.equal(
+				hasUnvettedPrivatePerson(
+					"Ayala introduces first high school pilot program of AWWA Starting this school year, Ayala has been granted the first ever high school American Water Works Association (AWWA) program in the country.",
+				),
+				false,
+			);
+			assert.equal(
+				hasUnvettedPrivatePerson(
+					"Club Rush puts student spirit on full display On Friday, September 4, Ayala hosted their annual Club Rush during lunch.",
+				),
+				false,
+			);
+			assert.equal(hasUnvettedPrivatePerson("UCLA Bruins win at home"), false);
+			// A real name after the same kind of phrase still fails closed.
+			assert.equal(
+				hasUnvettedPrivatePerson(
+					"On Friday, September 4, Jane Doe hosted the annual Club Rush.",
+				),
+				true,
+			);
 		},
 	);
 

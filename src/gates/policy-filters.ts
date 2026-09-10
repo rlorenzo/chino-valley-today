@@ -45,6 +45,13 @@ const AGE_RE = /\b(\d{1,2})[-\s]years?[-\s]old\b/gi;
 // carries real signal ("the boy was found safe").
 const PLACE_NAME_RE =
 	/\bboys\s+republic\b|\bboys\s*(?:&|and)\s*girls\s+club\b/gi;
+// A team category is not an identified minor either. "Varsity girls flag
+// football defeats Mission College Prep" is the team-level score EDITORIAL.md's
+// sports rule allows; leaving "girls" in scope there made every girls' and
+// boys' team result unpublishable. Scrubbed only when the word is followed by
+// a sport or "team", so "the girl was found safe" still binds.
+const TEAM_CATEGORY_RE =
+	/\b(?:varsity\s+|jv\s+)?(?:girls|boys)['’]?\s+(?:varsity\s+|jv\s+)?(?:flag\s+football|football|soccer|basketball|volleyball|water\s+polo|tennis|golf|cross\s+country|track(?:\s+and\s+field)?|wrestling|softball|baseball|swim(?:ming)?|lacrosse|team)\b/gi;
 
 const CRIME_RE =
 	/\b(?:arrest(?:ed|s|ing)?|suspect(?:s)?|homicide|murder|shooting|shot|stabbed|stabbing|robbery|burglary|assault|dui|manslaughter|felony|indict(?:ed|ment)?|theft|stolen|vandal(?:ism)?|crash|collision|hit-and-run|fatal(?:ity|ities)?)\b/i;
@@ -214,6 +221,54 @@ const COMMON_WORDS = new Set([
 	"holds",
 	"leads",
 	"rides",
+	// Calendar words open the sentence right after a headline ("On Friday,
+	// September 4, Ayala hosted...") and read as a name to NAME_PATTERN.
+	"monday",
+	"tuesday",
+	"wednesday",
+	"thursday",
+	"friday",
+	"saturday",
+	"sunday",
+	"january",
+	"february",
+	"march",
+	"april",
+	"may",
+	"june",
+	"july",
+	"august",
+	"september",
+	"october",
+	"november",
+	"december",
+	// Organisations, venues and teams: "Club Rush", "Mission College Prep",
+	"club",
+	"college",
+	"university",
+	"association",
+	"federation",
+	"foundation",
+	"league",
+	"academy",
+	"prep",
+	"stadium",
+	"arena",
+	"field",
+	"team",
+	"varsity",
+	"football",
+	"soccer",
+	"basketball",
+	"volleyball",
+	"baseball",
+	"softball",
+	"american",
+	"national",
+	"works",
+	// Team categories, never a surname.
+	"girls",
+	"boys",
 	"bids",
 	"covid",
 	"rules",
@@ -310,7 +365,9 @@ export function isPublicFigure(name: string): boolean {
 export function mentionsMinor(text: string): boolean {
 	// Replaced with a space, not "": removing the place name outright can weld
 	// its neighbours into a word the guard then misreads.
-	const scrubbed = text.replace(PLACE_NAME_RE, " ");
+	const scrubbed = text
+		.replace(PLACE_NAME_RE, " ")
+		.replace(TEAM_CATEGORY_RE, " ");
 	if (EXPLICIT_MINOR_RE.test(scrubbed)) return true;
 	for (const m of scrubbed.matchAll(AGE_RE)) {
 		const age = Number.parseInt(m[1], 10);
@@ -418,11 +475,28 @@ export function hasUnvettedPrivatePerson(text: string): boolean {
 		const candidate = match[0].trim();
 		const tokens = candidate.split(/\s+/);
 
-		// Skip if every word in the candidate is a common dictionary stop word
-		const isAllCommon = tokens.every((t) =>
-			COMMON_WORDS.has(t.toLowerCase().replace(/[^a-z]/g, "")),
-		);
-		if (isAllCommon) continue;
+		// Dictionary words and initials carry no name signal. What is left has
+		// to be at least two tokens to be a person: "On Friday", "Club Rush",
+		// "Mission College Prep", "American Water Works Association" reduce to
+		// one word or none, while "Chino Resident Jane Doe Announces Campaign"
+		// and "A. B. Smith" keep two. A person named entirely with dictionary
+		// words ("Mark Field") slips through; the honorific path carries that.
+		const isName = (t: string) =>
+			t.endsWith(".") ||
+			!COMMON_WORDS.has(t.toLowerCase().replace(/['’]s$/, ""));
+		const nameTokens = tokens.filter(isName);
+		if (nameTokens.length < 2) continue;
+		// A short run with a dictionary word strictly inside it is a compound
+		// noun ("Mission College Prep Royals"): names carry their particles in
+		// lowercase, which NAME_PATTERN already allows. Longer runs are
+		// title-case headlines ("Resident Jane Doe Announces Campaign"), where
+		// a verb between names is normal, so those are scanned as a whole.
+		if (tokens.length <= 4 && tokens.slice(1, -1).some((t) => !isName(t)))
+			continue;
+		// An acronym beside a title-case word is an organisation or a team
+		// ("AWWA Starting", "UCLA Bruins"), not a person.
+		const acronyms = tokens.filter((t) => /^\p{Lu}{2,}$/u.test(t)).length;
+		if (acronyms > 0 && acronyms < tokens.length) continue;
 
 		// If it's a known civic entity, landmark, school, or development -> allowed
 		if (isCivicEntity(candidate)) continue;
