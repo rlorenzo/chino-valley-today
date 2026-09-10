@@ -4,17 +4,17 @@ post_type: podcast
 tier: B
 date: "2026-09-09T23:30:00.000Z"
 audio_url: "https://chinovalley.today/audio/2026-w37-podcast.mp3"
-audio_bytes: 3409557
-duration_sec: 426
+audio_bytes: 3274389
+duration_sec: 409
 chapters:
   - title: "Cold open"
     start_sec: 0
   - title: "Last week"
-    start_sec: 36
+    start_sec: 37
   - title: "Week ahead"
-    start_sec: 252
+    start_sec: 241
   - title: "Sign-off"
-    start_sec: 379
+    start_sec: 361
 sources:
   - "https://chinovalley.today/posts/2026-w36-news-digest/"
   - "https://chinovalley.today/posts/2026-09-08-chinohills-city-council-regular-preview/"
@@ -109,4 +109,4 @@ sources:
 
 ---
 
-*First episode. Produced on 2026-09-09 from the posts listed below, with the script reviewed by hand before publication; later episodes cite their source after every spoken turn. Generated from public records with automated review; see sources linked above. Corrections: see About page.*
+*First episode. Script produced on 2026-09-09 from the posts listed below and reviewed by hand before publication, audio rendered 2026-09-10; later episodes cite their source after every spoken turn. Generated from public records with automated review; see sources linked above. Corrections: see About page.*
