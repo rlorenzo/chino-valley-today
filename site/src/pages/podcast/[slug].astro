@@ -15,7 +15,6 @@ const { post } = Astro.props;
 <Base
 	title={`${post.data.title} — Chino Valley Today`}
 	description={`The Chino Valley Today podcast: ${post.data.title}. Every story linked to its source.`}
-	current="record"
 >
 	<PostArticle post={post} />
 	<p class="shell podcast-feedlink">
