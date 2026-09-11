@@ -43,3 +43,9 @@ rclone.conf
 # Temporary or task-specific plan scratch files
 PLAN-*
 
+
+# Knowledge-graph tool output and agent scratch reports. Generated, never
+# committed; listed in .markdownlint-cli2.jsonc too, since the pre-commit hook
+# lints the working tree rather than the index.
+graphify-out/
+agent-review-summary.md

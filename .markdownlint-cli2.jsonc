@@ -15,6 +15,8 @@
 		"content/published", // generated; see above
 		".impeccable", // design-tooling output, not authored docs
 		".claude", // agent worktrees and session state, not part of this checkout
+		"graphify-out", // knowledge-graph tool output, not authored docs
+		"agent-review-summary.md", // agent scratch, same reason as the report below
 		// Uncommitted correspondence drafts. These are email bodies staged in the
 		// repo root for review before sending, not documentation: bare URLs and
 		// bold section labels are correct in an email and would be wrong to
