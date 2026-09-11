@@ -2,20 +2,26 @@
 import { getCollection } from "astro:content";
 import PostArticle from "../../components/PostArticle.astro";
 import Base from "../../layouts/Base.astro";
-import { briefsOnly } from "../../lib/record.ts";
+import { briefsOnly, formatLocalDateShort } from "../../lib/record.ts";
 
 export async function getStaticPaths() {
 	// One brief per LA calendar day; brief_date is the permalink. The pipeline
 	// enforces one-per-day (slug YYYY-MM-DD-daily-brief), and the collection
 	// schema requires brief_date on every daily-brief post.
+	// briefsOnly sorts newest first, so a brief's neighbours are its older
+	// and newer days, whatever gaps the archive has.
 	const briefs = briefsOnly(await getCollection("posts"));
-	return briefs.map((post) => ({
+	return briefs.map((post, i) => ({
 		params: { date: post.data.brief_date },
-		props: { post },
+		props: {
+			post,
+			newer: briefs[i - 1]?.data.brief_date,
+			older: briefs[i + 1]?.data.brief_date,
+		},
 	}));
 }
 
-const { post } = Astro.props;
+const { post, newer, older } = Astro.props;
 ---
 
 <Base
@@ -23,4 +29,38 @@ const { post } = Astro.props;
 	description={`The Chino Valley daily brief for ${post.data.brief_date}: weather, today's meetings and events, and what's new on the record — every claim linked to its source.`}
 >
 	<PostArticle post={post} />
+	<nav class="shell briefnav mark" aria-label="Other days">
+		{
+			older && (
+				<a href={`/brief/${older}/`} rel="prev">
+					← {formatLocalDateShort(older)}
+				</a>
+			)
+		}
+		{
+			newer && (
+				<a href={`/brief/${newer}/`} rel="next">
+					{formatLocalDateShort(newer)} →
+				</a>
+			)
+		}
+	</nav>
 </Base>
+
+<style>
+	.briefnav {
+		max-width: var(--measure);
+		padding-block: 0 2.4rem;
+		display: flex;
+		justify-content: space-between;
+		gap: 1rem;
+		font-size: 0.85rem;
+	}
+	.briefnav a {
+		color: var(--crate);
+	}
+	/* With no older day, the newer link still sits on the right. */
+	.briefnav a[rel="next"] {
+		margin-left: auto;
+	}
+</style>
