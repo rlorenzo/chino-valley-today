@@ -31,16 +31,23 @@ export interface ChatResult {
 // it divides among its calls if that ever actually fires.
 const FALLBACK_BUDGET_MS = 10 * 60_000;
 
+// setTimeout's 32-bit ceiling, which AbortSignal.timeout inherits: above this
+// Node clamps the delay to 1ms with only a warning, so an over-large budget
+// would read as an instantly exhausted one.
+const MAX_TIMER_MS = 2_147_483_647;
+
 // Number("10m") is NaN, and every budget comparison against NaN is false —
 // which would silently restore the unbounded retries this budget exists to
-// prevent. A bad value falls back to the default loudly instead.
+// prevent. A fractional value is worse than useless: AbortSignal.timeout(1.5)
+// throws before a request is ever sent. A bad value falls back to the default
+// loudly instead.
 export function budgetFromEnv(): number {
 	const raw = process.env.CVT_LLM_BUDGET_MS;
 	if (raw === undefined) return FALLBACK_BUDGET_MS;
 	const parsed = Number(raw);
-	if (!Number.isFinite(parsed) || parsed <= 0) {
+	if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > MAX_TIMER_MS) {
 		console.log(
-			`CVT_LLM_BUDGET_MS=${raw} is not a positive number of milliseconds — using ${FALLBACK_BUDGET_MS}ms`,
+			`CVT_LLM_BUDGET_MS=${raw} is not a whole number of milliseconds between 1 and ${MAX_TIMER_MS} — using ${FALLBACK_BUDGET_MS}ms`,
 		);
 		return FALLBACK_BUDGET_MS;
 	}
@@ -100,7 +107,14 @@ export async function chat(
 		// budget below the per-attempt timeout (CVT_LLM_BUDGET_MS is tunable,
 		// so that is reachable by configuration) must not be ignored just
 		// because this is the first request.
-		const attemptMs = Math.min(perAttemptMs, remainingMs());
+		// Whole milliseconds inside the timer range, enforced here rather than
+		// only on the env var: opts.budgetMs and opts.timeoutMs reach this same
+		// call without passing budgetFromEnv, and AbortSignal.timeout throws on
+		// a fractional delay and silently clamps an over-large one to 1ms.
+		const attemptMs = Math.min(
+			Math.floor(Math.min(perAttemptMs, remainingMs())),
+			MAX_TIMER_MS,
+		);
 		if (attemptMs <= 0)
 			throw new Error(
 				`LLM ${task} (${cfg.model}): budget of ${budgetMs}ms exhausted before attempt ${attempt}`,

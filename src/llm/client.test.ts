@@ -64,6 +64,21 @@ describe("chat retry budget", () => {
 		);
 	});
 
+	test("a fractional budget from a caller never reaches AbortSignal.timeout", async () => {
+		const { chat } = await import("./client.ts");
+		requests = 0;
+		// opts.budgetMs skips budgetFromEnv, so the guard has to sit at the use
+		// site: unfloored, this rejects with ERR_OUT_OF_RANGE before sending.
+		await assert.rejects(
+			chat("judge", [{ role: "user", content: "hi" }], {
+				timeoutMs: 300.7,
+				budgetMs: 1_000.5,
+			}),
+			(err: Error) => !/out of range/i.test(err.message),
+		);
+		assert.equal(requests, 1);
+	});
+
 	test("an unparseable CVT_LLM_BUDGET_MS falls back instead of disabling the budget", async () => {
 		const { budgetFromEnv } = await import("./client.ts");
 		const previous = process.env.CVT_LLM_BUDGET_MS;
@@ -82,6 +97,13 @@ describe("chat retry budget", () => {
 			assert.equal(withEnv(""), 600_000);
 			assert.equal(withEnv("0"), 600_000);
 			assert.equal(withEnv("-5"), 600_000);
+			// AbortSignal.timeout throws outright on a fractional delay.
+			assert.equal(withEnv("1.5"), 600_000);
+			// Above the 32-bit timer ceiling Node clamps to 1ms with a warning,
+			// which would read as a budget already spent. The ceiling itself
+			// stays usable.
+			assert.equal(withEnv("2147483648"), 600_000);
+			assert.equal(withEnv("2147483647"), 2_147_483_647);
 		} finally {
 			withEnv(previous);
 		}
