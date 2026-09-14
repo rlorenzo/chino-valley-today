@@ -113,6 +113,9 @@ export function cleanTitle(t: string | null | undefined): string | null {
 	return trimmed.length > 0 ? trimmed : null;
 }
 
+// The trailing "…" is display-only: never feed the output of this into a
+// generator prompt. A model handed a cut-off clause completes it and invents
+// the rest ("at the Government" → "the Government Center in Chino Hills").
 export function truncateTeaser(s: string, max = 140): string {
 	const clean = s.replace(/\s+/g, " ").trim();
 	if (clean.length <= max) return clean;

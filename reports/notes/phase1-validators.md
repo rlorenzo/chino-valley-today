@@ -328,8 +328,13 @@ caller might reasonably want to inspect or extend them)
   recurring institution here (e.g. if CVUSD's board gets referred to by a
   new short form) rather than teaching the sequence logic about it.
 - `SENTENCE_INITIAL_COMMON_WORDS` — single-token exemption when sentence- or
-  block-initial. This is where new template label words (`"Date:"`,
-  `"Status:"`, …) get added as they show up.
+  block-initial. Two halves. The English function-word half (determiners,
+  quantifiers, numerals, possessives, conjunctions, prepositions, conjunctive
+  adverbs) is a **closed class listed to completion** — a word missing from it
+  is a held episode, so if one turns up, the class boundary was drawn wrong;
+  don't append one word and move on. The domain half (template label words
+  like `"Date:"`/`"Status:"`, institutional nouns like `council`/`staff`) is
+  genuinely open and gets added to as they show up.
 - `TITLE_WORDS` — leading role/title words stripped regardless of position.
 - `CONNECTORS` — lowercase particles that bridge two capitalized tokens into
   one sequence (`of`, `de`, `la`, …). Deliberately small; `"and"`/`"the"`

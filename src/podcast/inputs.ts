@@ -14,7 +14,11 @@ import {
 	railEntries,
 	selectUpcomingEvents,
 } from "../pipeline/daily-brief.ts";
-import { type BriefEventAhead, listPosts } from "../pipeline/posts.ts";
+import {
+	type BriefEventAhead,
+	listPosts,
+	type NewPost,
+} from "../pipeline/posts.ts";
 import { SITE_ORIGIN } from "../pipeline/site-url.ts";
 import { ROOT } from "../store.ts";
 import { queryItems } from "../tiera/queries.ts";
@@ -34,9 +38,21 @@ export interface PodcastInputs {
 }
 
 // A post digesting the record rather than entering it is not a story to review:
-// the brief is a daily assembly of the same posts, and last week's podcast is
-// this one talking about itself.
-const EXCLUDED_TYPES = new Set(["daily-brief", "podcast"]);
+// the brief is a daily assembly of the same posts, the weekly news_digest is a
+// roundup of them, and last week's podcast is this one talking about itself.
+// Feeding one back in makes the episode recap a recap — and because digest
+// entries are truncated teasers, the generator completes the ellipsis and
+// invents detail (see truncateTeaser in ../tiera/util.ts).
+//
+// Typed against the NewPost union so a separator typo ("news-digest") is a
+// build error rather than a filter that silently stops filtering.
+// src/pipeline/topics.ts has a near-twin, UNTOPICED_POST_TYPES, that answers a
+// different question; the two are intentionally not shared.
+const EXCLUDED_TYPES: ReadonlySet<string> = new Set<NewPost["postType"]>([
+	"daily-brief",
+	"news_digest",
+	"podcast",
+]);
 
 /**
  * An instant that lands on `laDate` in BOTH the Pacific and the UTC calendar.
