@@ -103,13 +103,18 @@ describe("podcastInputs — last week's posts", () => {
 		}
 	});
 
-	test("skips the daily brief and last week's own episode", () => {
+	test("skips the brief, the digest and last week's own episode", () => {
 		const db = openDb(":memory:");
 		const slugs: string[] = [];
 		try {
 			slugs.push(
 				publish(db, "brief", "2026-09-03T14:00:00.000Z", {
 					postType: "daily-brief",
+				}),
+			);
+			slugs.push(
+				publish(db, "digest", "2026-09-03T14:00:00.000Z", {
+					postType: "news_digest",
 				}),
 			);
 			slugs.push(
@@ -172,14 +177,14 @@ describe("podcastInputs — last week's posts", () => {
 		const slugs: string[] = [];
 		try {
 			createPost(db, {
-				slug: `${SLUG_PREFIX}-2026-W36-digest`,
-				postType: "news_digest",
+				slug: `${SLUG_PREFIX}-2026-W36-recap`,
+				postType: "meeting_recap",
 				tier: "A",
-				title: "Digest",
+				title: "Recap",
 				bodyMd: "Body.",
 				sources: [SOURCE],
 			});
-			const lower = `${SLUG_PREFIX}-2026-w36-digest`;
+			const lower = `${SLUG_PREFIX}-2026-w36-recap`;
 			slugs.push(lower);
 			transitionPost(db, lower, "published");
 			db.raw

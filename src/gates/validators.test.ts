@@ -514,6 +514,21 @@ describe("Gate 1c — proper-name whitelist", () => {
 		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
 	});
 
+	// A podcast turn makes every sentence sentence-initial, so the function word
+	// opening it must never read as a name. The corpus deliberately does not
+	// contain the opener: that is the case that held the 2026-W38 episode.
+	for (const opener of ["Another", "Both", "Several", "One", "There", "More"]) {
+		test(`does not false-positive: "${opener}" opening a turn is not a name`, () => {
+			const input: GateInput = {
+				bodyMd: `**Maya:** ${opener} extreme heat warnings were issued on September 9. [Source](https://example.com/a)`,
+				allowedUrls: ["https://example.com/a"],
+				inputCorpus: "Maya. An extreme heat warning was issued on September 9.",
+			};
+			const report = validateDraft(input);
+			assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+		});
+	}
+
 	test('does not false-positive: sentence-initial institutional noun ("Staff recommended...")', () => {
 		const input: GateInput = {
 			bodyMd: `Staff recommended approval of the contract. [Agenda](https://example.com/a)`,
