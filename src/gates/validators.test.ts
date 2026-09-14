@@ -543,6 +543,35 @@ describe("Gate 1c — proper-name whitelist", () => {
 		assert.ok(BUILTIN_ALLOWLIST.includes("california"));
 	});
 
+	test("does not false-positive: a speaker label does not eat the sentence-initial slot", () => {
+		const input: GateInput = {
+			bodyMd:
+				`**Dan:** On Monday September 14th, the Chino Branch Library holds Preschool Storytime. [Source](https://example.com/a)\n\n` +
+				`**Maya:** A Community Science Bioblitz takes place Saturday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya Dan. " +
+				"Monday September 14th the Chino Branch Library holds Preschool Storytime. " +
+				"Community Science Bioblitz takes place Saturday.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("a time's colon is not a sentence boundary", () => {
+		const input: GateInput = {
+			bodyMd: `The meeting starts at 7:30 Pacific Standard Time. [Agenda](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "The meeting starts at 7:30 p.m.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Pacific Standard Time"),
+			),
+		);
+	});
+
 	test("headings are excluded from name scanning (title-case headings do not need corpus grounding)", () => {
 		const input: GateInput = {
 			bodyMd: `## Business License Reform Approved\n\nThe council approved the item. [Agenda](https://example.com/a)`,

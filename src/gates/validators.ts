@@ -882,7 +882,15 @@ const CONNECTORS = new Set([
 ]);
 
 const WORD_RE = /[A-Za-z][A-Za-z'-]*/g;
-const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+|\n+/g;
+// A colon ends a sentence part too, so the word after a label starts a new
+// one. Without this a speaker or field label eats the sentence-initial slot
+// ("**Dan:** On Monday..." makes "Dan" initial, never "On"), and the leading
+// article/preposition strip in stripTitleAndLead never fires — "On Monday
+// September" then goes to the corpus check with the preposition attached and
+// can never ground. Held the 2026-W38 podcast on six such phrases.
+// Markdown emphasis is consumed with the whitespace so "**Dan:** On" breaks;
+// "7:30 PM" does not, since a time has no whitespace after its colon.
+const SENTENCE_BOUNDARY_RE = /(?<=[.!?])\s+|(?<=:)[\s*_]+|\n+/g;
 
 interface Token {
 	text: string;
