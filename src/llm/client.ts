@@ -29,7 +29,23 @@ export interface ChatResult {
 // four of these (generate, repair, judge, backup judge), so a pathological run
 // can still outlast a 20-minute unit. Give runGatedPipeline a single deadline
 // it divides among its calls if that ever actually fires.
-const DEFAULT_BUDGET_MS = Number(process.env.CVT_LLM_BUDGET_MS ?? 10 * 60_000);
+const FALLBACK_BUDGET_MS = 10 * 60_000;
+
+// Number("10m") is NaN, and every budget comparison against NaN is false —
+// which would silently restore the unbounded retries this budget exists to
+// prevent. A bad value falls back to the default loudly instead.
+export function budgetFromEnv(): number {
+	const raw = process.env.CVT_LLM_BUDGET_MS;
+	if (raw === undefined) return FALLBACK_BUDGET_MS;
+	const parsed = Number(raw);
+	if (!Number.isFinite(parsed) || parsed <= 0) {
+		console.log(
+			`CVT_LLM_BUDGET_MS=${raw} is not a positive number of milliseconds — using ${FALLBACK_BUDGET_MS}ms`,
+		);
+		return FALLBACK_BUDGET_MS;
+	}
+	return parsed;
+}
 
 export async function chat(
 	task: LlmTask,
@@ -69,8 +85,9 @@ export async function chat(
 	}
 
 	const perAttemptMs = opts.timeoutMs ?? 600_000;
-	const budgetMs = opts.budgetMs ?? DEFAULT_BUDGET_MS;
+	const budgetMs = opts.budgetMs ?? budgetFromEnv();
 	const startedAt = Date.now();
+	const remainingMs = () => startedAt + budgetMs - Date.now();
 	// True when another attempt plus its backoff would run past the budget, so
 	// we stop instead of starting work that is certain to be killed.
 	const outOfBudget = (backoffMs: number) =>
@@ -79,6 +96,15 @@ export async function chat(
 	let attempt = 0;
 	for (;;) {
 		attempt++;
+		// The budget bounds the whole call, so it bounds each attempt too: a
+		// budget below the per-attempt timeout (CVT_LLM_BUDGET_MS is tunable,
+		// so that is reachable by configuration) must not be ignored just
+		// because this is the first request.
+		const attemptMs = Math.min(perAttemptMs, remainingMs());
+		if (attemptMs <= 0)
+			throw new Error(
+				`LLM ${task} (${cfg.model}): budget of ${budgetMs}ms exhausted before attempt ${attempt}`,
+			);
 		let res: Awaited<ReturnType<typeof undiciFetch>>;
 		try {
 			res = await undiciFetch(`${cfg.endpoint}/chat/completions`, {
@@ -88,7 +114,7 @@ export async function chat(
 					"content-type": "application/json",
 				},
 				body: JSON.stringify(body),
-				signal: AbortSignal.timeout(opts.timeoutMs ?? 600_000),
+				signal: AbortSignal.timeout(attemptMs),
 				dispatcher: llmAgent,
 			});
 		} catch (err) {

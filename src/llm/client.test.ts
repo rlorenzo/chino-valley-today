@@ -44,4 +44,46 @@ describe("chat retry budget", () => {
 			`should fail fast once out of budget, took ${elapsed}ms`,
 		);
 	});
+
+	test("bounds the first attempt too when the budget is under the timeout", async () => {
+		const { chat } = await import("./client.ts");
+		requests = 0;
+		const startedAt = Date.now();
+		// The budget, not the 30s per-attempt timeout, has to end this attempt.
+		await assert.rejects(
+			chat("judge", [{ role: "user", content: "hi" }], {
+				timeoutMs: 30_000,
+				budgetMs: 400,
+			}),
+		);
+		const elapsed = Date.now() - startedAt;
+		assert.equal(requests, 1);
+		assert.ok(
+			elapsed < 5_000,
+			`budget should cap the attempt, took ${elapsed}ms`,
+		);
+	});
+
+	test("an unparseable CVT_LLM_BUDGET_MS falls back instead of disabling the budget", async () => {
+		const { budgetFromEnv } = await import("./client.ts");
+		const previous = process.env.CVT_LLM_BUDGET_MS;
+		const withEnv = (v: string | undefined) => {
+			if (v === undefined) delete process.env.CVT_LLM_BUDGET_MS;
+			else process.env.CVT_LLM_BUDGET_MS = v;
+			return budgetFromEnv();
+		};
+		try {
+			assert.equal(withEnv(undefined), 600_000);
+			assert.equal(withEnv("1234"), 1234);
+			// Number("10m") is NaN, and every budget comparison against NaN is
+			// false — silently restoring the unbounded retries the budget exists
+			// to prevent.
+			assert.equal(withEnv("10m"), 600_000);
+			assert.equal(withEnv(""), 600_000);
+			assert.equal(withEnv("0"), 600_000);
+			assert.equal(withEnv("-5"), 600_000);
+		} finally {
+			withEnv(previous);
+		}
+	});
 });
