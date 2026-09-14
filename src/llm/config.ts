@@ -34,16 +34,28 @@ export const LLM_TASKS: Record<LlmTask, TaskConfig> = {
 		temperature: 0.1,
 	},
 	// Judge MUST be a different model family than the generator (uncorrelated
-	// failure modes) — DeepSeek generates, Qwen judges. Backup: glm-5.2.
+	// failure modes) — DeepSeek generates, GLM judges. Backup: Qwen, a third
+	// family again, so a primary outage does not fall back into a correlated
+	// one.
+	//
+	// Was qwen3.5-397b-a17b until 2026-09-14. A 397B judge over a podcast
+	// transcript ran past the 15-minute client timeout and took the weekly
+	// episode down with it; the verdict JSON is long (one claims[] entry per
+	// cited turn) and nothing capped it. See the retry budget in client.ts.
 	judge: {
-		model: process.env.CVT_MODEL_JUDGE ?? "qwen3.5-397b-a17b",
+		model: process.env.CVT_MODEL_JUDGE ?? "glm-5.3",
 		endpoint: DO_ENDPOINT,
 		temperature: 0,
 	},
-	// Backup judge when the primary is overloaded — also a non-DeepSeek family,
-	// so the cross-family constraint holds.
+	// Backup judge when the primary is overloaded — a third family again, so
+	// neither judge correlates with the generator or with each other.
+	//
+	// Measured on the same held podcast draft, 2026-09-14: kimi-k3 10.2s and a
+	// clean verdict; qwen3.5-397b-a17b never returned (three runs, each dead at
+	// 300s); glm-5.2 answers HTTP 400 to reasoning_effort, which the judge call
+	// now depends on. Those two are why the backup is not simply the old primary.
 	judge_backup: {
-		model: process.env.CVT_MODEL_JUDGE_BACKUP ?? "glm-5.2",
+		model: process.env.CVT_MODEL_JUDGE_BACKUP ?? "kimi-k3",
 		endpoint: DO_ENDPOINT,
 		temperature: 0,
 	},
