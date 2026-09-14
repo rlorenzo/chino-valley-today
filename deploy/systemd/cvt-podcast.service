@@ -31,8 +31,11 @@ RestrictSUIDSGID=true
 ReadWritePaths=/srv/chino-valley-today/data /srv/chino-valley-today/content /srv/chino-valley-today/reports /srv/chino-valley-today/site /srv/chino-valley-today/site/public/audio /var/www/chinovalley.today
 
 # The Gemini free tier's TTS capacity is sheddable, so a run can spend a while
-# retrying rejected chunks before giving up for this firing.
-TimeoutStartSec=30min
+# retrying rejected chunks before giving up for this firing. Raised from 30min
+# on 2026-09-14: the LLM retry budget (CVT_LLM_BUDGET_MS, 10min per call) times
+# the four calls a gated run can make did not fit, so a slow judge was killed
+# mid-retry instead of failing cleanly.
+TimeoutStartSec=45min
 
 [Install]
 WantedBy=multi-user.target

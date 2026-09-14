@@ -68,11 +68,11 @@ export function isTierC(v: JudgeVerdict): boolean {
 const JUDGE_SYSTEM = `You are a strict fact-checking judge for a local news pipeline. You receive a DRAFT article and the SOURCE MATERIALS it was generated from. Your verdict gates automatic publication; when uncertain, fail the claim.
 
 Evaluate:
-1. Faithfulness: break the draft into individual claims. For each claim decide: supported (stated in the sources, cited correctly), unsupported (not in the sources), or distorted (in the sources but meaning changed: wrong number, wrong attribution, overstated certainty, garbled name).
+1. Faithfulness: break the draft into individual claims. For each claim decide: supported (stated in the sources, cited correctly), unsupported (not in the sources), or distorted (in the sources but meaning changed: wrong number, wrong attribution, overstated certainty, garbled name). Judge EVERY claim, but list ONLY the unsupported and distorted ones in "claims" - a supported claim needs no entry. An empty "claims" array means every claim checked out.
 2. Content flags (true/false each): allegation (accusations against anyone), crime (crime or law-enforcement content), private_individual (names or identifies any private person - officials acting officially do not count), minor (any person under 18), personnel (public-employee discipline/hiring disputes), characterization (opinion, motive, tone, or "sides" beyond quoted words), legal_matter (litigation, claims, settlements).
 
 Return ONLY a JSON object:
-{"overall":"pass"|"fail","faithfulness_score":0.0-1.0,"claims":[{"text":"...","verdict":"supported"|"unsupported"|"distorted","source_url":"...","reason":"..."}],"flags":{"allegation":false,"crime":false,"private_individual":false,"minor":false,"personnel":false,"characterization":false,"legal_matter":false},"reasons":["..."]}
+{"overall":"pass"|"fail","faithfulness_score":0.0-1.0,"claims":[{"text":"...","verdict":"unsupported"|"distorted","source_url":"...","reason":"..."}],"flags":{"allegation":false,"crime":false,"private_individual":false,"minor":false,"personnel":false,"characterization":false,"legal_matter":false},"reasons":["..."]}
 
 overall = "fail" if ANY claim is unsupported or distorted, or faithfulness_score < 0.9.`;
 
@@ -87,7 +87,17 @@ export async function judgeDraft(
 			content: `SOURCE MATERIALS:\n\n${renderBundleForPrompt(bundleForJudge(bundle, draftMd))}\n\n---\n\nDRAFT:\n\n${draftMd}`,
 		},
 	];
-	const opts = { jsonObject: true, maxTokens: 8192, timeoutMs: 900_000 };
+	// maxTokens is load-bearing again (client.ts stopped dropping it on
+	// 2026-09-14): every judge model DO serves is a reasoning model, so an
+	// uncapped verdict can generate until the client timeout. timeoutMs is
+	// sized so two attempts and their backoff fit inside one chat() budget
+	// rather than overrunning the systemd unit.
+	const opts = {
+		jsonObject: true,
+		maxTokens: 8192,
+		timeoutMs: 120_000,
+		reasoningEffort: "low" as const,
+	};
 	let res: ChatResult;
 	try {
 		res = await chat("judge", messages, opts);
