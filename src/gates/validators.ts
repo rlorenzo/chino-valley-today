@@ -954,6 +954,29 @@ const CONNECTORS = new Set([
 	"der",
 ]);
 
+// Clock-face and timezone markers. They scan as capitalized words and sit
+// directly beside weekday names, so without this they fuse into candidates
+// like "PM Thursday" that name nothing and can never ground: the NWS corpus
+// writes "8 PM PDT Thursday" while a draft naturally drops the zone, so the
+// two spellings are never contiguous. Treated as a sequence BREAKER rather
+// than stripped off the front, because the marker turns up on either side of
+// the weekday ("Thursday PM", "8 PM Thursday") and in the middle of a run;
+// breaking is position-independent, so all of those reduce to the bare
+// weekday, which the allowlist already covers. A real name beside a marker is
+// still checked on its own — "8 PM Rialto Bandshell" still reports "Rialto
+// Bandshell" — which front-stripping could only manage in one position.
+// Deliberately limited to the markers this Pacific-time pipeline actually
+// emits: the ambiguous two-letter zones (MT, CT, ET, PT) are excluded because
+// they collide with real names like "Mt Baldy" and would punch holes in the
+// gate in exchange for zones no source here produces.
+const CLOCK_WORDS = new Set(["am", "pm", "pdt", "pst"]);
+
+// A token may seed or extend a name sequence only if it is capitalized and is
+// not one of those markers.
+function isNameToken(text: string): boolean {
+	return /^[A-Z]/.test(text) && !CLOCK_WORDS.has(text.toLowerCase());
+}
+
 const WORD_RE = /[A-Za-z][A-Za-z'-]*/g;
 // A colon ends a sentence part too, so the word after a label starts a new
 // one. Without this a speaker or field label eats the sentence-initial slot
@@ -1058,7 +1081,7 @@ function findNameSequences(
 	for (const tokens of tokenizeBySentence(text)) {
 		let i = 0;
 		while (i < tokens.length) {
-			if (!/^[A-Z]/.test(tokens[i].text)) {
+			if (!isNameToken(tokens[i].text)) {
 				i++;
 				continue;
 			}
@@ -1067,7 +1090,7 @@ function findNameSequences(
 			while (j < tokens.length) {
 				const prevEnd = tokens[j - 1].end;
 				if (
-					/^[A-Z]/.test(tokens[j].text) &&
+					isNameToken(tokens[j].text) &&
 					isWhitespaceGap(text, prevEnd, tokens[j].start)
 				) {
 					seq.push(tokens[j]);
@@ -1076,7 +1099,7 @@ function findNameSequences(
 					CONNECTORS.has(tokens[j].text.toLowerCase()) &&
 					isWhitespaceGap(text, prevEnd, tokens[j].start) &&
 					j + 1 < tokens.length &&
-					/^[A-Z]/.test(tokens[j + 1].text) &&
+					isNameToken(tokens[j + 1].text) &&
 					isWhitespaceGap(text, tokens[j].end, tokens[j + 1].start)
 				) {
 					seq.push(tokens[j], tokens[j + 1]);

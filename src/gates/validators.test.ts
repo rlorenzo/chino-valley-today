@@ -679,6 +679,60 @@ describe("Gate 1c — proper-name whitelist", () => {
 		);
 	});
 
+	test("does not false-positive: a draft dropping the timezone still grounds", () => {
+		const input: GateInput = {
+			bodyMd: `**Dan:** The advisory ran from 10 AM Wednesday until 8 PM Thursday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Dan. WHEN...From 10 AM Wednesday to 8 PM PDT Thursday. IMPACTS...Hot temperatures.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("a clock marker breaks a sequence from any position, not just the front", () => {
+		// Markers turn up before, after and between the weekdays they sit next
+		// to. Breaking on them (rather than stripping the leading one) is what
+		// makes every one of these reduce to a bare allowlisted weekday.
+		for (const phrasing of [
+			"The advisory expires 8 PM Thursday PDT.", // trailing zone
+			"The advisory expires Thursday PM.", // trailing marker
+			"The advisory runs Wednesday PDT Thursday.", // marker in the middle
+			"PDT Thursday is when the advisory expires.", // sentence-initial marker
+		]) {
+			const input: GateInput = {
+				bodyMd: `**Dan:** ${phrasing} [Source](https://example.com/a)`,
+				allowedUrls: ["https://example.com/a"],
+				inputCorpus:
+					"Dan. WHEN...From 10 AM Wednesday to 8 PM PDT Thursday. IMPACTS...Hot temperatures.",
+			};
+			const report = validateDraft(input);
+			assert.equal(
+				failuresFor(report.failures, "proper_names").length,
+				0,
+				phrasing,
+			);
+		}
+	});
+
+	test("a clock marker splits its neighbours instead of hiding them", () => {
+		// The breaker must not become a way to launder a hallucination by
+		// parking it next to a marker: each side is still checked on its own.
+		const input: GateInput = {
+			bodyMd: `**Dan:** Gates open Thursday PDT Rialto Bandshell. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Dan. Gates open 8 PM PDT Thursday.",
+		};
+		const report = validateDraft(input);
+		const failures = failuresFor(report.failures, "proper_names");
+		assert.ok(failures.some((f) => f.detail.includes("Rialto Bandshell")));
+		assert.equal(
+			failures.filter((f) => f.detail.includes("PDT")).length,
+			0,
+			"the marker itself must never appear in a reported candidate",
+		);
+	});
+
 	test("headings are excluded from name scanning (title-case headings do not need corpus grounding)", () => {
 		const input: GateInput = {
 			bodyMd: `## Business License Reform Approved\n\nThe council approved the item. [Agenda](https://example.com/a)`,
