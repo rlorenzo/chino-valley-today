@@ -15,6 +15,7 @@ import {
 	getPost,
 	listPosts,
 	type PostRow,
+	TIER_C_ACK,
 	transitionPost,
 } from "../pipeline/posts.ts";
 import { ROOT } from "../store.ts";
@@ -105,7 +106,7 @@ function renderHeld(db: Db): string {
         <div class="actions">
           <form class="inline" method="post" action="/posts/${encodeURIComponent(p.slug)}/approve">
             ${ackBlock}
-            <button type="submit" class="approve">Approve &rarr; publish</button>
+            <button type="submit" class="approve">${p.post_type === "podcast" ? "Approve &rarr; render audio" : "Approve &rarr; publish"}</button>
           </form>
           <form class="inline" method="post" action="/posts/${encodeURIComponent(p.slug)}/reject">
             <button type="submit" class="reject">Reject</button>
@@ -337,13 +338,32 @@ export function createApp(db: Db) {
 				400,
 			);
 		}
+		const ack = post.tier === "C" ? TIER_C_ACK : "";
+		// A podcast is not finished when it is approved. The fixed intro and
+		// sign-off are spliced in by composeTranscript and the audio is
+		// rendered by the podcast job — minutes of Gemini calls and ffmpeg,
+		// which has no business inside an HTTP request. Publishing straight
+		// from here would ship the raw draft: no week intro, no AI disclosure
+		// in the cold open, no sign-off, and an episode with no audio, which a
+		// podcast client reads as a broken item.
+		//
+		// So approval marks it instead. The "audio:" prefix is the resume
+		// contract in src/podcast/run.ts, which finishes and publishes it on
+		// its next run, ahead of the MIN_POSTS check so a quiet week cannot
+		// strand an approved episode.
+		if (post.post_type === "podcast") {
+			transitionPost(db, slug, "held", {
+				heldReason: `audio:approved — renders and publishes on the next podcast run${ack}`,
+			});
+			return c.redirect("/", 303);
+		}
 		// transitionPost moves the file to content/published/ and updates the
 		// posts row; write actions go through it exclusively so file and DB
 		// status never drift apart. The non-null heldReason marker records that
 		// this was a human approval (see renderAudit's sampling universe above).
 		transitionPost(db, slug, "published", {
 			publishedVia: "manual",
-			heldReason: `reviewed:approved${post.tier === "C" ? " (Tier C acknowledgment confirmed)" : ""}`,
+			heldReason: `reviewed:approved${ack}`,
 		});
 		return c.redirect("/", 303);
 	});

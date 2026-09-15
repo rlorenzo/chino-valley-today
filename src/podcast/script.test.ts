@@ -224,6 +224,16 @@ describe("composeTranscript", () => {
 		assert.equal(parseTurns(out).length, before + 4);
 	});
 
+	test("composing an already-composed transcript changes nothing", () => {
+		// The audio-promote failure path holds the post with the composed
+		// transcript in its body; the resume run composes whatever is on disk.
+		assert.equal(composeTranscript(out, MONDAY), out);
+		assert.equal(
+			parseTurns(composeTranscript(out, MONDAY)).length,
+			parseTurns(out).length,
+		);
+	});
+
 	test("throws rather than publish a transcript with no cold open", () => {
 		assert.throws(
 			() => composeTranscript("## Last week\n\n**Maya:** Hi.", MONDAY),

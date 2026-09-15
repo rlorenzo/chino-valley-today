@@ -73,6 +73,23 @@ export function laDatePlusDays(laDate: string, days: number): string {
 	return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+/**
+ * The oldest episode held for audio — its render failed, or a human approved
+ * it in the dashboard — or undefined if there is no backlog.
+ *
+ * An episode held this way is a work item, not a property of today's date. The
+ * podcast timer fires Mondays only, so keying the resume off the current week's
+ * slug strands anything approved Tuesday through Sunday: the next firing
+ * computes the NEXT week's slug and generates a fresh episode over the top of
+ * it. Callers derive the week from this row's `meeting_date` instead.
+ */
+export function pendingAudioEpisode(db: Db): PostRow | undefined {
+	// listPosts is created_at DESC, so findLast is the oldest.
+	return listPosts(db, "held").findLast(
+		(p) => p.post_type === "podcast" && p.held_reason?.startsWith("audio:"),
+	);
+}
+
 // Last week's weather already happened. A heat advisory that expired on
 // Thursday is not news on Monday, and the W38 draft spent three of its turns
 // on expired advisories — the single least interesting thing in the episode.
