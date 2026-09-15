@@ -152,6 +152,10 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 						'that IS in the citable list below, copied character-for-character. If a number "does not appear in ' +
 						'the input corpus", remove that claim entirely (you do not have the sources in this message — do not ' +
 						"guess a replacement number). " +
+						'If a name "does not appear in the input corpus", write the name exactly as the sources write it ' +
+						"or drop the name from the sentence. Do NOT invent a variant, a compound, or a longer " +
+						"official-sounding title to get around the failure — a reworded name fails the same check again. " +
+						"Never split one source item into two, or merge two into one, while repairing. " +
 						(o.repairGuidance ?? "") +
 						'If a block "has no citation link", add a link from the citable list ' +
 						"that the surrounding claims already use, or delete the block. Return the complete corrected draft " +
