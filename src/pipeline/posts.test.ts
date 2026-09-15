@@ -265,6 +265,24 @@ describe("createPost respects a terminal post on disk with no DB row", () => {
 			rmSync(queued, { force: true });
 		}
 	});
+
+	// What the podcast resume path in src/podcast/run.ts leans on: rendering
+	// takes minutes and the dashboard's Reject button stays live throughout, so
+	// a re-file after the render must report that the decision already happened
+	// rather than quietly updating the row.
+	test("skips a rejected row rather than re-filing over it", () => {
+		const db = openDb(":memory:");
+		try {
+			createPost(db, draft);
+			transitionPost(db, slug, "rejected");
+			const res = createPost(db, { ...draft, bodyMd: "rendered body" });
+			assert.equal(res.outcome, "skipped");
+			assert.equal(getPost(db, slug)?.status, "rejected");
+		} finally {
+			rmSync(join(ROOT, "content", "rejected", `${slug}.md`), { force: true });
+			rmSync(join(ROOT, "content", "queue", `${slug}.md`), { force: true });
+		}
+	});
 });
 
 // The site publishes a post at Astro's collection id, which its glob loader

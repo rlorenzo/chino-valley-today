@@ -5,7 +5,12 @@ import { describe, test } from "node:test";
 import { openDb } from "../db/index.ts";
 import { createPost, type NewPost, transitionPost } from "../pipeline/posts.ts";
 import { ROOT } from "../store.ts";
-import { laDatePlusDays, pacificDay, podcastInputs } from "./inputs.ts";
+import {
+	laDatePlusDays,
+	pacificDay,
+	pendingAudioEpisode,
+	podcastInputs,
+} from "./inputs.ts";
 
 const MONDAY = pacificDay("2026-09-07");
 const SOURCE = "https://chino.gov/agenda/1";
@@ -400,5 +405,105 @@ describe("date helpers", () => {
 		assert.equal(laDatePlusDays("2026-12-28", 7), "2027-01-04");
 		// Pacific falls back on 2026-11-01; calendar-day math must not shift.
 		assert.equal(laDatePlusDays("2026-10-26", 7), "2026-11-02");
+	});
+});
+
+// The podcast timer fires Mondays only. If the resume lookup were keyed off
+// the current week's slug, an episode approved on a Tuesday would be found by
+// no later run — the next Monday computes a new week and regenerates over it.
+describe("pendingAudioEpisode", () => {
+	const PREFIX = `${SLUG_PREFIX}-pending`;
+
+	function heldEpisode(
+		db: ReturnType<typeof openDb>,
+		name: string,
+		heldReason: string,
+		over: Partial<NewPost> = {},
+	): string {
+		const slug = `${PREFIX}-${name}`;
+		createPost(db, {
+			slug,
+			postType: "podcast",
+			tier: "B",
+			title: `Episode ${name}`,
+			bodyMd: `Body for ${name}.`,
+			sources: [SOURCE],
+			meetingDate: "2026-09-07",
+			...over,
+		});
+		transitionPost(db, slug, "held", { heldReason });
+		return slug;
+	}
+
+	test("finds an episode approved in the dashboard, with its week", () => {
+		const db = openDb(":memory:");
+		const slug = heldEpisode(
+			db,
+			"approved",
+			"audio:approved — renders next run",
+		);
+		try {
+			const found = pendingAudioEpisode(db);
+			assert.equal(found?.slug, slug);
+			// The week comes off the row, not off today's date: this is what lets
+			// a run on any weekday pick the episode back up.
+			assert.equal(found?.meeting_date, "2026-09-07");
+		} finally {
+			cleanup([slug]);
+		}
+	});
+
+	test("finds an episode whose render failed", () => {
+		const db = openDb(":memory:");
+		const slug = heldEpisode(db, "failed", "audio: TTS chunk 3 rejected");
+		try {
+			assert.equal(pendingAudioEpisode(db)?.slug, slug);
+		} finally {
+			cleanup([slug]);
+		}
+	});
+
+	test("ignores holds that are not waiting on audio", () => {
+		const db = openDb(":memory:");
+		const slugs = [
+			heldEpisode(db, "gate2", "gate2: judge flagged tone"),
+			heldEpisode(db, "tierc", "tierC: names a private individual"),
+		];
+		try {
+			assert.equal(pendingAudioEpisode(db), undefined);
+		} finally {
+			cleanup(slugs);
+		}
+	});
+
+	test("ignores a non-podcast hold", () => {
+		const db = openDb(":memory:");
+		const slug = heldEpisode(db, "recap", "audio:approved", {
+			postType: "meeting_recap",
+		});
+		try {
+			assert.equal(pendingAudioEpisode(db), undefined);
+		} finally {
+			cleanup([slug]);
+		}
+	});
+
+	test("returns the oldest when a week's backlog has piled up", () => {
+		const db = openDb(":memory:");
+		const older = heldEpisode(db, "older", "audio:approved", {
+			meetingDate: "2026-08-31",
+		});
+		db.raw
+			.prepare("UPDATE posts SET created_at = ? WHERE slug = ?")
+			.run("2026-08-31T10:00:00.000Z", older);
+		const newer = heldEpisode(db, "newer", "audio:approved");
+		db.raw
+			.prepare("UPDATE posts SET created_at = ? WHERE slug = ?")
+			.run("2026-09-07T10:00:00.000Z", newer);
+		try {
+			assert.equal(pendingAudioEpisode(db)?.slug, older);
+		} finally {
+			cleanup([older, newer]);
+		}
 	});
 });

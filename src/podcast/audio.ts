@@ -4,7 +4,13 @@
 // scratchpad/podcast/render-gemini.mjs.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import {
+	copyFileSync,
+	mkdirSync,
+	readFileSync,
+	statSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { Agent, fetch as undiciFetch } from "undici";
 import { SITE_ORIGIN } from "../pipeline/site-url.ts";
@@ -201,6 +207,20 @@ function runFfprobe(path: string): number {
 	return Number(out.toString().trim());
 }
 
+/**
+ * Moves a rendered episode's MP3 and chapters sidecar into the public asset
+ * directory. Called only after the post is committed to `published`, so the
+ * two things a listener can reach — the post and the recording — appear
+ * together. Copies rather than moves: the cache copy is what a re-run reuses.
+ */
+export function publishEpisodeAudio(slug: string): void {
+	const audioDir = join(ROOT, "site", "public", "audio");
+	mkdirSync(audioDir, { recursive: true });
+	for (const name of [`${slug}.mp3`, `${slug}.chapters.json`]) {
+		copyFileSync(join(cacheDir(), name), join(audioDir, name));
+	}
+}
+
 export async function renderEpisode(
 	opts: RenderEpisodeOpts,
 ): Promise<RenderEpisodeResult> {
@@ -352,9 +372,12 @@ export async function renderEpisode(
 			.join("")}`,
 	);
 
-	const audioDir = join(ROOT, "site", "public", "audio");
-	mkdirSync(audioDir, { recursive: true });
-	const outPath = join(audioDir, `${opts.slug}.mp3`);
+	// Rendered into the private cache dir, not site/public/audio: every astro
+	// build copies that directory into the release (deploy/README.md), so an
+	// episode a human rejects while the render is running would be served at
+	// /audio/<slug>.mp3 anyway. publishEpisodeAudio promotes it once the post
+	// is really published.
+	const outPath = join(cacheDir(), `${opts.slug}.mp3`);
 	runFfmpeg(rawPath, ffmetaPath, outPath);
 
 	const durationSec = Math.round(runFfprobe(outPath));
@@ -369,7 +392,7 @@ export async function renderEpisode(
 		title: c.title,
 	}));
 	writeFileSync(
-		join(audioDir, `${opts.slug}.chapters.json`),
+		join(cacheDir(), `${opts.slug}.chapters.json`),
 		JSON.stringify({ version: "1.2.0", chapters: chaptersOut }, null, 2),
 	);
 
