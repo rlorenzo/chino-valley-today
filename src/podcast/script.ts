@@ -335,6 +335,8 @@ FORMAT — follow exactly; a script that breaks any of these rules is discarded.
 
 FACTS
 - Use ONLY what the source material below states. If it is not there, it does not go in the script. Never add background, context, history, population figures, explanations of what a body does, or anything you happen to know about Chino Valley.
+- Name a body, an event or a place exactly as the source material names it. Do not add a city, an agency or any other qualifier in front of a name, even a correct one: "Parks and Recreation Commission" does not become "Chino Hills Parks and Recreation Commission".
+- Describe two listings as one event only when the sources show they ARE one event — same title, same registration link, or one plainly a translation of the other. Matching time and place alone is not enough; two different programs can share a venue and a start time, so keep them separate when in doubt. Use the words the listing uses, and never infer an attribute the sources do not state — a listing written in Spanish does not say the word "Spanish".
 - Write every number, date, time, dollar amount and vote tally EXACTLY as the source writes it: "September 8", "6:00 PM", "$1.2 million", "4-1". Do not spell numbers out, do not convert them, do not round them, do not reformat a date.
 - Attribute rather than assert: "according to the agenda", "the sheriff's station said", "the city's notice says", "per the district's calendar". A recap of a meeting is a summary of the public record, never "the minutes".
 - Never say a story was reported by us or anyone else, and never refer to previous episodes.

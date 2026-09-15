@@ -733,6 +733,107 @@ describe("Gate 1c — proper-name whitelist", () => {
 		);
 	});
 
+	test("a qualified name passes when the corpus carries that exact name", () => {
+		const input: GateInput = {
+			bodyMd: `**Maya:** The Chino Hills Parks and Recreation Commission meets Wednesday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya. Meeting Preview: Chino Hills Parks and Recreation Commission — September 16, 2026.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("a place spliced onto a grounded name is held (the corpus must carry the whole name)", () => {
+		const input: GateInput = {
+			bodyMd: `**Maya:** The Chino Hills Parks and Recreation Commission meets Wednesday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya. Meeting Preview: Parks and Recreation Commission — September 16, 2026.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Chino Hills Parks"),
+			),
+		);
+	});
+
+	test("a place prefix does not swap a name's jurisdiction", () => {
+		const input: GateInput = {
+			bodyMd: `**Maya:** The Chino Hills High School hosts the workshop. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Maya. The Chino High School hosts the workshop.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Chino Hills High School"),
+			),
+		);
+	});
+
+	test("a place prefix does not turn a common noun into a venue name", () => {
+		const input: GateInput = {
+			bodyMd: `**Maya:** The Chino Hills Park opens Wednesday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Maya. The park opens Wednesday.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Chino Hills Park"),
+			),
+		);
+	});
+
+	test("a place does not launder an invented name behind it", () => {
+		const input: GateInput = {
+			bodyMd: `**Maya:** The Chino Hills Fabricated Hall opens Wednesday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya. Meeting Preview: Parks and Recreation Commission — September 16, 2026.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Fabricated Hall"),
+			),
+		);
+	});
+
+	test("a name that only matches the corpus mid-word is held", () => {
+		// "Chino Hills Park" shares the prefix "Chino Hills" and the stem "Park"
+		// with the corpus, but the corpus names no such venue.
+		const input: GateInput = {
+			bodyMd: `**Maya:** The Chino Hills Park opens Wednesday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya. Meeting Preview: Parks and Recreation Commission — September 16, 2026.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Chino Hills Park"),
+			),
+		);
+	});
+
+	test("a weekday or state is not a place prefix that can launder a name", () => {
+		const input: GateInput = {
+			bodyMd: `**Maya:** The Nevada Recreation Commission meets Wednesday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya. Meeting Preview: Parks and Recreation Commission — September 16, 2026.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Nevada Recreation Commission"),
+			),
+		);
+	});
+
 	test("headings are excluded from name scanning (title-case headings do not need corpus grounding)", () => {
 		const input: GateInput = {
 			bodyMd: `## Business License Reform Approved\n\nThe council approved the item. [Agenda](https://example.com/a)`,
