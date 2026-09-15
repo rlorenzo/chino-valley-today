@@ -133,6 +133,97 @@ describe("podcastInputs — last week's posts", () => {
 		}
 	});
 
+	test("skips a preview of an event that has not happened yet", () => {
+		const db = openDb(":memory:");
+		const slugs: string[] = [];
+		try {
+			// Published inside the window, but the event is after the episode
+			// Monday, so it is not part of "last week".
+			slugs.push(
+				publish(db, "future", "2026-09-03T14:00:00.000Z", {
+					meetingDate: "2026-09-26",
+				}),
+			);
+			// Same window, an event that already happened: still last week's.
+			slugs.push(
+				publish(db, "past", "2026-09-03T14:00:00.000Z", {
+					postType: "meeting_recap",
+					meetingDate: "2026-09-02",
+				}),
+			);
+
+			assert.deepEqual(
+				podcastInputs(db, MONDAY).posts.map((p) => p.slug),
+				[`${SLUG_PREFIX}-past`],
+			);
+		} finally {
+			cleanup(slugs);
+		}
+	});
+
+	test("drops last week's lapsed forecasts but keeps the flood", () => {
+		const db = openDb(":memory:");
+		const slugs: string[] = [];
+		try {
+			// Slugs and titles are the shapes the generators really produce:
+			// alertPostSlug ends `-alert-<8 hex>`, and generateAlerts prefixes
+			// every title with "Weather Alert: " (src/tiera/alerts.ts).
+			// Published at distinct instants: listPosts orders by created_at, which
+			// ties within a test, so published_at is what makes the order defined.
+			const alert = (name: string, hour: string, title: string): void => {
+				slugs.push(
+					publish(db, `${name}-alert-abcd1234`, `2026-09-03T${hour}:00.000Z`, {
+						postType: "alert",
+						title: `Weather Alert: ${title}`,
+					}),
+				);
+			};
+			alert(
+				"heat",
+				"14:00",
+				"Heat Advisory issued September 2 at 2:30AM PDT until " +
+					"September 3 at 8:00PM PDT by NWS San Diego CA",
+			);
+			alert(
+				"wind",
+				"15:00",
+				"High Wind Advisory issued September 2 by NWS San Diego CA",
+			);
+			// A red flag warning is a forecast of fire RISK, so it goes too: if
+			// anything actually burned, the sheriff's release below is the story.
+			alert(
+				"redflag",
+				"16:00",
+				"Red Flag Warning issued September 2 by NWS San Diego CA",
+			);
+			// Flooding leaves damage behind, so it still has something to say.
+			alert(
+				"flood",
+				"17:00",
+				"Flood Warning issued September 2 by NWS San Diego CA",
+			);
+
+			// Nixle sheriff releases are alert-typed too, and end `-nixle-<hash>`.
+			// This one mentions wind and rain and must survive anyway.
+			slugs.push(
+				publish(db, "release-nixle-99887766", "2026-09-03T18:00:00.000Z", {
+					postType: "alert",
+					title: "High Wind Downs Power Line, Rain Closes Los Serranos Roads",
+				}),
+			);
+
+			assert.deepEqual(
+				podcastInputs(db, MONDAY).posts.map((p) => p.title),
+				[
+					"Weather Alert: Flood Warning issued September 2 by NWS San Diego CA",
+					"High Wind Downs Power Line, Rain Closes Los Serranos Roads",
+				],
+			);
+		} finally {
+			cleanup(slugs);
+		}
+	});
+
 	test("skips a post that is queued, held or rejected", () => {
 		const db = openDb(":memory:");
 		const slugs: string[] = [];

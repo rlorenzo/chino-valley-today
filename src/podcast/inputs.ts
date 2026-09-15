@@ -18,11 +18,12 @@ import {
 	type BriefEventAhead,
 	listPosts,
 	type NewPost,
+	type PostRow,
 } from "../pipeline/posts.ts";
 import { SITE_ORIGIN } from "../pipeline/site-url.ts";
 import { ROOT } from "../store.ts";
 import { queryItems } from "../tiera/queries.ts";
-import { localMeetingDate } from "../tiera/util.ts";
+import { alertPostSlugHashOf, localMeetingDate } from "../tiera/util.ts";
 
 export interface PodcastPost {
 	slug: string;
@@ -72,6 +73,41 @@ export function laDatePlusDays(laDate: string, days: number): string {
 	return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
 }
 
+// Last week's weather already happened. A heat advisory that expired on
+// Thursday is not news on Monday, and the W38 draft spent three of its turns
+// on expired advisories — the single least interesting thing in the episode.
+//
+// Expiry cannot be the test, even though every alert carries one: generateAlerts
+// mints a post only for an advisory still in force (src/tiera/alerts.ts), so by
+// Monday nearly every alert post in the window has lapsed, the consequential
+// ones included. The test is what KIND of weather it was — whether anything is
+// left to say once the forecast runs out. Flooding leaves damage behind; a
+// tsunami is an event that happened. Heat, wind, fog, frost, air quality and
+// fire WEATHER are all forecasts of risk, and a risk that did not materialise
+// is not a story. One that did arrives as a sheriff's release instead.
+//
+// Written as a keep-list rather than a drop-list so an NWS product nobody
+// anticipated is dropped rather than kept: a miss costs one dull turn, which is
+// the thing being fixed, not a wrong one.
+const CONSEQUENTIAL_WEATHER_RE = /\b(flood|tsunami)/i;
+
+/**
+ * A past-week weather advisory with nothing left to say by Monday.
+ *
+ * Gated on the slug marker and not on `post_type` alone, because
+ * nixle-releases.ts mints alert-typed posts too and a sheriff's release about
+ * a wind-downed line or a rain closure is real news. Same join the brief uses
+ * in dropAlertPostsShownAsActive.
+ */
+function isRoutineWeatherAlert(
+	post: Pick<PostRow, "post_type" | "slug">,
+	title: string,
+): boolean {
+	if (post.post_type !== "alert") return false;
+	if (alertPostSlugHashOf(post.slug) === null) return false;
+	return !CONSEQUENTIAL_WEATHER_RE.test(title);
+}
+
 /**
  * `monday` is any instant on the episode's Monday, Pacific.
  *
@@ -88,14 +124,26 @@ export function podcastInputs(db: Db, monday: Date): PodcastInputs {
 	for (const row of listPosts(db, "published")) {
 		if (EXCLUDED_TYPES.has(row.post_type)) continue;
 		if (!row.published_at) continue;
+		// "Last week" means what happened, not what was written about. A
+		// preview published last Friday for an event two weeks out is neither
+		// last week's news nor next week's schedule, and the W38 draft recapped
+		// a September 26 celebration as though it had already happened. If the
+		// event is close enough to matter the week-ahead segment picks it up
+		// from the calendar; further out, it waits for the episode that covers
+		// the week it lands in.
+		if (row.meeting_date && row.meeting_date >= mondayDate) continue;
 		const day = localMeetingDate(row.published_at);
 		if (day === null || day < weekStart || day >= mondayDate) continue;
 		const parsed = parsePostFile(
 			readFileSync(join(ROOT, row.file_path), "utf8"),
 		);
+		const title = parsed.title || row.slug;
+		// After the file read, because the title lives in the frontmatter and
+		// PostRow does not carry it.
+		if (isRoutineWeatherAlert(row, title)) continue;
 		posts.push({
 			slug: row.slug,
-			title: parsed.title || row.slug,
+			title,
 			// Astro's glob loader lowercases the filename into the collection id and
 			// routes /posts/<id>/ (see postUrl in site/src/lib/record.ts). createPost
 			// normalizes the stored slug to match, so the stored slug IS the id.
