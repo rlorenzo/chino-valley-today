@@ -587,6 +587,98 @@ describe("Gate 1c — proper-name whitelist", () => {
 		);
 	});
 
+	test("does not false-positive: undotted AM/PM grounds against a dotted corpus", () => {
+		const input: GateInput = {
+			bodyMd: `**Dan:** The advisory ran from 10 AM Tuesday until 8 PM Thursday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Dan. The advisory ran from 10 a.m. Tuesday until 8 p.m. Thursday.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("does not false-positive: a meridiem grounds anywhere in the candidate, not just first", () => {
+		const input: GateInput = {
+			bodyMd: `**Dan:** Registration opens Monday AM and the gate shuts Thursday PM. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Dan. Registration opens Monday a.m. and the gate shuts Thursday p.m.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("does not false-positive: a bare trailing meridiem grounds against a dotted corpus", () => {
+		const input: GateInput = {
+			bodyMd: `**Dan:** The meeting ends at 8 PM. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Dan. The meeting ends at 8 p.m.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("does not false-positive: any dotted abbreviation grounds undotted (U.S. -> US)", () => {
+		const input: GateInput = {
+			bodyMd: `**Dan:** The US Forest Service closed the trail. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Dan. The U.S. Forest Service closed the trail.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("closing up dotted initials does not swallow a middle initial's surname", () => {
+		const input: GateInput = {
+			bodyMd: `**Dan:** Mayor Eunice M Ulloa spoke, and so did Curtis Burton. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Dan. Mayor Eunice M. Ulloa spoke, and so did C. Burton.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Curtis Burton"),
+			),
+		);
+		assert.equal(
+			failuresFor(report.failures, "proper_names").filter((f) =>
+				f.detail.includes("Ulloa"),
+			).length,
+			0,
+		);
+	});
+
+	test("consecutive initials ground both spaced and closed up", () => {
+		for (const spelling of ["J R R Tolkien", "J.R.R. Tolkien"]) {
+			const input: GateInput = {
+				bodyMd: `**Dan:** The library discussed ${spelling}. [Source](https://example.com/a)`,
+				allowedUrls: ["https://example.com/a"],
+				inputCorpus: "Dan. The library discussed J. R. R. Tolkien.",
+			};
+			const report = validateDraft(input);
+			assert.equal(
+				failuresFor(report.failures, "proper_names").length,
+				0,
+				spelling,
+			);
+		}
+	});
+
+	test("a meridiem does not hide an ungrounded name next to it", () => {
+		const input: GateInput = {
+			bodyMd: `**Dan:** Doors open at 8 PM Rialto Bandshell. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Dan. Doors open at 8 p.m.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Rialto Bandshell"),
+			),
+		);
+	});
+
 	test("headings are excluded from name scanning (title-case headings do not need corpus grounding)", () => {
 		const input: GateInput = {
 			bodyMd: `## Business License Reform Approved\n\nThe council approved the item. [Agenda](https://example.com/a)`,

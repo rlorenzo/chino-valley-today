@@ -86,8 +86,6 @@ await runGatedPipeline({
 	// Record-derived corpora fuse adjacent capitalized words more often, so the
 	// proper-name gate needs explicit repair guidance here.
 	repairGuidance:
-		'If a name "does not appear in the input corpus", reword to eliminate ' +
-		"that exact capitalized phrase: use names only exactly as the sources write them, and break " +
-		"accidental fusions of adjacent capitalized words (a common cause is a capitalized word at the " +
+		"Break accidental fusions of adjacent capitalized words (a common cause is a capitalized word at the " +
 		"start of a sentence directly before a place or agency name). ",
 });

@@ -1102,12 +1102,30 @@ function runProperNamesGate(
 	inputCorpus: string,
 ): { failures: GateFailure[]; stats: Record<string, number> } {
 	const failures: GateFailure[] = [];
-	// Periods become spaces (not dropped) before matching: WORD_RE never
-	// captures a period, so a candidate like "Eunice M Ulloa" must still find
-	// "Eunice M. Ulloa" in the corpus — collapsing "M." to "M " keeps the
-	// token boundary intact instead of fusing "M" into "MUlloa".
-	const corpusNorm = collapseWhitespace(
+	// A run of dotted single letters is ONE abbreviation, not several words, so
+	// it is closed up first: the corpus writes "8 p.m. Thursday" and "U.S.
+	// Forest Service" where the draft writes "8 PM Thursday" and "US Forest
+	// Service", and WORD_RE cannot produce a dotted candidate to match the long
+	// form with. Without this the period pass below splits them into "p m" and
+	// "u s" and the undotted spelling can never ground, at any position in a
+	// candidate. Held the 2026-W38 podcast three times over in one draft.
+	// The next letter must itself be dotted, so a lone initial before a real
+	// word is untouched ("grade B. I asked" must not become "grade bi asked").
+	//
+	// Both forms are kept and a candidate grounds if EITHER contains it, because
+	// a run of dotted initials is written both ways in drafts: the corpus
+	// "J. R. R. Tolkien" collapses to "jrr tolkien" for a draft writing
+	// "J.R.R. Tolkien", but a draft writing "J R R Tolkien" needs the spaced
+	// form. Periods become spaces there (not dropped): "Eunice M Ulloa" must
+	// still find "Eunice M. Ulloa" — collapsing "M." to "M " keeps the token
+	// boundary intact instead of fusing "M" into "MUlloa".
+	const corpusSpaced = collapseWhitespace(
 		inputCorpus.replace(/\./g, " "),
+	).toLowerCase();
+	const corpusCollapsed = collapseWhitespace(
+		inputCorpus
+			.replace(/\b([A-Za-z])\.\s*(?=[A-Za-z]\.)/g, "$1")
+			.replace(/\./g, " "),
 	).toLowerCase();
 
 	const sequences = findNameSequences(scanText);
@@ -1122,7 +1140,11 @@ function runProperNamesGate(
 		const candidateLower = candidate.toLowerCase();
 		checked++;
 		if (BUILTIN_ALLOWLIST_SET.has(candidateLower)) continue;
-		if (corpusNorm.includes(candidateLower)) continue;
+		if (
+			corpusSpaced.includes(candidateLower) ||
+			corpusCollapsed.includes(candidateLower)
+		)
+			continue;
 
 		failed++;
 		failures.push({
