@@ -134,6 +134,14 @@ function wordCount(s: string): number {
 	return s.split(/\s+/).filter(Boolean).length;
 }
 
+// Spoken length. The gate below enforces the hard bounds; the prompt and the
+// repair guidance quote the same numbers, so they are written once here and
+// interpolated rather than restated in prose that can drift from the check.
+const WORDS_MIN = 600;
+const WORDS_MAX = 1300;
+const WORDS_TARGET_MIN = 900;
+const WORDS_TARGET_MAX = 1100;
+
 /**
  * Format checks Gate 1 has no way to express, merged into its report by
  * gate-run's `extraChecks`. Every failure is `markup`: each one says the draft
@@ -220,10 +228,10 @@ export function podcastChecks(draftMd: string): GateFailure[] {
 	}
 
 	const words = turns.reduce((n, t) => n + wordCount(t.text), 0);
-	if (words < 600 || words > 1300) {
+	if (words < WORDS_MIN || words > WORDS_MAX) {
 		failures.push({
 			gate: "markup",
-			detail: `spoken length is ${words} words; the episode must be between 600 and 1300 (target 900-1100)`,
+			detail: `spoken length is ${words} words; the episode must be between ${WORDS_MIN} and ${WORDS_MAX} (target ${WORDS_TARGET_MIN}-${WORDS_TARGET_MAX})`,
 		});
 	}
 	return failures;
@@ -335,7 +343,7 @@ FORMAT — follow exactly; a script that breaks any of these rules is discarded.
 - NO HOST EVER ASKS THE OTHER A QUESTION. No turn may end with a question mark. Two hosts alternate reading facts; they do not interview each other.
 - No reactions, no agreement, no banter. Never "That's right", "Interesting", "As we reported", "More on that later", "Stay with us".
 - Every turn ends with exactly one citation in the form [source](URL), using a URL copied character-for-character from the citable list. One turn, one source.
-- Total spoken length across the three sections: 900 to 1,100 words.
+- Total spoken length across the three sections: ${WORDS_TARGET_MIN} to ${WORDS_TARGET_MAX} words.
 - Cold open: two or three turns teasing the biggest items. Last week: the week's published stories. Week ahead: the coming week's scheduled events.
 
 FACTS
@@ -386,4 +394,7 @@ export const PODCAST_REPAIR_GUIDANCE =
 	'If a failure says a line is not a host turn, rewrite that line as one paragraph beginning "**Maya:** " or "**Dan:** ", keeping the hosts alternating. ' +
 	"If a failure says a host asked a question, restate it as a statement of the same fact. " +
 	'If a failure names the sections, fix the headings to exactly "## Cold open", "## Last week", "## Week ahead" in that order. ' +
-	"If a failure gives a word count, cut or expand turns to land between 900 and 1,100 spoken words without adding any fact that is not already in the draft. ";
+	`If a failure gives a word count, cut or expand turns to land between ${WORDS_TARGET_MIN} and ${WORDS_TARGET_MAX} spoken words without adding any fact that is not already in the draft. ` +
+	`Removing a claim must never take the episode below ${WORDS_MIN} spoken words: if dropping one would, say more about the stories already in the draft — every ` +
+	"listing carries a date, a time and a place that the script can state in full — rather than returning a short episode. A repair that fixes the named " +
+	"failure and lands under the floor has failed. ";
