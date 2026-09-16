@@ -738,6 +738,29 @@ const BUILTIN_ALLOWLIST_SET = new Set(
 	BUILTIN_ALLOWLIST.map((s) => s.toLowerCase()),
 );
 
+// Calendar vocabulary only. Used for the multi-token exemption below, which
+// must stay narrower than BUILTIN_ALLOWLIST: several allowlisted place names
+// double as personal names ("Georgia Washington", "Virginia"), so a
+// whole-allowlist token rule would let an invented person through.
+const WEEKDAY_SET = new Set(WEEKDAYS);
+const MONTH_WORD_SET = new Set([...MONTH_NAMES, ...MONTH_ABBR_DISPLAY]);
+
+// A date names at most one weekday and one month: "Monday August 24th". Two
+// month words in a row is a person, not a date — "April May" and "June May"
+// are full names a draft can invent, and a plain calendar-word test would
+// wave them through ungrounded.
+function isDateRun(tokens: string[]): boolean {
+	let weekdays = 0;
+	let months = 0;
+	for (const token of tokens) {
+		const word = token.toLowerCase();
+		if (WEEKDAY_SET.has(word)) weekdays++;
+		else if (MONTH_WORD_SET.has(word)) months++;
+		else return false;
+	}
+	return weekdays <= 1 && months <= 1;
+}
+
 // Single-token exemption, ONLY when the token is the first word of a
 // sentence (capitalized purely by sentence-initial position, not because it
 // is a name). Generic English function words plus a handful of
@@ -1163,6 +1186,16 @@ function runProperNamesGate(
 		const candidateLower = candidate.toLowerCase();
 		checked++;
 		if (BUILTIN_ALLOWLIST_SET.has(candidateLower)) continue;
+		// A run that spells out one date names nothing new. Sources write
+		// "Monday, August 24" and a draft writes "Monday August 24th": the
+		// comma is what stops the fused candidate grounding below, and six of
+		// these held the W35 episode. Deliberately calendar words and not the
+		// whole allowlist — "Georgia" and "Washington" are both allowlisted
+		// states, and a per-token allowlist rule would exempt the invented
+		// "Mayor Georgia Washington". "Chino Hills High School" still fails
+		// too, which keeps a jurisdiction swap catchable.
+		// (A single allowlisted token already exited on the check above.)
+		if (isDateRun(stripped)) continue;
 		if (
 			corpusSpaced.includes(candidateLower) ||
 			corpusCollapsed.includes(candidateLower)
