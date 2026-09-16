@@ -56,7 +56,13 @@ import {
 // patrols" was a generator padding a headline with no body behind it. A full
 // week keeps script.ts's own WORDS_MIN rather than restating the number here.
 const FULL_WEEK_POSTS = 3;
-const THIN_WEEK_MIN_WORDS = 250;
+// 150 is measured, not guessed: on W38 — one published story and thirteen
+// listings after curation — the generator wrote 203 to 246 spoken words, and
+// repair, which on a thin week may cut a claim without replacing it, took one
+// run to 173. A floor the material cannot reach produces no episode, not a
+// longer one. 150 still catches a stub; the structural checks catch a
+// malformed one.
+const THIN_WEEK_MIN_WORDS = 150;
 
 /** The Monday named by `--date=`, or null if the flag was not passed. */
 function dateFlag(argv: string[]): string | null {
