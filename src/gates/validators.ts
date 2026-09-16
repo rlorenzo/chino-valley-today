@@ -749,6 +749,17 @@ const MONTH_WORD_SET = new Set([...MONTH_NAMES, ...MONTH_ABBR_DISPLAY]);
 // month words in a row is a person, not a date — "April May" and "June May"
 // are full names a draft can invent, and a plain calendar-word test would
 // wave them through ungrounded.
+/** The candidate with any trailing weekday/month words removed, or null. */
+function stripTrailingDateWords(tokens: string[]): string[] | null {
+	let end = tokens.length;
+	while (end > 1) {
+		const word = tokens[end - 1].toLowerCase();
+		if (!WEEKDAY_SET.has(word) && !MONTH_WORD_SET.has(word)) break;
+		end--;
+	}
+	return end === tokens.length ? null : tokens.slice(0, end);
+}
+
 function isDateRun(tokens: string[]): boolean {
 	let weekdays = 0;
 	let months = 0;
@@ -901,6 +912,25 @@ const SENTENCE_INITIAL_COMMON_WORDS: readonly string[] = [
 	"voters",
 	"attendees",
 	"meeting",
+	// The nouns a turn opens with when it introduces a list rather than names
+	// a body. "Events include a community science bioblitz" read "Events" as
+	// an unsourced proper name and held the W38 episode.
+	"event",
+	"events",
+	"program",
+	"programs",
+	"activity",
+	"activities",
+	"class",
+	"classes",
+	"highlights",
+	"services",
+	"registration",
+	"tickets",
+	"families",
+	"students",
+	"parents",
+	"volunteers",
 	"item",
 	"agenda",
 	"motion",
@@ -1247,14 +1277,36 @@ function runProperNamesGate(
 		// too, which keeps a jurisdiction swap catchable.
 		// (A single allowlisted token already exited on the check above.)
 		if (isDateRun(stripped)) continue;
+		// A name with a date word hanging off the end: "at the Waterwise
+		// Community Center Saturday at 9 AM" fuses venue and weekday into one
+		// candidate the corpus cannot contain, though it carries the venue.
+		// Only the trailing date words come off, so what is left is still
+		// judged — "Fabricated Hall Saturday" fails on "Fabricated Hall".
 		// Canonical form is for corpus grounding only: the allowlist above is
 		// matched on the raw spelling, as its entries are written out in full.
-		const grounded = canonSuffix(candidateLower);
-		if (
-			containsPhrase(corpusSpaced, grounded) ||
-			containsPhrase(corpusCollapsed, grounded)
-		)
-			continue;
+		const inCorpus = (value: string) => {
+			const canon = canonSuffix(value);
+			return (
+				containsPhrase(corpusSpaced, canon) ||
+				containsPhrase(corpusCollapsed, canon)
+			);
+		};
+		if (inCorpus(candidateLower)) continue;
+		// A name with a date word hanging off the end: "at the Waterwise
+		// Community Center Saturday at 9 AM" fuses venue and weekday into one
+		// candidate the corpus cannot contain, though it carries the venue.
+		// Only the trailing date words come off, so what is left is still
+		// judged — "Fabricated Hall Saturday" fails on "Fabricated Hall".
+		const withoutTrailingDate = stripTrailingDateWords(stripped);
+		if (withoutTrailingDate) {
+			const shorter = collapseWhitespace(
+				withoutTrailingDate.join(" "),
+			).toLowerCase();
+			// Corpus grounding only, never the allowlist: month names double as
+			// first names, so allowing the allowlist here would strip "May" off
+			// the invented "Mayor April May" and wave it through on "April".
+			if (inCorpus(shorter)) continue;
+		}
 
 		failed++;
 		failures.push({
