@@ -39,15 +39,24 @@ import {
 import {
 	buildPodcastBundle,
 	composeTranscript,
-	PODCAST_REPAIR_GUIDANCE,
-	PODCAST_SYSTEM,
 	podcastChecks,
 	podcastPromptBody,
+	podcastRepairGuidance,
+	podcastSystem,
+	WORDS_MIN,
 } from "./script.ts";
 
-// An episode with almost nothing to review is not an episode. Three stories is
-// the floor at which "the week in review" is an honest description.
-const MIN_POSTS = 3;
+// A quiet week is a short episode, not a missing one. One published story is
+// a show — segment one is a single story and the weight sits in the week
+// ahead — so the floor is a story, not three.
+//
+// The spoken-length floor moves with the material for the same reason. A week
+// carrying one story and ten listings cannot honestly reach the full-week
+// floor, and forcing it to is how invented detail gets in — "DUI saturation
+// patrols" was a generator padding a headline with no body behind it. A full
+// week keeps script.ts's own WORDS_MIN rather than restating the number here.
+const FULL_WEEK_POSTS = 3;
+const THIN_WEEK_MIN_WORDS = 250;
 
 /** The Monday named by `--date=`, or null if the flag was not passed. */
 function dateFlag(argv: string[]): string | null {
@@ -191,10 +200,20 @@ const inputs = podcastInputs(db, monday);
 console.log(
 	`  inputs: ${inputs.posts.length} post(s) last week, ${inputs.events.length} event(s) ahead`,
 );
-if (inputs.posts.length < MIN_POSTS) {
-	console.log(`skip: ${inputs.posts.length} posts`);
+// One story is enough; zero is not. "## Last week" is a required section and
+// every turn in it needs a citation from the bundle, so a week with no posts
+// has nothing that can honestly fill it — an episode generated from listings
+// alone either fails the section check or narrates the week ahead twice.
+if (inputs.posts.length === 0) {
+	console.log(
+		`skip: nothing published last week (${inputs.events.length} event(s) ahead)`,
+	);
 	process.exit(0);
 }
+const thinWeek = inputs.posts.length < FULL_WEEK_POSTS;
+const minWords = thinWeek ? THIN_WEEK_MIN_WORDS : WORDS_MIN;
+if (thinWeek)
+	console.log(`  thin week: spoken-length floor lowered to ${minWords} words`);
 
 const bundle = buildPodcastBundle(inputs, monday);
 console.log(
@@ -205,14 +224,14 @@ await runGatedPipeline({
 	db,
 	bundle,
 	promptBody: podcastPromptBody(inputs, monday),
-	generatorSystem: PODCAST_SYSTEM,
+	generatorSystem: podcastSystem(minWords),
 	slug,
 	title,
 	postType: "podcast",
 	tier: "B",
 	meetingDate: mondayDate,
-	repairGuidance: PODCAST_REPAIR_GUIDANCE,
-	extraChecks: podcastChecks,
+	repairGuidance: podcastRepairGuidance(minWords),
+	extraChecks: (draftMd: string) => podcastChecks(draftMd, minWords),
 	beforePublish: withAudio,
 	afterPublish: () => publishEpisodeAudio(slug),
 });

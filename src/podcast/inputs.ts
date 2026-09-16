@@ -23,7 +23,11 @@ import {
 import { SITE_ORIGIN } from "../pipeline/site-url.ts";
 import { ROOT } from "../store.ts";
 import { queryItems } from "../tiera/queries.ts";
-import { alertPostSlugHashOf, localMeetingDate } from "../tiera/util.ts";
+import {
+	alertPostSlugHashOf,
+	dedupeByKey,
+	localMeetingDate,
+} from "../tiera/util.ts";
 
 export interface PodcastPost {
 	slug: string;
@@ -108,6 +112,113 @@ export function pendingAudioEpisode(db: Db): PostRow | undefined {
 // the thing being fixed, not a wrong one.
 const CONSEQUENTIAL_WEATHER_RE = /\b(flood|tsunami)/i;
 
+// A title carried in this many CONSECUTIVE weeks is a standing program —
+// Preschool Storytime, Craft Corner, Movers and Shakers — not something that
+// happened to be scheduled this week. Measured over the whole calendar the
+// split is unambiguous: recurring library programs run 6 to 8 weeks unbroken
+// and 112 titles appear in exactly one week, so three is clear of both.
+//
+// Consecutive, not merely distinct, because the calendar accumulates: counting
+// distinct weeks over all history makes any title standing eventually, and the
+// casualties are exactly the events the episode exists to name. "City Council
+// - Regular Meeting" on the first and third Tuesday reaches three distinct
+// weeks in a month and an annual parade reaches it in three years; neither
+// reaches two weeks in a row, ever.
+//
+// The run must also CONTAIN the episode's own week, not merely land on the
+// right side of it: a summer series that ended in August would otherwise keep
+// suppressing an isolated September revival for as long as the August rows are
+// stored, and a seasonal series starting in November would suppress it too —
+// the calendar query has no upper bound either.
+const RECURRING_WEEK_THRESHOLD = 3;
+
+function normalizeTitle(title: string): string {
+	return title.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+/**
+ * Which Monday–Sunday week a Pacific calendar day falls in, as an integer, so
+ * "the week after" is `+ 1` rather than string math over ISO week-years.
+ * The boundary is not arbitrary: it has to be the episode's own Monday–Sunday
+ * week, or a series whose first occurrence is Thursday through Sunday lands in
+ * the NEXT bucket and misses the anchor. The `+ 3` shifts epoch day 0, a
+ * Thursday, back onto a Monday.
+ */
+function weekIndexOf(occurredAt: string | null): number | null {
+	if (!occurredAt) return null;
+	const day = localMeetingDate(occurredAt);
+	if (!day) return null;
+	const [y, m, d] = day.split("-").map(Number);
+	return Math.floor((Date.UTC(y, m - 1, d) / 86_400_000 + 3) / 7);
+}
+
+/**
+ * Titles that recur week after week as of `anchorDate` (YYYY-MM-DD, the
+ * episode's Monday). The week-ahead segment is for what makes this week
+ * different from the last one; a program that runs every Tuesday is not that,
+ * and 41 events of which 28 are storytimes bury the one that is.
+ *
+ * A weekly program always has an occurrence in the anchor's own Monday–Sunday
+ * week, whatever weekday it runs on, so requiring the run to span it costs
+ * nothing for a live series, expires a finished one, and ignores a disconnected
+ * series months out. A run that starts in the anchor week and continues forward
+ * still qualifies.
+ */
+export function standingProgramTitles(
+	items: { title: string | null; occurred_at: string | null }[],
+	anchorDate: string,
+): Set<string> {
+	const anchorWeek = weekIndexOf(anchorDate);
+	if (anchorWeek === null) throw new Error(`unusable anchor: ${anchorDate}`);
+	const weeks = new Map<string, Set<number>>();
+	for (const item of items) {
+		const title = item.title ? normalizeTitle(item.title) : "";
+		const week = weekIndexOf(item.occurred_at);
+		if (!title || week === null) continue;
+		let seen = weeks.get(title);
+		if (!seen) {
+			seen = new Set();
+			weeks.set(title, seen);
+		}
+		seen.add(week);
+	}
+	const standing = new Set<string>();
+	for (const [title, seen] of weeks) {
+		// Only the run through the anchor's own week counts. Walking outward from
+		// it — rather than scanning every run and testing its bounds — is the same
+		// answer in fewer lines: a run elsewhere in the calendar, past OR future,
+		// never reaches the anchor and so never gets counted.
+		//
+		// Both walks stop at the threshold: only whether the run REACHES it is
+		// used, and a program running since the first scrape has a run as long as
+		// the stored history, which grows every week.
+		if (!seen.has(anchorWeek)) continue;
+		let run = 1;
+		for (let w = anchorWeek - 1; run < RECURRING_WEEK_THRESHOLD; w--) {
+			if (!seen.has(w)) break;
+			run++;
+		}
+		for (let w = anchorWeek + 1; run < RECURRING_WEEK_THRESHOLD; w++) {
+			if (!seen.has(w)) break;
+			run++;
+		}
+		if (run >= RECURRING_WEEK_THRESHOLD) standing.add(title);
+	}
+	return standing;
+}
+
+/**
+ * One listing per title per day. Two calendars carrying the same meeting is
+ * routine — W38 had "City Council - Regular Meeting" twice — and a script that
+ * reads both sounds broken. Which of two listings survives is arbitrary — they
+ * name the same event — so dedupeByKey's last-wins is as good as first-wins.
+ */
+export function dedupeEvents<T extends { title: string; date: string }>(
+	events: T[],
+): T[] {
+	return dedupeByKey(events, (e) => `${e.date}|${normalizeTitle(e.title)}`);
+}
+
 /**
  * A past-week weather advisory with nothing left to say by Monday.
  *
@@ -175,13 +286,20 @@ export function podcastInputs(db: Db, monday: Date): PodcastInputs {
 	// the SUNDAY before the episode because selectUpcomingEvents is exclusive of
 	// its anchor day, so a 7-day horizon from Sunday is Monday..Sunday — the
 	// week the episode previews.
-	const events = railEntries(
-		selectUpcomingEvents(
-			queryItems(db, { sourceKeys: CALENDAR_SOURCES, itemTypes: ["event"] }),
-			pacificDay(laDatePlusDays(mondayDate, -1)),
-			7,
-		),
-		(url) => url,
+	const calendar = queryItems(db, {
+		sourceKeys: CALENDAR_SOURCES,
+		itemTypes: ["event"],
+	});
+	const standing = standingProgramTitles(calendar, mondayDate);
+	const events = dedupeEvents(
+		railEntries(
+			selectUpcomingEvents(
+				calendar,
+				pacificDay(laDatePlusDays(mondayDate, -1)),
+				7,
+			),
+			(url) => url,
+		).filter((e) => !standing.has(normalizeTitle(e.title))),
 	);
 
 	return { posts, events };
