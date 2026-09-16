@@ -1,10 +1,14 @@
 import assert from "node:assert/strict";
+import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, test } from "node:test";
+import { ROOT } from "../store.ts";
 import {
 	chapterTimes,
 	chunkSection,
 	decideRetry,
 	parseTranscript,
+	publishEpisodeAudio,
 } from "./audio.ts";
 
 describe("parseTranscript", () => {
@@ -195,5 +199,43 @@ describe("chapterTimes", () => {
 		assert.equal(chapters[0].endSec, 0);
 		assert.equal(chapters[1].startSec, 0);
 		assert.equal(chapters[1].endSec, 5);
+	});
+});
+
+describe("publishEpisodeAudio", () => {
+	// The render writes into data/podcast-cache; only this promotes those files
+	// into site/public/audio, which every astro build copies into the release.
+	// If a rejection mid-render skips the promote, nothing is publicly reachable.
+	const slug = `test-promote-${process.pid}`;
+	const cache = join(ROOT, "data", "podcast-cache");
+	const publicDir = join(ROOT, "site", "public", "audio");
+	const publicFiles = [
+		join(publicDir, `${slug}.mp3`),
+		join(publicDir, `${slug}.chapters.json`),
+	];
+
+	test("promotes the MP3 and its chapters sidecar, and only then", () => {
+		mkdirSync(cache, { recursive: true });
+		writeFileSync(join(cache, `${slug}.mp3`), "mp3");
+		writeFileSync(join(cache, `${slug}.chapters.json`), "{}");
+		try {
+			for (const f of publicFiles) assert.equal(existsSync(f), false);
+			publishEpisodeAudio(slug);
+			for (const f of publicFiles) assert.equal(existsSync(f), true);
+		} finally {
+			for (const f of [
+				...publicFiles,
+				join(cache, `${slug}.mp3`),
+				join(cache, `${slug}.chapters.json`),
+			])
+				rmSync(f, { force: true });
+		}
+	});
+
+	test("refuses to publish audio that was never rendered", () => {
+		// Loud failure beats a published post pointing at a dead /audio URL.
+		assert.throws(() => publishEpisodeAudio(`${slug}-missing`), {
+			code: "ENOENT",
+		});
 	});
 });

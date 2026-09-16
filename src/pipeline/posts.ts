@@ -9,6 +9,11 @@ import { classifyTopics } from "./topics.ts";
 export type PostStatus = "queued" | "held" | "published" | "rejected";
 export type Tier = "A" | "B" | "C";
 
+// Appended to a Tier C post's held_reason on approval: the durable record that
+// a human ticked the EDITORIAL.md acknowledgment box. Shared because both the
+// admin approve handler and the podcast render job write it.
+export const TIER_C_ACK = " (Tier C acknowledgment confirmed)";
+
 export interface PostRow {
 	id: number;
 	slug: string;

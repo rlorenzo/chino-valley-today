@@ -65,6 +65,12 @@ export interface GatedRunOptions {
 	// audio here, which is why a throw holds the post rather than publishing a
 	// transcript with no episode behind it.
 	beforePublish?: (draftMd: string) => Promise<Partial<NewPost>>;
+	// Runs once the post is cleared to publish, immediately before the
+	// transition. beforePublish's output may be a public artifact (the podcast's
+	// MP3), and a human can reject the post while beforePublish is still
+	// running — so anything that makes that artifact reachable belongs here, not
+	// there. A throw holds the post instead of publishing it.
+	afterPublish?: () => void;
 }
 
 // Extra checks join the Gate 1 report rather than sitting beside it, so one
@@ -266,7 +272,41 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 			}
 			// Rewrites the queued file with the extra frontmatter before the
 			// transition moves it into content/published/.
-			createPost(db, { ...gatedPostInput(o, draftMd), ...extra });
+			const written = createPost(db, {
+				...gatedPostInput(o, draftMd),
+				...extra,
+			});
+			// beforePublish takes minutes (the audio render) and the dashboard's
+			// Reject button stays live the whole time. createPost refuses to touch
+			// a rejected or published row, so a "skipped" here is a human decision
+			// made mid-render — honor it instead of publishing over the top.
+			if (written.outcome === "skipped") {
+				console.log(
+					"Rejected or published while rendering — not publishing over a human decision.",
+				);
+				process.exit(0);
+			}
+		}
+		if (o.afterPublish) {
+			// Before the transition, not after: `published` is terminal — the next
+			// run exits on that row — so a throw here (permissions, disk space)
+			// would strand a published post whose MP3 was never promoted, with no
+			// path back. Held on the same `audio:` reason the render failure uses,
+			// which is what the backlog drain resumes from. Safe this side of the
+			// transition because the mid-render rejection check above is the last
+			// slow step; nothing can change the row between the two.
+			try {
+				o.afterPublish();
+			} catch (err) {
+				const message = err instanceof Error ? err.message : String(err);
+				transitionPost(db, o.slug, "held", {
+					heldReason: `audio: promote failed: ${message}`,
+					gates: gateReport,
+					judge: verdict,
+				});
+				console.log(`HELD after Gate 2: promote failed: ${message}`);
+				process.exit(0);
+			}
 		}
 		transitionPost(db, o.slug, "published", {
 			gates: gateReport,

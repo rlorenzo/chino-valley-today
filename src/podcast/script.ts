@@ -72,6 +72,11 @@ function introTurns(monday: Date): string {
  */
 export function composeTranscript(draftMd: string, monday: Date): string {
 	const draft = draftMd.trim();
+	// Idempotent, because one failure path re-composes its own output: a post
+	// held after the transcript was already filed (the audio promote threw)
+	// resumes from the composed body on disk, and composing that again would
+	// speak the intro and the sign-off twice.
+	if (draft.endsWith(OUTRO)) return `${draft}\n`;
 	const idx = draft.indexOf(`## ${SECTIONS[0]}`);
 	if (idx === -1) throw new Error(`draft has no "## ${SECTIONS[0]}" heading`);
 	const rest = draft.slice(idx + SECTIONS[0].length + 3).replace(/^\s+/, "");
