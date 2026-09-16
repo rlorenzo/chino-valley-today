@@ -834,6 +834,67 @@ describe("Gate 1c — proper-name whitelist", () => {
 		);
 	});
 
+	test("does not false-positive: a run of allowlisted words fused by a dropped comma", () => {
+		// Sources write "Monday, August 24"; the draft drops the comma. Both
+		// words are allowlisted on their own, and the pair names nothing.
+		const input: GateInput = {
+			bodyMd: `**Maya:** Monday August 24th, Preschool Storytime takes place. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya. Preschool Storytime is on Monday, August 24 at the library.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("a run of allowlisted words that are not dates is still grounded", () => {
+		// "Georgia" and "Washington" are both allowlisted states, but strung
+		// together they name a person the corpus never mentions.
+		const input: GateInput = {
+			bodyMd: `**Maya:** Mayor Georgia Washington spoke at the meeting. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Maya. Mayor Jane Smith spoke at the meeting.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Georgia Washington"),
+			),
+		);
+	});
+
+	test("an allowlisted run does not excuse a name with unlisted words in it", () => {
+		// The guard that keeps the jurisdiction swap catchable: "High" and
+		// "School" are not allowlisted, so the whole candidate is still judged.
+		const input: GateInput = {
+			bodyMd: `**Maya:** Chino Hills High School won on Friday. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Maya. Chino High School won on Friday.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Chino Hills High School"),
+			),
+		);
+	});
+
+	test("two month words in a row are a person, not a date, and must ground", () => {
+		// Month names double as first names, so "April May" is a full name the
+		// date exemption must not wave through.
+		const input: GateInput = {
+			bodyMd: `**Maya:** Mayor April May spoke at the meeting. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Maya. Mayor Jane Smith spoke at the meeting.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("April May"),
+			),
+		);
+	});
+
 	test("headings are excluded from name scanning (title-case headings do not need corpus grounding)", () => {
 		const input: GateInput = {
 			bodyMd: `## Business License Reform Approved\n\nThe council approved the item. [Agenda](https://example.com/a)`,
