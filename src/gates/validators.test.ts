@@ -895,6 +895,76 @@ describe("Gate 1c — proper-name whitelist", () => {
 		);
 	});
 
+	test("does not false-positive: a street suffix spoken in full against an abbreviated record", () => {
+		// The ABC feed writes "4125 Riverside Dr"; an episode read aloud says
+		// "Riverside Drive", which is the right choice for audio.
+		const input: GateInput = {
+			bodyMd: `**Maya:** Gozo Kitchen and Lounge at 4125 Riverside Drive held a Type 41 license. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya. Gozo Kitchen and Lounge — type 41 — 4125 Riverside Dr, Chino, CA 91710.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("a street suffix does not excuse an invented street name", () => {
+		const input: GateInput = {
+			bodyMd: `**Maya:** Gozo Kitchen and Lounge at 4125 Fabricated Drive held a license. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Maya. Gozo Kitchen and Lounge — 4125 Riverside Dr, Chino.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Fabricated Drive"),
+			),
+		);
+	});
+
+	test("does not false-positive: a street suffix abbreviated in the draft against a spelled-out record", () => {
+		// The other direction of the same canonicalization: both sides are
+		// folded to the abbreviation, so neither spelling is privileged.
+		const input: GateInput = {
+			bodyMd: `**Maya:** Gozo Kitchen and Lounge at 4125 Riverside Dr held a Type 41 license. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus:
+				"Maya. Gozo Kitchen and Lounge — type 41 — 4125 Riverside Drive, Chino, CA 91710.",
+		};
+		const report = validateDraft(input);
+		assert.equal(failuresFor(report.failures, "proper_names").length, 0);
+	});
+
+	test("an abbreviated suffix does not match the start of a longer word", () => {
+		// "Oak Street" canonicalizes to "oak st", which is a substring of
+		// "oak station" — only a token boundary keeps the invented street out.
+		const input: GateInput = {
+			bodyMd: `**Maya:** The ribbon cutting is at Oak Street. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Maya. The ribbon cutting is at Oak Station, Chino.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Oak Street"),
+			),
+		);
+	});
+
+	test("a spelled-out suffix does not match a longer word sharing its abbreviation", () => {
+		const input: GateInput = {
+			bodyMd: `**Maya:** The hearing covered Maple Avenue. [Source](https://example.com/a)`,
+			allowedUrls: ["https://example.com/a"],
+			inputCorpus: "Maya. The hearing covered Maple Avery, Chino.",
+		};
+		const report = validateDraft(input);
+		assert.ok(
+			failuresFor(report.failures, "proper_names").some((f) =>
+				f.detail.includes("Maple Avenue"),
+			),
+		);
+	});
+
 	test("headings are excluded from name scanning (title-case headings do not need corpus grounding)", () => {
 		const input: GateInput = {
 			bodyMd: `## Business License Reform Approved\n\nThe council approved the item. [Agenda](https://example.com/a)`,

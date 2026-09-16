@@ -1000,6 +1000,52 @@ function isNameToken(text: string): boolean {
 	return /^[A-Z]/.test(text) && !CLOCK_WORDS.has(text.toLowerCase());
 }
 
+// A street suffix is written short in the record and long in speech: the ABC
+// feed says "4125 Riverside Dr" and an episode read aloud says "Riverside
+// Drive", which is the correct editorial choice for audio and which the corpus
+// can never match. Canonicalising both sides to the abbreviation lets either
+// spelling ground the other. Long form to the abbreviation public records use.
+const STREET_SUFFIX: Record<string, string> = {
+	drive: "dr",
+	avenue: "ave",
+	street: "st",
+	boulevard: "blvd",
+	road: "rd",
+	lane: "ln",
+	court: "ct",
+	place: "pl",
+	parkway: "pkwy",
+	highway: "hwy",
+	circle: "cir",
+	terrace: "ter",
+};
+const STREET_SUFFIX_RE = new RegExp(
+	`\\b(${Object.keys(STREET_SUFFIX).join("|")})\\b`,
+	"g",
+);
+// Expects already-lowercased text, as both the corpus variants and the name
+// candidates are by the time they are compared.
+function canonSuffix(lowered: string): string {
+	return lowered.replace(STREET_SUFFIX_RE, (w) => STREET_SUFFIX[w] ?? w);
+}
+
+// Plain `includes` lets a canonicalised suffix land inside a longer word:
+// "Oak Street" becomes "oak st" and would ground against "Oak Station".
+// Require a non-letter on both sides of the match instead.
+function containsPhrase(haystack: string, needle: string): boolean {
+	const isWordChar = (c: string | undefined) =>
+		c !== undefined && /[a-z0-9]/.test(c);
+	for (let i = haystack.indexOf(needle); i !== -1; ) {
+		if (
+			!isWordChar(haystack[i - 1]) &&
+			!isWordChar(haystack[i + needle.length])
+		)
+			return true;
+		i = haystack.indexOf(needle, i + 1);
+	}
+	return false;
+}
+
 const WORD_RE = /[A-Za-z][A-Za-z'-]*/g;
 // A colon ends a sentence part too, so the word after a label starts a new
 // one. Without this a speaker or field label eats the sentence-initial slot
@@ -1165,14 +1211,19 @@ function runProperNamesGate(
 	// form. Periods become spaces there (not dropped): "Eunice M Ulloa" must
 	// still find "Eunice M. Ulloa" — collapsing "M." to "M " keeps the token
 	// boundary intact instead of fusing "M" into "MUlloa".
-	const corpusSpaced = collapseWhitespace(
-		inputCorpus.replace(/\./g, " "),
-	).toLowerCase();
-	const corpusCollapsed = collapseWhitespace(
-		inputCorpus
-			.replace(/\b([A-Za-z])\.\s*(?=[A-Za-z]\.)/g, "$1")
-			.replace(/\./g, " "),
-	).toLowerCase();
+	// Street suffixes are folded to their abbreviation here rather than at the
+	// comparison below, so the corpus is walked once instead of once per
+	// candidate and the two checks already written ground either spelling.
+	const corpusSpaced = canonSuffix(
+		collapseWhitespace(inputCorpus.replace(/\./g, " ")).toLowerCase(),
+	);
+	const corpusCollapsed = canonSuffix(
+		collapseWhitespace(
+			inputCorpus
+				.replace(/\b([A-Za-z])\.\s*(?=[A-Za-z]\.)/g, "$1")
+				.replace(/\./g, " "),
+		).toLowerCase(),
+	);
 
 	const sequences = findNameSequences(scanText);
 	let checked = 0;
@@ -1196,9 +1247,12 @@ function runProperNamesGate(
 		// too, which keeps a jurisdiction swap catchable.
 		// (A single allowlisted token already exited on the check above.)
 		if (isDateRun(stripped)) continue;
+		// Canonical form is for corpus grounding only: the allowlist above is
+		// matched on the raw spelling, as its entries are written out in full.
+		const grounded = canonSuffix(candidateLower);
 		if (
-			corpusSpaced.includes(candidateLower) ||
-			corpusCollapsed.includes(candidateLower)
+			containsPhrase(corpusSpaced, grounded) ||
+			containsPhrase(corpusCollapsed, grounded)
 		)
 			continue;
 
