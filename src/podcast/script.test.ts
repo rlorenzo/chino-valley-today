@@ -8,6 +8,8 @@ import {
 	eventLine,
 	parseTurns,
 	podcastChecks,
+	podcastRepairGuidance,
+	podcastSystem,
 	spokenText,
 } from "./script.ts";
 
@@ -84,6 +86,29 @@ describe("parseTurns", () => {
 });
 
 describe("podcastChecks", () => {
+	test("the spoken-length floor is the caller's, so a thin week can be short", () => {
+		const short = [
+			"## Cold open",
+			"",
+			"**Maya:** One thing happened this week. [s](https://example.com/a)",
+			"",
+			"## Last week",
+			"",
+			"**Dan:** The council met on Tuesday. [s](https://example.com/a)",
+			"",
+			"## Week ahead",
+			"",
+			"**Maya:** The commission meets Wednesday. [s](https://example.com/a)",
+		].join("\n");
+		const lengthFailure = (min?: number) =>
+			podcastChecks(short, min).filter((f) =>
+				f.detail.includes("spoken length"),
+			);
+		// Default floor rejects it; a thin week's floor of 1 accepts it.
+		assert.equal(lengthFailure().length, 1);
+		assert.equal(lengthFailure(1).length, 0);
+	});
+
 	test("passes a well-formed draft", () => {
 		assert.deepEqual(podcastChecks(validDraft()), []);
 	});
@@ -193,6 +218,25 @@ describe("podcastChecks", () => {
 			"\n\n",
 		);
 		assert.ok(podcastChecks(garbage).length <= 7);
+	});
+});
+
+describe("thin-week prompts", () => {
+	// The floor only works if generation and repair are told the same number the
+	// check enforces: a prompt still demanding 900-1100 words, or a repair still
+	// forbidding anything under 600, is an instruction to pad.
+	test("generation and repair carry the caller's floor and no full-week target", () => {
+		const system = podcastSystem(250);
+		const repair = podcastRepairGuidance(250);
+		for (const text of [system, repair]) {
+			assert.match(text, /250/);
+			assert.doesNotMatch(text, /900|1100|600/);
+		}
+	});
+
+	test("a full week keeps the target and the 600-word floor", () => {
+		assert.match(podcastSystem(), /900 to 1100 words/);
+		assert.match(podcastRepairGuidance(), /below 600 spoken words/);
 	});
 });
 

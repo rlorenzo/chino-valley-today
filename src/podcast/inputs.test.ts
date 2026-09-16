@@ -6,10 +6,12 @@ import { openDb } from "../db/index.ts";
 import { createPost, type NewPost, transitionPost } from "../pipeline/posts.ts";
 import { ROOT } from "../store.ts";
 import {
+	dedupeEvents,
 	laDatePlusDays,
 	pacificDay,
 	pendingAudioEpisode,
 	podcastInputs,
+	standingProgramTitles,
 } from "./inputs.ts";
 
 const MONDAY = pacificDay("2026-09-07");
@@ -380,6 +382,42 @@ describe("podcastInputs — the week ahead", () => {
 	test("is empty rather than throwing when no calendar has anything", () => {
 		assert.deepEqual(podcastInputs(openDb(":memory:"), MONDAY).events, []);
 	});
+
+	test("drops a standing program and folds a meeting two calendars both list", () => {
+		const db = openDb(":memory:");
+		// Four consecutive Tuesdays, the last inside the episode's week: by the
+		// third the calendar is describing its own wallpaper, not the week.
+		for (const day of ["08-18", "08-25", "09-01", "09-08"]) {
+			addEvent(
+				db,
+				"sbclib-events",
+				`story-${day}`,
+				`2026-${day}T20:00:00.000Z`,
+				"Preschool Storytime",
+			);
+		}
+		// One meeting, two calendars, two external_ids — so selectUpcomingEvents'
+		// dedupe by identity lets both through and only the title/day key folds them.
+		addEvent(
+			db,
+			"sbclib-events",
+			"council-lib",
+			"2026-09-09T20:00:00.000Z",
+			"City Council - Regular Meeting",
+		);
+		addEvent(
+			db,
+			"cvusd-calendar",
+			"council-district",
+			"2026-09-09T20:00:00.000Z",
+			"city council - regular meeting",
+		);
+
+		assert.deepEqual(
+			podcastInputs(db, MONDAY).events.map((e) => e.title.toLowerCase()),
+			["city council - regular meeting"],
+		);
+	});
 });
 
 describe("date helpers", () => {
@@ -505,5 +543,174 @@ describe("pendingAudioEpisode", () => {
 		} finally {
 			cleanup([older, newer]);
 		}
+	});
+});
+
+describe("week-ahead curation", () => {
+	test("standingProgramTitles: a weekly program is standing, a one-off is not", () => {
+		const items = [
+			// Same title across four distinct weeks.
+			{ title: "Preschool Storytime", occurred_at: "2026-08-04T17:00:00Z" },
+			{ title: "Preschool Storytime", occurred_at: "2026-08-11T17:00:00Z" },
+			{ title: "Preschool Storytime", occurred_at: "2026-08-18T17:00:00Z" },
+			{
+				title: "  preschool   storytime ",
+				occurred_at: "2026-08-25T17:00:00Z",
+			},
+			// Twice in ONE week is not a series.
+			{ title: "Milkcan Blood Drive", occurred_at: "2026-09-15T17:00:00Z" },
+			{ title: "Milkcan Blood Drive", occurred_at: "2026-09-16T17:00:00Z" },
+			{ title: "Annual Milkcan Game", occurred_at: "2026-09-20T17:00:00Z" },
+			{ title: null, occurred_at: "2026-09-20T17:00:00Z" },
+			{ title: "No date", occurred_at: null },
+		];
+		const standing = standingProgramTitles(items, "2026-08-24");
+		assert.ok(standing.has("preschool storytime"));
+		assert.ok(!standing.has("milkcan blood drive"));
+		assert.ok(!standing.has("annual milkcan game"));
+	});
+
+	test("standingProgramTitles: a gap breaks the run, so meetings survive history", () => {
+		// The calendar keeps growing, so anything counted over all of it becomes
+		// standing eventually. These are the cases that must never be dropped no
+		// matter how many years accumulate.
+		const monthly = ["2026-01-13", "2026-02-10", "2026-03-10", "2026-04-14"];
+		const twiceMonthly = [
+			// First and third Tuesday: three distinct weeks inside one month, but
+			// never two in a row.
+			"2026-01-06",
+			"2026-01-20",
+			"2026-02-03",
+			"2026-02-17",
+			"2026-03-03",
+		];
+		const annual = ["2024-09-20", "2025-09-19", "2026-09-18"];
+		const standing = standingProgramTitles(
+			[
+				...monthly.map((d) => ({
+					title: "Planning Commission Meeting",
+					occurred_at: `${d}T02:00:00Z`,
+				})),
+				...twiceMonthly.map((d) => ({
+					title: "City Council - Regular Meeting",
+					occurred_at: `${d}T02:00:00Z`,
+				})),
+				...annual.map((d) => ({
+					title: "Annual Milkcan Game",
+					occurred_at: `${d}T02:00:00Z`,
+				})),
+				// A weekly program that skips a week and comes back still runs long
+				// enough on one side of the gap to be wallpaper.
+				...[
+					"2026-08-04",
+					"2026-08-11",
+					"2026-08-25",
+					"2026-09-01",
+					"2026-09-08",
+				].map((d) => ({
+					title: "Craft Corner",
+					occurred_at: `${d}T17:00:00Z`,
+				})),
+			],
+			"2026-09-07",
+		);
+
+		assert.ok(!standing.has("planning commission meeting"));
+		assert.ok(!standing.has("city council - regular meeting"));
+		assert.ok(!standing.has("annual milkcan game"));
+		assert.ok(standing.has("craft corner"));
+	});
+
+	test("standingProgramTitles: a finished series stops being standing", () => {
+		// Three consecutive August weeks and then nothing until an isolated
+		// September revival. The August run is over by the time the September
+		// episode runs, so the one-off occurrence is the episode's to name.
+		const items = [
+			...["2026-08-04", "2026-08-11", "2026-08-18", "2026-09-15"].map((d) => ({
+				title: "Craft Corner",
+				occurred_at: `${d}T17:00:00Z`,
+			})),
+			// Control: still running through the episode's own week.
+			...["2026-08-25", "2026-09-01", "2026-09-08", "2026-09-15"].map((d) => ({
+				title: "Preschool Storytime",
+				occurred_at: `${d}T17:00:00Z`,
+			})),
+		];
+		const standing = standingProgramTitles(items, "2026-09-14");
+		assert.ok(!standing.has("craft corner"));
+		assert.ok(standing.has("preschool storytime"));
+	});
+
+	test("standingProgramTitles: a series that has not started yet is not standing", () => {
+		// The calendar query has no upper bound, so a November series is visible
+		// in September. It must not suppress the isolated September occurrence —
+		// and a run that STARTS in the episode's week still must.
+		const items = [
+			...["2026-09-15", "2026-11-03", "2026-11-10", "2026-11-17"].map((d) => ({
+				title: "Craft Corner",
+				occurred_at: `${d}T17:00:00Z`,
+			})),
+			...["2026-09-15", "2026-09-22", "2026-09-29"].map((d) => ({
+				title: "Preschool Storytime",
+				occurred_at: `${d}T17:00:00Z`,
+			})),
+		];
+		const standing = standingProgramTitles(items, "2026-09-14");
+		assert.ok(!standing.has("craft corner"));
+		assert.ok(standing.has("preschool storytime"));
+	});
+
+	test("standingProgramTitles: a series starting in the episode week qualifies on every weekday", () => {
+		// Week buckets have to be the episode's own Monday–Sunday week. Aligned
+		// anywhere else, a series whose first occurrence is late in the week falls
+		// in the next bucket and escapes the filter in its opening episode.
+		const items = [];
+		for (let offset = 0; offset < 7; offset++) {
+			for (const week of [0, 7, 14]) {
+				// 2026-09-14 is the anchor Monday; 17:00Z is 10am Pacific same day.
+				const day = Date.UTC(2026, 8, 14 + offset + week, 17);
+				items.push({
+					title: `Series Day ${offset}`,
+					occurred_at: new Date(day).toISOString(),
+				});
+			}
+		}
+		const standing = standingProgramTitles(items, "2026-09-14");
+		for (let offset = 0; offset < 7; offset++) {
+			assert.ok(
+				standing.has(`series day ${offset}`),
+				`weekday offset ${offset} should be standing`,
+			);
+		}
+	});
+
+	test("standingProgramTitles: an unusable anchor names itself", () => {
+		// The anchor goes straight to weekIndexOf, which returns null for anything
+		// it cannot read, so the guard reports the bad value instead of the bare
+		// "Invalid time value" a Date round-trip would throw.
+		assert.throws(
+			() => standingProgramTitles([], "not-a-date"),
+			/unusable anchor: not-a-date/,
+		);
+	});
+
+	test("dedupeEvents: one listing per title per day, later days kept", () => {
+		const events = [
+			{ title: "City Council - Regular Meeting", date: "2026-09-15" },
+			{ title: "city council - regular meeting", date: "2026-09-15" },
+			{ title: "City Council - Regular Meeting", date: "2026-09-22" },
+			{ title: "Planning Commission Meeting", date: "2026-09-15" },
+		];
+		// Lowercased in the assertion because which of two listings of the same
+		// meeting survives is arbitrary; that one row per title per day survives,
+		// in calendar order, is the contract.
+		assert.deepEqual(
+			dedupeEvents(events).map((e) => `${e.date} ${e.title.toLowerCase()}`),
+			[
+				"2026-09-15 city council - regular meeting",
+				"2026-09-22 city council - regular meeting",
+				"2026-09-15 planning commission meeting",
+			],
+		);
 	});
 });

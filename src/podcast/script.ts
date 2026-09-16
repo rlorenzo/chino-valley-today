@@ -137,7 +137,7 @@ function wordCount(s: string): number {
 // Spoken length. The gate below enforces the hard bounds; the prompt and the
 // repair guidance quote the same numbers, so they are written once here and
 // interpolated rather than restated in prose that can drift from the check.
-const WORDS_MIN = 600;
+export const WORDS_MIN = 600;
 const WORDS_MAX = 1300;
 const WORDS_TARGET_MIN = 900;
 const WORDS_TARGET_MAX = 1100;
@@ -148,7 +148,13 @@ const WORDS_TARGET_MAX = 1100;
  * is not shaped like a transcript, which is the gate the validators use for
  * structural defects.
  */
-export function podcastChecks(draftMd: string): GateFailure[] {
+export function podcastChecks(
+	draftMd: string,
+	// Scales with the week's material. A week carrying one story and ten
+	// listings cannot reach WORDS_MIN without padding, and padding is how
+	// unsourced detail arrives. run.ts owns that decision.
+	minWords = WORDS_MIN,
+): GateFailure[] {
 	const failures: GateFailure[] = [];
 	const headings: string[] = [];
 	const strays: string[] = [];
@@ -228,10 +234,10 @@ export function podcastChecks(draftMd: string): GateFailure[] {
 	}
 
 	const words = turns.reduce((n, t) => n + wordCount(t.text), 0);
-	if (words < WORDS_MIN || words > WORDS_MAX) {
+	if (words < minWords || words > WORDS_MAX) {
 		failures.push({
 			gate: "markup",
-			detail: `spoken length is ${words} words; the episode must be between ${WORDS_MIN} and ${WORDS_MAX} (target ${WORDS_TARGET_MIN}-${WORDS_TARGET_MAX})`,
+			detail: `spoken length is ${words} words; the episode must be between ${minWords} and ${WORDS_MAX} (target ${WORDS_TARGET_MIN}-${WORDS_TARGET_MAX})`,
 		});
 	}
 	return failures;
@@ -328,7 +334,13 @@ export function buildPodcastBundle(
 // Prompt
 // ---------------------------------------------------------------------------
 
-export const PODCAST_SYSTEM = `You write the script for "Chino Valley Today, the Week in Review", a weekly two-host news podcast about Chino and Chino Hills, California. Two synthetic voices, Maya and Dan, read it aloud. Your output is the script and nothing else.
+/**
+ * The generator's system prompt. `minWords` is the same floor the check will
+ * enforce, so a thin week is told to be short rather than told to hit the
+ * full-week target and then failed for padding it.
+ */
+export function podcastSystem(minWords = WORDS_MIN): string {
+	return `You write the script for "Chino Valley Today, the Week in Review", a weekly two-host news podcast about Chino and Chino Hills, California. Two synthetic voices, Maya and Dan, read it aloud. Your output is the script and nothing else.
 
 TONE
 Calm public radio. Plain declarative sentences a person can follow by ear the first time. Never breathless, never promotional, never chatty. No jokes, no opinions, no editorializing, no speculation about what anything means or what happens next.
@@ -343,8 +355,15 @@ FORMAT — follow exactly; a script that breaks any of these rules is discarded.
 - NO HOST EVER ASKS THE OTHER A QUESTION. No turn may end with a question mark. Two hosts alternate reading facts; they do not interview each other.
 - No reactions, no agreement, no banter. Never "That's right", "Interesting", "As we reported", "More on that later", "Stay with us".
 - Every turn ends with exactly one citation in the form [source](URL), using a URL copied character-for-character from the citable list. One turn, one source.
-- Total spoken length across the three sections: ${WORDS_TARGET_MIN} to ${WORDS_TARGET_MAX} words.
+- ${
+		minWords < WORDS_MIN
+			? `This week is thin. Total spoken length across the three sections: at least ${minWords} words and at most ${WORDS_MAX}. Say what the sources support and stop; there is no target to reach and padding is worse than a short episode.`
+			: `Total spoken length across the three sections: ${WORDS_TARGET_MIN} to ${WORDS_TARGET_MAX} words.`
+	}
 - Cold open: two or three turns teasing the biggest items. Last week: the week's published stories. Week ahead: the coming week's scheduled events.
+- Week ahead carries AT MOST 10 events, and fewer is fine. The list you are given is already stripped of the programs that run every week, so what is left is the choice: pick the ones a listener would change their plans for, and drop the rest without mentioning them.
+- Spread those picks across the audiences in the town rather than stacking one kind: something for families, something for kids and teens, something outdoors or about nature, something an adult on their own would go to, and the public meetings that decide things. A week ahead that is five library programs in a row has failed even when every line is true.
+- Two listings of the same event — the same thing under an English and a Spanish title, or one calendar calling a game "Annual Milkcan Game" and another "Milkcan @ Chino HS" — are ONE pick. Say it once, in the words of whichever listing is clearer.
 
 FACTS
 - Use ONLY what the source material below states. If it is not there, it does not go in the script. Never add background, context, history, population figures, explanations of what a body does, or anything you happen to know about Chino Valley.
@@ -363,6 +382,7 @@ PEOPLE
 - On contested school-district items, report only what was decided and how members voted. No characterization of motives, tone, or sides.
 
 Output the script only. No preamble, no title, no closing note, no explanation.`;
+}
 
 /** The user message: the citable URLs, then the material, and nothing else. */
 export function podcastPromptBody(inputs: PodcastInputs, monday: Date): string {
@@ -389,12 +409,24 @@ export function podcastPromptBody(inputs: PodcastInputs, monday: Date): string {
 	return lines.join("\n");
 }
 
-/** Appended to gate-run's repair instructions, which know nothing of scripts. */
-export const PODCAST_REPAIR_GUIDANCE =
-	'If a failure says a line is not a host turn, rewrite that line as one paragraph beginning "**Maya:** " or "**Dan:** ", keeping the hosts alternating. ' +
-	"If a failure says a host asked a question, restate it as a statement of the same fact. " +
-	'If a failure names the sections, fix the headings to exactly "## Cold open", "## Last week", "## Week ahead" in that order. ' +
-	`If a failure gives a word count, cut or expand turns to land between ${WORDS_TARGET_MIN} and ${WORDS_TARGET_MAX} spoken words without adding any fact that is not already in the draft. ` +
-	`Removing a claim must never take the episode below ${WORDS_MIN} spoken words: if dropping one would, say more about the stories already in the draft — every ` +
-	"listing carries a date, a time and a place that the script can state in full — rather than returning a short episode. A repair that fixes the named " +
-	"failure and lands under the floor has failed. ";
+/**
+ * Appended to gate-run's repair instructions, which know nothing of scripts.
+ * Takes the same floor as the prompt and the check: a repair told to expand a
+ * thin week back to the full-week floor is the padding the floor was lowered
+ * to avoid.
+ */
+export function podcastRepairGuidance(minWords = WORDS_MIN): string {
+	return (
+		'If a failure says a line is not a host turn, rewrite that line as one paragraph beginning "**Maya:** " or "**Dan:** ", keeping the hosts alternating. ' +
+		"If a failure says a host asked a question, restate it as a statement of the same fact. " +
+		'If a failure names the sections, fix the headings to exactly "## Cold open", "## Last week", "## Week ahead" in that order. ' +
+		(minWords < WORDS_MIN
+			? `If a failure gives a word count, cut or expand turns to land between ${minWords} and ${WORDS_MAX} spoken words without adding any fact that is not already in the draft. ` +
+				"This week's material is thin and a short episode is the correct outcome: fixing an unrelated failure must never become an excuse to say more than the " +
+				"sources support. "
+			: `If a failure gives a word count, cut or expand turns to land between ${WORDS_TARGET_MIN} and ${WORDS_TARGET_MAX} spoken words without adding any fact that is not already in the draft. ` +
+				`Removing a claim must never take the episode below ${WORDS_MIN} spoken words: if dropping one would, say more about the stories already in the draft — every ` +
+				"listing carries a date, a time and a place that the script can state in full — rather than returning a short episode. A repair that fixes the named " +
+				"failure and lands under the floor has failed. ")
+	);
+}
