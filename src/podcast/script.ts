@@ -355,6 +355,7 @@ FORMAT — follow exactly; a script that breaks any of these rules is discarded.
 - NO HOST EVER ASKS THE OTHER A QUESTION. No turn may end with a question mark. Two hosts alternate reading facts; they do not interview each other.
 - No reactions, no agreement, no banter. Never "That's right", "Interesting", "As we reported", "More on that later", "Stay with us".
 - Every turn ends with exactly one citation in the form [source](URL), using a URL copied character-for-character from the citable list. One turn, one source.
+- That URL must be the source for THAT turn's own claim, not merely a URL from the right week. If a turn covers the Planning Commission, it cites the Planning Commission listing, not the City Council one; a City of Chino compost giveaway cites the City of Chino calendar, not a different agency's page for a similar event. Two things with two different sources are TWO turns — split them rather than citing one and mentioning both.
 - ${
 		minWords < WORDS_MIN
 			? `This week is thin. Total spoken length across the three sections: at least ${minWords} words and at most ${WORDS_MAX}. Say what the sources support and stop; there is no target to reach and padding is worse than a short episode.`
