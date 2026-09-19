@@ -159,6 +159,93 @@ sourced:
 The standing attractions (art gallery, pretzel train) are mall amenities
 rather than dated events, and are not brief material in any case.
 
+## Follow-on: chinohillsfoundation.com, checked 2026-09-19
+
+Checked because the section above recommends it, and the Champion is the
+reason we read terms *before* building rather than after.
+
+**Access posture is clean — cleaner than most sources already ingested.**
+
+- `robots.txt` is `User-Agent: *` with an empty `Disallow:`. Nothing
+  restricted, no `Crawl-delay`, no AI-crawler carve-outs.
+- **There is no terms of use page, and no privacy policy.** Ten common paths
+  probed (`/terms`, `/terms-of-use`, `/terms-of-service`, `/privacy`,
+  `/privacy-policy`, `/legal`, `/disclaimer`, `/copyright`, …) all 404 or are
+  not real pages, and the Yoast sitemap index was enumerated in full — 64
+  pages across `page`, `service`, `footer` and `ct-mega-menu` sitemaps, not
+  one of them legal. The footer carries a bare
+  "© Chino Hills Community Foundation. All rights reserved." and no legal
+  links at all.
+- A bare copyright notice is the default state of every website. It asserts
+  copyright; it is not an access restriction, not a contract, and it does not
+  reach facts or inbound links. So **robots.txt is the binding access
+  document** — the treatment `tos-config.ts` already applies to CIF-SS, the
+  three Home Campus sites and the SNO student papers, with the same
+  justification recorded in each of their notes.
+- **One wrinkle worth recording: a Sucuri CloudProxy WAF sits in front.**
+  `/legal` and `/terms-and-conditions` returned HTTP 307 JS challenges rather
+  than 404s (the challenge is what 307s, not a page). Ordinary paths, all
+  sitemaps and the REST API returned clean, so nothing is blocked today — but
+  a WAF can start challenging a bot UA at any time, which is a reliability
+  note, not a permission one. `failClosedRobots: true` and the usual degraded-
+  source alarm would both apply.
+
+**But the calendar is not what we wanted, and that is the finding.**
+
+`https://chinohillsfoundation.com/wp-json/tribe/events/v1/events` is live and
+well-formed — WordPress with The Events Calendar, the same API family as
+`sbclib-events` / `sbparks-events` / `cbwcd-events` / `yanksair-events`, so
+`tribe-events.ts` would very likely read it unmodified. It returns **five
+events, all of them board meetings** (`tribe_events-sitemap.xml` confirms
+that is the whole calendar, ever; the only two categories are "Board
+Meetings" and "Special Meeting"). They are held in the Chino Hills City
+Council Chambers, but the Foundation is a private 501(c)(3) — no Brown Act,
+not a public body. Whether a nonprofit's board schedule is brief material is
+an editorial question, not a technical one, and it is not answered here.
+
+**The Wine Walk is not in the calendar at all.** It is a hand-built Elementor
+marketing page at `/wine-walk-2026/`, with no `Event` JSON-LD (Yoast emits
+only `WebPage`/`Organization`/`BreadcrumbList`), the date and time in prose
+("October 10, 2026 5:00 pm to 8:00 pm"), and a fresh URL each year —
+`/wine-walk-2025/` is still up. Same for the concert series, home tours, jazz
+festival and CHARTS: all bespoke pages, none of them calendar entries. A
+scraper over those would be the most churn-prone thing in the repo, for one
+event a year. That is the case the hand-maintained `FARMERS_MARKET_URL`
+constant in `daily-brief.ts` already exists for.
+
+So the Foundation is **permitted but nearly empty** of what the Shoppes
+rejection sent us looking for. Recorded rather than built.
+
+## Incidental find: the city's Calendar module is not ingested
+
+Chased while checking whether the city already carries these events, and
+worth more than the question that prompted it.
+
+`chinohills-news-rss` ingests News & Announcements (`ModID=1`) and the Alert
+Center (`ModID=63`) from `chinohills.org`. The catalog in that scraper's
+header also lists **Calendar as `ModID=58`, and nothing ingests it.**
+
+`RSSFeed.aspx?ModID=58&CID=All-calendar.xml` returns HTTP 200 and 18 items on
+the probe day, with structured `calendarEvent:EventDates`,
+`calendarEvent:EventTimes` and `calendarEvent:Location` fields and item-level
+links (`Calendar.aspx?EID=N`). Contents are real community events — Blood
+Drive, Bulky Item Drop-off, Mulch and Compost Giveaway, a horse show at McCoy
+Arenas, City Council Meeting.
+
+The full `chinohills.org` robots.txt was re-read: `/RSS.aspx` (the catalog)
+is disallowed, as SOURCES.md already records, but **neither `Calendar.aspx`
+nor `RSSFeed.aspx` is covered by any rule.** Same host, same permitted
+endpoint family, same politeness posture as the two modules already ingested.
+
+The Wine Walk is not in the current feed, but the window only runs to
+October 3 on the probe day and the event is October 10 — so this is "outside
+today's window", not "the city does not carry it". Worth re-checking nearer
+the date before concluding anything.
+
+This looks like a genuine gap: the brief has a "today's events" section, and
+this is a structured, already-permitted municipal events feed on a host the
+pipeline already talks to. Not built — flagged for the operator.
+
 ## If someone wants this source anyway
 
 The terms name a contact — `webmaster@placewise.com`, and the property's

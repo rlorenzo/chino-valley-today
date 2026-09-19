@@ -55,6 +55,15 @@ whenever a source changes behavior.
   ingested as `alert` items; valid-but-empty on probe day, same steady-state
   logic as CVFD's Alert Center. Catalog page robots-blocked (noted above), so
   per-category alert CIDs are unverified.
+- **Calendar (ModID=58) is NOT ingested — probed 2026-09-19, gap flagged.**
+  `RSSFeed.aspx?ModID=58&CID=All-calendar.xml` returns 200 with structured
+  `calendarEvent:EventDates` / `EventTimes` / `Location` fields and item-level
+  `Calendar.aspx?EID=N` links; 18 real community events on the probe day
+  (blood drive, bulky-item drop-off, mulch giveaway, McCoy Arenas horse
+  shows). Neither `Calendar.aspx` nor `RSSFeed.aspx` is covered by any
+  robots.txt rule — only the `/RSS.aspx` catalog is, as noted above. Same
+  host and endpoint family as the two modules already ingested. Reasoning in
+  `reports/notes/shoppes-events.md`.
 - **Link-back depth:** item-level (`CivicAlerts.aspx?aid=N`, 302s to canonical).
 - **Reliability guess:** high.
 
