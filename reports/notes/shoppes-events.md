@@ -84,6 +84,53 @@ fetching the page is itself the prohibited act, and our content-addressed raw
 archive is precisely the "copy … on any network computer" the grant excludes.
 A daily brief is also not personal noncommercial use.
 
+## "What if we only publish a title and a link?" (asked 2026-09-19)
+
+The first question back, and it splits in two. The answer differs depending on
+who does the fetching, which is the whole point of the Champion rule.
+
+**Automated, publishing only a title and a link — still no.** The robot clause
+governs the *fetch*, not the publication: using a program to "catalog,
+download or otherwise reproduce, store" the Site's content is the prohibited
+act, and our pipeline would do all three before deciding what to render. Both
+halves of the pipeline trip it independently — `fetchDocument` writes a
+content-addressed copy of the page into the raw archive, and `insertItem`
+stores the title as a row. Publishing nothing at all would not cure it. This
+is the same answer EDITORIAL.md already gives for the Champion, and it does
+not change with how little we render.
+
+**A human reading the page and typing a line by hand — different question,
+and much narrower.** No spider, no robot, no automated device, so the clause
+that decides the automated case simply does not reach it. Three things are
+worth separating:
+
+- **Linking is unrestricted.** The terms contain no linking clause at all —
+  the only `LINKS` section is `LINKS TO THIRD-PARTY WEBSITES`, which is about
+  links *from* their site *to* others, and disclaims responsibility rather
+  than granting or withholding anything. Every section heading was read to
+  confirm this. That is a weaker position than the Champion, whose terms
+  expressly grant linking and reserve the right to revoke it; here there is
+  nothing to revoke because there is nothing addressed.
+- **The facts are ours to state.** That an event happens, on a date, at a
+  time, at a place, is not anyone's property. A line written in our own words
+  and pointed at their page is not reproduction of their Content.
+- **Their wording is the one edge.** `DEFINITIONS` makes "Content" cover "all
+  of the text … available on this Site", and the grant that follows is for
+  "personal, educational, noncommercial use only" with a proviso that you "do
+  not copy or post the Content on any network computer". Read literally, an
+  event title lifted verbatim onto chinovalley.today is text from the Site on
+  a network computer. Whether a short factual title is protectable at all is a
+  separate question from what their contract says, and this note does not
+  answer it — it flags it. Writing our own title avoids needing to know.
+
+So a hand-maintained line, in our own words, linking their event page, is a
+defensible reading of these terms where an automated one is not. **It is still
+the wrong build.** It puts a recurring manual task on an operator the project
+is designed not to require, for a venue that posts a handful of real events a
+year — and it buys nothing over the option below, which needs no such reading.
+
+This is not legal advice, and the call is the operator's.
+
 ## Where the events are still reachable
 
 Rejecting the mall's site does not mean losing the events. Every one of the
@@ -100,6 +147,12 @@ sourced:
   wants this as a source.
 - **CAACH Moon Festival** is a Chinese American Association of Chino Hills
   event, likewise published by the organizer.
+- **The mall's own listings point at both.** The Wine Walk body links
+  `chinohillsfoundation.com/wine-walk-2026/` and the Moon Festival body links
+  `caach.org` — the property is telling readers to go to the organizer for
+  the event itself. Following that is not a workaround; it is the deeper and
+  more durable link, the one that survives the mall rotating its calendar,
+  and the one whose publisher can issue a correction.
 - The city's own CivicPlus calendar (`chinohills-news-rss`, already ingested)
   carries community events held at the property when the city is involved.
 

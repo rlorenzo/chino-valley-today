@@ -372,6 +372,14 @@ whenever a source changes behavior.
   in the daily brief; the Wine Walk is a Chino Hills Community Foundation
   event (`chinohillsfoundation.com`, robots fully open, terms not yet read);
   the Moon Festival is CAACH's. The mall is the venue, not the publisher.
+- **"Title and link only" does not open a door (asked 2026-09-19).** Not for
+  an automated one: the robot clause governs the fetch, not the publication,
+  and `fetchDocument` plus `insertItem` trip it before anything renders. A
+  human hand-entering a line is a different and narrower question — the terms
+  carry no linking clause at all (the only `LINKS` section is outbound), and
+  facts are not theirs — but it puts a recurring manual task on an operator
+  this project is designed not to require, and buys nothing over citing the
+  organizer. Full reasoning in the note.
 - **Revisit only on a terms change or written permission** to
   `webmaster@placewise.com` (the channel the terms name), covering automated
   retrieval and storage, not just publication.
