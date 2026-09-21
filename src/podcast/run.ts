@@ -4,12 +4,12 @@
 //   node src/podcast/run.ts --date=2026-09-07
 //
 // Runs Mondays. The timer fires more than once, so every path below either
-// does the work or exits 0 having decided not to: a published or rejected
-// episode is never regenerated, and an episode held for audio — the render
-// failed, or a human approved it in the dashboard — resumes from the draft
-// already on disk rather than paying for a second generation of a script that
-// already passed both gates. That hand-off is drained by week, not by today's
-// date, so an approval on any day of the week still lands.
+// does the work or exits 0 having decided not to: a published, rejected or
+// tierC-held episode is never regenerated, and an episode held for audio — the
+// render failed, or a human approved it in the dashboard — resumes from the
+// draft already on disk rather than paying for a second generation of a script
+// that already passed both gates. That hand-off is drained by week, not by
+// today's date, so an approval on any day of the week still lands.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parsePostFile } from "../admin/render.ts";
@@ -123,6 +123,22 @@ console.log(`Podcast ${slug} — week of ${mondayDate}`);
 const existing = getPost(db, slug);
 if (existing?.status === "published" || existing?.status === "rejected") {
 	console.log(`  already ${existing.status}; nothing to do.`);
+	process.exit(0);
+}
+
+// A tierC hold is a FINISHED draft waiting on a human, not a failed one: it
+// cleared Gate 1 and the judge, and only the content flags need sign-off.
+// Regenerating it on the next firing throws that work away and can replace it
+// with a WORSE draft — the three weekly firings exist to retry the free tier's
+// sheddable TTS capacity, not to re-roll a script somebody is already
+// reviewing. W39 lost a judge-passing draft (faithfulness 0.93, flagged only
+// `crime`) to a Gate-1-failing one exactly this way, and the week went out
+// with no episode. Gate 1 and Gate 2 holds are not protected: those drafts are
+// unpublishable as they stand, so a fresh attempt can only help.
+if (existing?.status === "held" && existing.held_reason?.startsWith("tierC:")) {
+	console.log(
+		`  held for human review (${existing.held_reason}); leaving the draft in place.`,
+	);
 	process.exit(0);
 }
 
