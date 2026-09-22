@@ -25,10 +25,11 @@ export interface ChatResult {
 // was always SIGTERMed mid-attempt, which is how the 2026-09-14 podcast died.
 // Giving up inside the window turns that into a clean, logged failure that the
 // next timer firing can retry.
-// ponytail: a per-CALL ceiling, not a per-run one. A gated run makes up to
-// four of these (generate, repair, judge, backup judge), so a pathological run
-// can still outlast a 20-minute unit. Give runGatedPipeline a single deadline
-// it divides among its calls if that ever actually fires.
+// ponytail: a per-CALL ceiling, not a per-run one, so a gated run's several
+// calls can still outlast the unit that hosts them. repairDeadlineMs in
+// ../pipeline/gate-run.ts holds that arithmetic and caps the run today. Give
+// runGatedPipeline a single deadline it divides among every call if the judge
+// calls ever start timing out too.
 const FALLBACK_BUDGET_MS = 10 * 60_000;
 
 // setTimeout's 32-bit ceiling, which AbortSignal.timeout inherits: above this

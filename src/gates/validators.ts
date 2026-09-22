@@ -727,6 +727,17 @@ export const BUILTIN_ALLOWLIST: readonly string[] = [
 	"cvusd",
 	"chino valley unified school district",
 	"board of education",
+	// The two above, written end to end, which is the body's full official name
+	// and what a generator reaches for when a turn needs it spelled out.
+	// findNameSequences fuses adjacent capitalised words into ONE candidate, so
+	// a run built from two allowlisted entries matches neither and cannot
+	// ground — it held the W39 episode on a name that was entirely correct.
+	// Enumerated rather than fixed by tiling the allowlist per token: tiling
+	// would also wave through "Chino Board of Education", and keeping a
+	// jurisdiction swap catchable is the reason "Chino Hills High School" still
+	// fails. Same reasoning as the city council entries above.
+	"chino valley unified school district board of education",
+	"cvusd board of education",
 	"chino valley today",
 	"alcoholic beverage control",
 	"department of alcoholic beverage control",

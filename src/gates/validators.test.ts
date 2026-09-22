@@ -1063,3 +1063,35 @@ describe("Gate 1d — markup", () => {
 		assert.equal(failuresFor(report.failures, "markup").length, 0);
 	});
 });
+
+describe("proper names: adjacent allowlist entries", () => {
+	const U = "https://x.test/a";
+	const names = (text: string) =>
+		failuresFor(
+			validateDraft({
+				bodyMd: `The ${text} is scheduled to meet. [source](${U})`,
+				allowedUrls: [U],
+				inputCorpus: "CVUSD Board of Education preview for September 17.",
+			}).failures,
+			"proper_names",
+		);
+
+	test("a body's full official name grounds, though it is two entries", () => {
+		assert.deepEqual(
+			names("Chino Valley Unified School District Board of Education"),
+			[],
+		);
+		assert.deepEqual(names("CVUSD Board of Education"), []);
+	});
+
+	test("each half still grounds on its own", () => {
+		assert.deepEqual(names("Chino Valley Unified School District"), []);
+		assert.deepEqual(names("Board of Education"), []);
+	});
+
+	test("a jurisdiction swap is still caught", () => {
+		// Why the combinations are enumerated rather than matched by tiling
+		// allowlist entries: tiling grounds "Chino" + "Board of Education".
+		assert.equal(names("Chino Board of Education").length, 1);
+	});
+});
