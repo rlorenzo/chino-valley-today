@@ -144,8 +144,12 @@ export function nixleLocationField(body: string): string | null {
 	// Plain-text mail wraps: a long city list or a street address can run onto
 	// the next line, and stopping at the first newline drops the city. Read to
 	// the blank line or the next ALL-CAPS template field, whichever comes first.
+	// Horizontal space only after the colon: `\s*` would cross the newline of an
+	// EMPTY "LOCATION(S):" line, step past the blank-line lookahead, and capture
+	// the NEXT template field — "LOCATION(S):\n\nSUMMARY: x" read back as
+	// "SUMMARY: x", which is a location the release never gave.
 	const m = body.match(
-		/(?:^|\n)[\s>]*LOCATION\(?S?\)?\s*:\s*([\s\S]*?)(?=\n[\s>]*\n|\n[\s>]*[A-Z][A-Z ()/&]+:|$)/i,
+		/(?:^|\n)[\s>]*LOCATION\(?S?\)?[ \t]*:[ \t]*([\s\S]*?)(?=\n[\s>]*\n|\n[\s>]*[A-Z][A-Z ()/&]+:|$)/i,
 	);
 	const value = m?.[1].replace(/[\s>]*[\r\n][\s>]*/g, " ").trim();
 	return value ? value : null;

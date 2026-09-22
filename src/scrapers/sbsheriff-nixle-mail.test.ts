@@ -7,6 +7,7 @@ import {
 	isChinoRelease,
 	isNixleMessage,
 	messageToItemDraft,
+	nixleLocationField,
 } from "./sbsheriff-nixle-mail.ts";
 
 // Fixtures are modeled on REAL messages in the subscribed mailbox, inspected
@@ -314,6 +315,30 @@ describe("isChinoRelease", () => {
 				"LOCATION(S): Rancho Cucamonga\nSUMMARY: Operation SMASH & Grab covers the Chino Hills shopping districts.",
 			),
 			false,
+		);
+	});
+
+	test("an empty LOCATION line does not capture the next template field", () => {
+		assert.equal(
+			nixleLocationField("LOCATION(S):\n\nSUMMARY: A collision in Chino."),
+			null,
+		);
+		// ...so relevance falls back to the whole text, which is the honest read.
+		assert.equal(
+			isChinoRelease(
+				"Advisory",
+				"LOCATION(S):\n\nSUMMARY: A collision in Chino.",
+			),
+			true,
+		);
+	});
+
+	test("a wrapped location keeps the city on the continuation line", () => {
+		assert.equal(
+			nixleLocationField(
+				"LOCATION(S): 16150 Pomona Rincon Road,\nChino Hills\n\nSUMMARY: x",
+			),
+			"16150 Pomona Rincon Road, Chino Hills",
 		);
 	});
 

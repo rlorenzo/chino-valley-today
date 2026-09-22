@@ -131,7 +131,12 @@ const CONSEQUENTIAL_WEATHER_RE = /\b(flood|tsunami)/i;
 //      suppressing an isolated September revival, and a November series would
 //      suppress it from the future. It is walked outward in both directions,
 //      because a series starting in the episode's own week is standing too.
-//   2. Two ADJACENT weeks somewhere in that run.
+//   2. Two ADJACENT weeks within the stretch the walk covers, which is as far
+//      out as it needs to go to reach the threshold and no further. Adjacency
+//      further out than that does not count, deliberately: a weekly programme
+//      missing at most MAX_GAP_WEEKS always has its adjacent pair inside that
+//      stretch, so anything only adjacent beyond it is running at some other
+//      cadence and is the episode's to name.
 //
 // Signal 2 is load-bearing and separates a weekly programme from a periodic
 // meeting: "City Council - Regular Meeting" on the first and third Tuesday
@@ -204,8 +209,9 @@ export function standingProgramTitles(
 		if (!seen.has(anchorWeek)) continue;
 		// Walk out from the anchor in one direction, over gaps of up to
 		// MAX_GAP_WEEKS, and report how many weeks the run picked up and whether
-		// any two of them were adjacent. Stops at the threshold: a programme
-		// running since the first scrape has a run as long as the stored history.
+		// any two of them were adjacent. Stops once the threshold is reachable —
+		// a programme running since the first scrape is not walked back over the
+		// whole stored history, and that bound is what scopes signal 2 above.
 		const walk = (step: number) => {
 			let found = 0;
 			let adjacent = false;
