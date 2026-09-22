@@ -18,8 +18,19 @@ const SHOW_TITLE = "Chino Valley Today, the Week in Review";
 const HOSTS = ["Maya", "Dan"] as const;
 type Host = (typeof HOSTS)[number];
 
-/** The three generated sections, in the only order they may appear. */
-const SECTIONS = ["Cold open", "Last week", "Week ahead"] as const;
+/** The two GENERATED sections, in the only order they may appear. */
+const SECTIONS = ["Last week", "Week ahead"] as const;
+
+/**
+ * The episode's first section, which the model does not write. It used to be
+ * "Cold open" and to carry two or three generated turns teasing the stories
+ * below, and both were wrong. The name described a radio device the show does
+ * not use, and the turns restated "Last week" in slightly different words a
+ * few seconds before the listener heard it again — W39 opened with the two
+ * facts it then repeated verbatim. What belongs here is the show saying what
+ * it is, which is fixed text, so the section is now fixed text entirely.
+ */
+const OPENING = "Opening";
 
 /**
  * A turn: one paragraph, one host, one citation. Deliberately strict — the
@@ -41,12 +52,68 @@ const INTRO_TEMPLATE = `**Maya:** Good morning, and welcome to Chino Valley Toda
 
 **Dan:** And I'm Dan. This show is produced automatically from posts published on Chino Valley Today, and we are synthetic voices. It's {{date}}.`;
 
+// The two sign-off sentences, named because they are spoken by different hosts
+// depending on whether the crisis line pushed the rotation along. Written once:
+// they are disclosure text, and a reworded copy that only half the episodes use
+// is a disclosure that has already drifted.
+const SIGN_OFF_CREDIT =
+	"That's the week. Every story in this episode links to its primary source at chinovalley.today.";
+const SIGN_OFF_DISCLAIMER =
+	"This show is generated automatically and is not a substitute for official minutes or notices. Thanks for listening.";
+
 /** Not generated either, and for the same reason. */
 const OUTRO = `## Sign-off
 
-**Maya:** That's the week. Every story in this episode links to its primary source at chinovalley.today.
+**Maya:** ${SIGN_OFF_CREDIT}
 
-**Dan:** This show is generated automatically and is not a substitute for official minutes or notices. Thanks for listening.`;
+**Dan:** ${SIGN_OFF_DISCLAIMER}`;
+
+/**
+ * Spoken before the sign-off when the episode touches suicide, self-harm or a
+ * mental-health crisis. Fixed text, for the reason the disclosure is: a
+ * resource the model could rephrase is a resource that can drift, and the one
+ * number here has to be right.
+ *
+ * It is a line the show adds, not a fact from a source — which is why it is
+ * added AFTER the gates, at compose time, and why its words are seeded into the
+ * bundle corpus so an episode quoting it back cannot fail its own boilerplate.
+ */
+const CRISIS_LINE =
+	"**Maya:** If you or someone you know is struggling, the 988 Suicide and Crisis Lifeline is available around the clock. Call or text 988.";
+
+/**
+ * Deliberately narrow. These words in a week-ahead listing or a story mean the
+ * episode has raised the subject, whatever else the turn says; a broad mental
+ * health sweep would fire on a wellness fair and make the line routine, which
+ * is how a resource stops being heard.
+ */
+const CRISIS_RE =
+	/\b(suicid\w*|self[- ]harm|crisis line|mental[- ]health crisis)\b/i;
+
+/**
+ * The sign-off, with the crisis line ahead of it when the draft raised the
+ * subject. Written out as a whole second literal rather than spliced into the
+ * first: the hosts must still alternate across the seam, so adding a turn
+ * flips who speaks the two after it, and a literal shows that at a glance
+ * where a string substitution would hide it.
+ */
+const OUTRO_WITH_CRISIS = `## Sign-off
+
+${CRISIS_LINE}
+
+**Dan:** ${SIGN_OFF_CREDIT}
+
+**Maya:** ${SIGN_OFF_DISCLAIMER}`;
+
+// Tested against the SPOKEN words only: parseTurns has already dropped the
+// citations, so a link to a suicide-prevention page does not by itself put the
+// line in an episode that never says the word out loud.
+function signOff(draft: string): string {
+	const spoken = parseTurns(draft)
+		.map((t) => t.text)
+		.join(" ");
+	return CRISIS_RE.test(spoken) ? OUTRO_WITH_CRISIS : OUTRO;
+}
 
 /** "Monday, September 7, 2026" — the episode date as the intro speaks it. */
 function episodeDateLabel(monday: Date): string {
@@ -64,23 +131,22 @@ function introTurns(monday: Date): string {
 }
 
 /**
- * The publishable transcript: fixed intro turns, then the generated draft,
- * then the fixed sign-off.
- *
- * The intro lands INSIDE the draft's `## Cold open` rather than above it, so
- * the episode opens on one section instead of a heading-less preamble.
+ * The publishable transcript: the fixed opening, then the generated draft, then
+ * the fixed sign-off, plus the crisis line when the episode has earned one.
  */
 export function composeTranscript(draftMd: string, monday: Date): string {
 	const draft = draftMd.trim();
 	// Idempotent, because one failure path re-composes its own output: a post
 	// held after the transcript was already filed (the audio promote threw)
 	// resumes from the composed body on disk, and composing that again would
-	// speak the intro and the sign-off twice.
-	if (draft.endsWith(OUTRO)) return `${draft}\n`;
-	const idx = draft.indexOf(`## ${SECTIONS[0]}`);
-	if (idx === -1) throw new Error(`draft has no "## ${SECTIONS[0]}" heading`);
-	const rest = draft.slice(idx + SECTIONS[0].length + 3).replace(/^\s+/, "");
-	return `## ${SECTIONS[0]}\n\n${introTurns(monday)}\n\n${rest}\n\n${OUTRO}\n`;
+	// speak the opening and the sign-off twice.
+	if (draft.endsWith(OUTRO) || draft.endsWith(OUTRO_WITH_CRISIS)) {
+		return `${draft}\n`;
+	}
+	if (!draft.startsWith(`## ${SECTIONS[0]}`)) {
+		throw new Error(`draft does not open on "## ${SECTIONS[0]}"`);
+	}
+	return `## ${OPENING}\n\n${introTurns(monday)}\n\n${draft}\n\n${signOff(draft)}\n`;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +209,29 @@ const WORDS_TARGET_MIN = 900;
 const WORDS_TARGET_MAX = 1100;
 
 /**
+ * Past-tense verbs that assert a meeting HAPPENED. A preview says one is
+ * scheduled and carries no record that it took place, so a turn citing a
+ * preview may not use these: the W39 draft said the Board of Education "held a
+ * regular meeting" and "met in a regular session" on the strength of a preview
+ * alone, and Gate 2's judge passed it at 0.93 faithfulness.
+ *
+ * Deterministic rather than another line in the prompt, which already says
+ * "attribute rather than assert" and was ignored. Future and conditional forms
+ * are untouched — "is scheduled to meet", "will consider" — because those are
+ * what a preview turn is SUPPOSED to say. The lookbehinds carve out the future
+ * PASSIVE, where the same participle is the correct word: "is scheduled to be
+ * held", "will be discussed", and with one adverb in between, "will be formally
+ * discussed". "been" is deliberately not exempt — "has been approved" asserts
+ * the thing happened.
+ *
+ * ponytail: one intervening adverb, not an arbitrary run of them. "will be
+ * quite formally discussed" still trips; widen the lookbehind if a draft ever
+ * writes one.
+ */
+const PAST_MEETING_RE =
+	/(?<!\bto )(?<!\bbe )(?<!\bto \w+ly )(?<!\bbe \w+ly )\b(met|held|convened|voted|approved|adopted|rejected|denied|passed|heard|discussed|decided|awarded|ratified)\b/i;
+
+/**
  * Format checks Gate 1 has no way to express, merged into its report by
  * gate-run's `extraChecks`. Every failure is `markup`: each one says the draft
  * is not shaped like a transcript, which is the gate the validators use for
@@ -154,6 +243,9 @@ export function podcastChecks(
 	// listings cannot reach WORDS_MIN without padding, and padding is how
 	// unsourced detail arrives. run.ts owns that decision.
 	minWords = WORDS_MIN,
+	// The cited URLs that are PREVIEWS. Empty when the caller has no post types
+	// to hand, which only disables the check below.
+	previewUrls: ReadonlySet<string> = new Set(),
 ): GateFailure[] {
 	const failures: GateFailure[] = [];
 	const headings: string[] = [];
@@ -233,6 +325,21 @@ export function podcastChecks(
 		}
 	}
 
+	// A turn citing a preview may not say the meeting happened.
+	for (const t of turns) {
+		if (!t.urls.some((u) => previewUrls.has(u))) continue;
+		const verb = PAST_MEETING_RE.exec(t.text);
+		if (!verb) continue;
+		failures.push({
+			gate: "markup",
+			detail:
+				`this turn cites a meeting PREVIEW and says "${verb[0]}" — a preview records ` +
+				"that a meeting was scheduled, never that it took place or what it did. " +
+				"Say what is scheduled, or drop the turn.",
+			excerpt: t.text.slice(0, 140),
+		});
+	}
+
 	const words = turns.reduce((n, t) => n + wordCount(t.text), 0);
 	if (words < minWords || words > WORDS_MAX) {
 		failures.push({
@@ -265,14 +372,41 @@ export function eventLine(e: BriefEventAhead): string {
 	return `${base}${closed}`;
 }
 
+/**
+ * A whole-line italic note the PIPELINE wrote about its own reach — "_No agenda
+ * item text is in our records for this meeting — CVUSD's agenda PDF host
+ * currently blocks automated fetching (robots.txt)_" and its two siblings in
+ * ../tiera/meeting-previews.ts.
+ *
+ * On the page that note is honest: it tells a reader why a preview is thin. Read
+ * aloud it is a machine complaining about a robots.txt file to somebody in their
+ * car, and the W39 draft did exactly that — "an agenda that was not available
+ * for automated review due to technical restrictions". It is also not a fact
+ * about Chino Valley, so it should never have been in the corpus that decides
+ * what a turn may say.
+ *
+ * ponytail: matched on its wording rather than a sentinel the generators emit,
+ * because the regex is one place and the sentinel would be three. If a fourth
+ * note appears with different words, give them all a sentinel.
+ */
+const PIPELINE_NOTE_RE = /^_.*\bin our records\b.*_\s*$/gim;
+
+function withoutPipelineNotes(bodyMd: string): string {
+	return bodyMd
+		.replace(PIPELINE_NOTE_RE, "")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
+}
+
 function postItem(p: PodcastPost): BundleItem {
+	const body = withoutPipelineNotes(p.bodyMd);
 	return {
 		title: p.title,
-		body: p.bodyMd,
+		body,
 		sourceUrl: p.url,
 		meta: { publishedAt: p.publishedAt },
 		occurredAt: p.publishedAt,
-		contentHash: sha256(p.bodyMd),
+		contentHash: sha256(body),
 	};
 }
 
@@ -314,6 +448,7 @@ export function buildPodcastBundle(
 		"Week in Review",
 		introTurns(monday),
 		OUTRO,
+		OUTRO_WITH_CRISIS,
 		episodeDateLabel(monday),
 		...items.flatMap((i) => [i.title ?? "", i.body ?? ""]),
 	];
@@ -346,10 +481,10 @@ TONE
 Calm public radio. Plain declarative sentences a person can follow by ear the first time. Never breathless, never promotional, never chatty. No jokes, no opinions, no editorializing, no speculation about what anything means or what happens next.
 
 FORMAT — follow exactly; a script that breaks any of these rules is discarded.
-- Exactly three sections, in this order, spelled exactly:
-## Cold open
+- Exactly two sections, in this order, spelled exactly:
 ## Last week
 ## Week ahead
+- The episode's opening and sign-off are fixed text added after you: do not write an introduction, do not greet the listener, do not name the show or the date, and do not tease what is coming. Start on the first story.
 - Every other line is one turn: a blank line, then a single paragraph beginning "**Maya:** " or "**Dan:** ". Nothing else may appear — no bullet lists, no bold, no italics, no stage directions, no host names anywhere but at the start of a turn.
 - Maya and Dan strictly alternate: no host speaks twice in a row.
 - NO HOST EVER ASKS THE OTHER A QUESTION. No turn may end with a question mark. Two hosts alternate reading facts; they do not interview each other.
@@ -358,10 +493,10 @@ FORMAT — follow exactly; a script that breaks any of these rules is discarded.
 - That URL must be the source for THAT turn's own claim, not merely a URL from the right week. If a turn covers the Planning Commission, it cites the Planning Commission listing, not the City Council one; a City of Chino compost giveaway cites the City of Chino calendar, not a different agency's page for a similar event. Two things with two different sources are TWO turns — split them rather than citing one and mentioning both.
 - ${
 		minWords < WORDS_MIN
-			? `This week is thin. Total spoken length across the three sections: at least ${minWords} words and at most ${WORDS_MAX}. Say what the sources support and stop; there is no target to reach and padding is worse than a short episode.`
-			: `Total spoken length across the three sections: ${WORDS_TARGET_MIN} to ${WORDS_TARGET_MAX} words.`
+			? `This week is thin. Total spoken length across the two sections: at least ${minWords} words and at most ${WORDS_MAX}. Say what the sources support and stop; there is no target to reach and padding is worse than a short episode.`
+			: `Total spoken length across the two sections: ${WORDS_TARGET_MIN} to ${WORDS_TARGET_MAX} words.`
 	}
-- Cold open: two or three turns teasing the biggest items. Last week: the week's published stories. Week ahead: the coming week's scheduled events.
+- Last week: the week's published stories. Week ahead: the coming week's scheduled events. Say each fact ONCE — a fact stated in one section must not be restated in the other.
 - Week ahead carries AT MOST 10 events, and fewer is fine. The list you are given is already stripped of the programs that run every week, so what is left is the choice: pick the ones a listener would change their plans for, and drop the rest without mentioning them.
 - Spread those picks across the audiences in the town rather than stacking one kind: something for families, something for kids and teens, something outdoors or about nature, something an adult on their own would go to, and the public meetings that decide things. A week ahead that is five library programs in a row has failed even when every line is true.
 - Two listings of the same event — the same thing under an English and a Spanish title, or one calendar calling a game "Annual Milkcan Game" and another "Milkcan @ Chino HS" — are ONE pick. Say it once, in the words of whichever listing is clearer.
@@ -374,6 +509,7 @@ FACTS
 - Describe two listings as one event only when the sources show they ARE one event — same title, same registration link, or one plainly a translation of the other. Matching time and place alone is not enough; two different programs can share a venue and a start time, so keep them separate when in doubt. Use the words the listing uses, and never infer an attribute the sources do not state — a listing written in Spanish does not say the word "Spanish".
 - Write every number, date, time, dollar amount and vote tally EXACTLY as the source writes it: "September 8", "6:00 PM", "$1.2 million", "4-1". Do not spell numbers out, do not convert them, do not round them, do not reformat a date.
 - Attribute rather than assert: "according to the agenda", "the sheriff's station said", "the city's notice says", "per the district's calendar". A recap of a meeting is a summary of the public record, never "the minutes".
+- A PREVIEW is not a recap. A post headed "Meeting Preview" records that a meeting was SCHEDULED; it is not evidence the meeting happened, and it never says what was decided. Never write that a body met, held a meeting, voted, approved, adopted or heard anything on the strength of a preview. Say what is scheduled, in the future or in the passive: "was scheduled to meet", "the agenda lists".
 - Never say a story was reported by us or anyone else, and never refer to previous episodes.
 
 PEOPLE
@@ -396,8 +532,17 @@ export function podcastPromptBody(inputs: PodcastInputs, monday: Date): string {
 		"",
 		"## Stories published last week",
 	];
-	for (const p of inputs.posts) {
-		lines.push("", `### ${p.title}`, `source: ${p.url}`, p.bodyMd.trim());
+	// Read back out of the bundle rather than off inputs.posts again: the corpus
+	// is what a turn's every number and name is checked against, so the prompt
+	// has to show the model the SAME text, stripped the same way. Cleaning it
+	// twice is two places to forget.
+	for (const item of bundle.transcriptSegments) {
+		lines.push(
+			"",
+			`### ${item.title ?? ""}`,
+			`source: ${item.sourceUrl}`,
+			item.body ?? "",
+		);
 	}
 	lines.push("", "## Week ahead events");
 	if (inputs.events.length === 0) {
@@ -420,7 +565,8 @@ export function podcastRepairGuidance(minWords = WORDS_MIN): string {
 	return (
 		'If a failure says a line is not a host turn, rewrite that line as one paragraph beginning "**Maya:** " or "**Dan:** ", keeping the hosts alternating. ' +
 		"If a failure says a host asked a question, restate it as a statement of the same fact. " +
-		'If a failure names the sections, fix the headings to exactly "## Cold open", "## Last week", "## Week ahead" in that order. ' +
+		'If a failure names the sections, fix the headings to exactly "## Last week", "## Week ahead" in that order — there is no opening section to write. ' +
+		"If a failure says a turn cites a preview and speaks in the past tense, rewrite that turn to say only what was scheduled, or delete it. " +
 		(minWords < WORDS_MIN
 			? `If a failure gives a word count, cut or expand turns to land between ${minWords} and ${WORDS_MAX} spoken words without adding any fact that is not already in the draft. ` +
 				"This week's material is thin and a short episode is the correct outcome: fixing an unrelated failure must never become an excuse to say more than the " +

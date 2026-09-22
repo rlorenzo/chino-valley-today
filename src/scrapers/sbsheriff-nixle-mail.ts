@@ -121,6 +121,45 @@ export function channelFromSender(
 // the archive stays complete and the editorial call happens downstream.
 const CHINO_RE = /\bchino\b|\bchino hills\b/i;
 
+/**
+ * SBSD releases follow a template — "DATE:", "INCIDENT:", "LOCATION(S):",
+ * "SUMMARY:" — and when it is present the LOCATION(S) line is the release's own
+ * statement of WHERE, which beats any other mention of a city in the prose.
+ *
+ * This exists because scanning the whole body cannot tell an incident's
+ * location from background about a programme's reach. Alert 12668373 announced
+ * six arrests with "LOCATION(S): Rancho Cucamonga" and carried a standing
+ * paragraph reading "Operation SMASH & Grab focuses its efforts on the Rancho
+ * Cucamonga, Apple Valley, Hesperia, Victorville, and Chino Hills shopping
+ * districts". The words "Chino Hills" in that sentence flagged a Rancho
+ * Cucamonga arrest as local news; it published as an alert and led the W39
+ * podcast.
+ *
+ * Free-form releases with no template fall back to the whole-text scan, which
+ * is the old behaviour and still the right default: over-flagging is recoverable
+ * downstream, and a release genuinely about Chino with no LOCATION line must
+ * not be dropped.
+ */
+export function nixleLocationField(body: string): string | null {
+	// Plain-text mail wraps: a long city list or a street address can run onto
+	// the next line, and stopping at the first newline drops the city. Read to
+	// the blank line or the next ALL-CAPS template field, whichever comes first.
+	// Horizontal space only after the colon: `\s*` would cross the newline of an
+	// EMPTY "LOCATION(S):" line, step past the blank-line lookahead, and capture
+	// the NEXT template field — "LOCATION(S):\n\nSUMMARY: x" read back as
+	// "SUMMARY: x", which is a location the release never gave.
+	const m = body.match(
+		/(?:^|\n)[\s>]*LOCATION\(?S?\)?[ \t]*:[ \t]*([\s\S]*?)(?=\n[\s>]*\n|\n[\s>]*[A-Z][A-Z ()/&]+:|$)/i,
+	);
+	const value = m?.[1].replace(/[\s>]*[\r\n][\s>]*/g, " ").trim();
+	return value ? value : null;
+}
+
+export function isChinoRelease(subject: string, body: string): boolean {
+	const location = nixleLocationField(body);
+	return CHINO_RE.test(location ?? `${subject} ${body}`);
+}
+
 export interface NixleMessageFields {
 	subject: string | null;
 	date: Date | null;
@@ -169,7 +208,7 @@ export function messageToItemDraft(
 		meta: {
 			channel: channel?.url ?? null,
 			channelSlug: channel?.slug ?? null,
-			chinoRelevant: CHINO_RE.test(`${subject} ${body}`),
+			chinoRelevant: isChinoRelease(subject, body),
 			priority: priorityMatch ? priorityMatch[1].toLowerCase() : null,
 			from: msg.from,
 			messageId: msg.messageId,

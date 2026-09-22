@@ -11,6 +11,7 @@ import { parsePostFile } from "../admin/render.ts";
 import type { Db } from "../db/index.ts";
 import {
 	CALENDAR_SOURCES,
+	laTimeOf,
 	railEntries,
 	selectUpcomingEvents,
 } from "../pipeline/daily-brief.ts";
@@ -35,6 +36,11 @@ export interface PodcastPost {
 	url: string;
 	publishedAt: string;
 	bodyMd: string;
+	// Carried so a check can tell a PREVIEW from a recap. A preview says a
+	// meeting is scheduled and nothing more; a turn citing one must not speak
+	// of it in the past tense (podcastChecks). W39 said the Board of Education
+	// "held a regular meeting" on the strength of a preview alone.
+	postType: string;
 }
 
 export interface PodcastInputs {
@@ -112,25 +118,41 @@ export function pendingAudioEpisode(db: Db): PostRow | undefined {
 // the thing being fixed, not a wrong one.
 const CONSEQUENTIAL_WEATHER_RE = /\b(flood|tsunami)/i;
 
-// A title carried in this many CONSECUTIVE weeks is a standing program —
-// Preschool Storytime, Craft Corner, Movers and Shakers — not something that
-// happened to be scheduled this week. Measured over the whole calendar the
-// split is unambiguous: recurring library programs run 6 to 8 weeks unbroken
-// and 112 titles appear in exactly one week, so three is clear of both.
+// A standing program — Preschool Storytime, Craft Corner, Movers and Shakers —
+// is not something that happened to be scheduled this week, and naming one as
+// news wastes the slot. Two signals together identify it:
 //
-// Consecutive, not merely distinct, because the calendar accumulates: counting
-// distinct weeks over all history makes any title standing eventually, and the
-// casualties are exactly the events the episode exists to name. "City Council
-// - Regular Meeting" on the first and third Tuesday reaches three distinct
-// weeks in a month and an annual parade reaches it in three years; neither
-// reaches two weeks in a row, ever.
+//   1. A RUN of at least RECURRING_WEEK_THRESHOLD weeks that contains the
+//      episode's own week. Measured over the whole calendar the split is
+//      unambiguous: recurring library programs run 6 to 8 weeks and 112 titles
+//      appear in exactly one week. The run must CONTAIN the anchor, not merely
+//      land on one side of it — the calendar query is unbounded in both
+//      directions, so a summer series that ended in August would otherwise keep
+//      suppressing an isolated September revival, and a November series would
+//      suppress it from the future. It is walked outward in both directions,
+//      because a series starting in the episode's own week is standing too.
+//   2. Two ADJACENT weeks within the stretch the walk covers, which is as far
+//      out as it needs to go to reach the threshold and no further. Adjacency
+//      further out than that does not count, deliberately: a weekly programme
+//      missing at most MAX_GAP_WEEKS always has its adjacent pair inside that
+//      stretch, so anything only adjacent beyond it is running at some other
+//      cadence and is the episode's to name.
 //
-// The run must also CONTAIN the episode's own week, not merely land on the
-// right side of it: a summer series that ended in August would otherwise keep
-// suppressing an isolated September revival for as long as the August rows are
-// stored, and a seasonal series starting in November would suppress it too —
-// the calendar query has no upper bound either.
+// Signal 2 is load-bearing and separates a weekly programme from a periodic
+// meeting: "City Council - Regular Meeting" on the first and third Tuesday
+// reaches three weeks of any run that tolerates a gap, and it is exactly the
+// event the episode exists to name. A fortnightly meeting never runs two weeks
+// in a row; a weekly programme does, constantly.
+//
+// The run tolerates MAX_GAP_WEEKS missing weeks, which an unbroken run did not.
+// A missing week is routine — a holiday closure, a cancelled session, a scrape
+// that came back empty — and one of them used to reset the count to nothing.
+// Toddler Boot Camp ran five of the six weeks to 2026-09-21 and still leaked
+// into the W39 episode as news, because nothing was scraped for the week of
+// September 7 and the run broke at two.
 const RECURRING_WEEK_THRESHOLD = 3;
+/** Consecutive missing weeks a run survives. One holiday, one empty scrape. */
+const MAX_GAP_WEEKS = 1;
 
 function normalizeTitle(title: string): string {
 	return title.trim().toLowerCase().replace(/\s+/g, " ");
@@ -184,25 +206,38 @@ export function standingProgramTitles(
 	}
 	const standing = new Set<string>();
 	for (const [title, seen] of weeks) {
-		// Only the run through the anchor's own week counts. Walking outward from
-		// it — rather than scanning every run and testing its bounds — is the same
-		// answer in fewer lines: a run elsewhere in the calendar, past OR future,
-		// never reaches the anchor and so never gets counted.
-		//
-		// Both walks stop at the threshold: only whether the run REACHES it is
-		// used, and a program running since the first scrape has a run as long as
-		// the stored history, which grows every week.
 		if (!seen.has(anchorWeek)) continue;
-		let run = 1;
-		for (let w = anchorWeek - 1; run < RECURRING_WEEK_THRESHOLD; w--) {
-			if (!seen.has(w)) break;
-			run++;
+		// Walk out from the anchor in one direction, over gaps of up to
+		// MAX_GAP_WEEKS, and report how many weeks the run picked up and whether
+		// any two of them were adjacent. Stops once the threshold is reachable —
+		// a programme running since the first scrape is not walked back over the
+		// whole stored history, and that bound is what scopes signal 2 above.
+		const walk = (step: number) => {
+			let found = 0;
+			let adjacent = false;
+			// Consecutive weeks missed since the last hit. Zero means the previous
+			// week was seen, which is what makes this hit an adjacent pair — the
+			// anchor itself counts as the first "previous week seen".
+			let gap = 0;
+			for (
+				let w = anchorWeek + step;
+				found + 1 < RECURRING_WEEK_THRESHOLD;
+				w += step
+			) {
+				if (seen.has(w)) {
+					found++;
+					if (gap === 0) adjacent = true;
+					gap = 0;
+				} else if (++gap > MAX_GAP_WEEKS) break;
+			}
+			return { found, adjacent };
+		};
+		const back = walk(-1);
+		const fwd = walk(1);
+		const run = 1 + back.found + fwd.found;
+		if (run >= RECURRING_WEEK_THRESHOLD && (back.adjacent || fwd.adjacent)) {
+			standing.add(title);
 		}
-		for (let w = anchorWeek + 1; run < RECURRING_WEEK_THRESHOLD; w++) {
-			if (!seen.has(w)) break;
-			run++;
-		}
-		if (run >= RECURRING_WEEK_THRESHOLD) standing.add(title);
 	}
 	return standing;
 }
@@ -237,13 +272,54 @@ function isRoutineWeatherAlert(
 }
 
 /**
+ * Minutes past midnight for a rail entry's time ("6:00 PM", "11:30 AM"), or
+ * null for "all day", a null, or any spelling this does not recognise. Null
+ * means "do not judge it on the clock" everywhere it is used.
+ */
+function minutesOfDay(time: string | null): number | null {
+	const m = time?.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+	if (!m) return null;
+	return (
+		((Number(m[1]) % 12) + (/pm/i.test(m[3]) ? 12 : 0)) * 60 + Number(m[2])
+	);
+}
+
+/**
+ * Events a listener can still act on, given when the episode is being made.
+ *
+ * The week-ahead horizon opens on the Sunday before the episode, so the Monday
+ * it publishes is inside it — and an 11:30 AM Monday listing read out by an
+ * episode assembled at 12:30 PM is over before anyone hears it. W39 carried
+ * exactly that. A same-day event with no parseable clock time ("all day", or a
+ * listing with no time at all) stays: it may well still be running.
+ */
+function stillAhead(events: BriefEventAhead[], now: Date): BriefEventAhead[] {
+	const today = localMeetingDate(now.toISOString());
+	if (today === null) return events;
+	// Same clock and the same "6:00 PM" spelling the listings themselves carry,
+	// so one parser reads both. laTimeOf returns null at exactly midnight, which
+	// is minute zero — every listing is still ahead of it.
+	const nowMinutes = minutesOfDay(laTimeOf(now.toISOString())) ?? 0;
+	return events.filter((e) => {
+		if (e.date < today) return false;
+		if (e.date > today) return true;
+		const start = minutesOfDay(e.time);
+		return start === null || start >= nowMinutes;
+	});
+}
+
+/**
  * `monday` is any instant on the episode's Monday, Pacific.
  *
  * The window is compared as Pacific CALENDAR DAYS, not as instants seven days
  * apart: an instant window drifts by an hour across a DST boundary and would
  * move a Sunday-evening post in or out of the episode twice a year.
  */
-export function podcastInputs(db: Db, monday: Date): PodcastInputs {
+export function podcastInputs(
+	db: Db,
+	monday: Date,
+	now: Date = new Date(),
+): PodcastInputs {
 	const mondayDate = localMeetingDate(monday.toISOString());
 	if (!mondayDate) throw new Error(`unusable episode date: ${monday}`);
 	const weekStart = laDatePlusDays(mondayDate, -7);
@@ -278,6 +354,7 @@ export function podcastInputs(db: Db, monday: Date): PodcastInputs {
 			url: `${SITE_ORIGIN}/posts/${row.slug}/`,
 			publishedAt: row.published_at,
 			bodyMd: parsed.body,
+			postType: row.post_type,
 		});
 	}
 	posts.sort((a, b) => a.publishedAt.localeCompare(b.publishedAt));
@@ -291,15 +368,18 @@ export function podcastInputs(db: Db, monday: Date): PodcastInputs {
 		itemTypes: ["event"],
 	});
 	const standing = standingProgramTitles(calendar, mondayDate);
-	const events = dedupeEvents(
-		railEntries(
-			selectUpcomingEvents(
-				calendar,
-				pacificDay(laDatePlusDays(mondayDate, -1)),
-				7,
-			),
-			(url) => url,
-		).filter((e) => !standing.has(normalizeTitle(e.title))),
+	const events = stillAhead(
+		dedupeEvents(
+			railEntries(
+				selectUpcomingEvents(
+					calendar,
+					pacificDay(laDatePlusDays(mondayDate, -1)),
+					7,
+				),
+				(url) => url,
+			).filter((e) => !standing.has(normalizeTitle(e.title))),
+		),
+		now,
 	);
 
 	return { posts, events };
