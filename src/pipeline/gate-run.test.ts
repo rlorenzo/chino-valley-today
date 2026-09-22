@@ -11,6 +11,8 @@ import {
 	gatedPostInput,
 	mergeExtraFailures,
 	normalizeCitations,
+	repairDeadlineMs,
+	repairVerdict,
 } from "./gate-run.ts";
 import { createPost, type NewPost } from "./posts.ts";
 
@@ -204,5 +206,68 @@ describe("gatedPostInput", () => {
 		} finally {
 			rmSync(queued, { force: true });
 		}
+	});
+});
+
+describe("repairVerdict", () => {
+	const report = (n: number): GateReport => ({
+		pass: n === 0,
+		failures: Array.from({ length: n }, () => ({
+			gate: "proper_names" as const,
+			detail: "x",
+		})),
+		stats: {},
+	});
+
+	test("a clean pass is taken and ends the loop", () => {
+		assert.equal(repairVerdict(report(0), report(3)), "done");
+	});
+
+	test("strictly fewer failures is taken and goes again", () => {
+		// The W39 shape: 4 down to 1, which used to be where the budget ran out.
+		assert.equal(repairVerdict(report(1), report(4)), "continue");
+	});
+
+	test("the same count is a trade, not progress, so it stops", () => {
+		assert.equal(repairVerdict(report(2), report(2)), "stop");
+	});
+
+	test("more failures than before stops and keeps the better draft", () => {
+		assert.equal(repairVerdict(report(5), report(2)), "stop");
+	});
+});
+
+// The deadline is derived from the per-call LLM budget precisely so that
+// raising that budget cannot silently push the run past cvt-podcast.service's
+// 45-minute TimeoutStartSec — the SIGTERM the whole mechanism exists to avoid.
+describe("repairDeadlineMs", () => {
+	const MIN = 60_000;
+	// A pass started at the deadline still gets a full budget, then the judge
+	// and the backup judge get theirs. That total is what must fit.
+	const worstCase = (budgetMs: number) =>
+		repairDeadlineMs(budgetMs) + 3 * budgetMs;
+
+	test("the default budget leaves the documented 12-minute window", () => {
+		assert.equal(repairDeadlineMs(10 * MIN), 12 * MIN);
+	});
+
+	test("a raised budget shrinks the window instead of overrunning the unit", () => {
+		assert.ok(repairDeadlineMs(13 * MIN) < repairDeadlineMs(10 * MIN));
+		assert.ok(worstCase(13 * MIN) <= 45 * MIN);
+	});
+
+	test("the worst case stays inside the unit timeout across budgets", () => {
+		for (const minutes of [1, 5, 10, 13, 14, 20]) {
+			assert.ok(
+				worstCase(minutes * MIN) <= 45 * MIN,
+				`a ${minutes} min budget overruns the unit`,
+			);
+		}
+	});
+
+	test("a budget too large for any pass skips repairs rather than starting one", () => {
+		// Non-positive means the elapsed check fails on the first iteration, so
+		// no pass is started that provably cannot finish.
+		assert.ok(repairDeadlineMs(14 * MIN) <= 0);
 	});
 });

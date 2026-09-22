@@ -1,5 +1,5 @@
 // The gate path shared by every Tier B generator: generate -> normalize
-// citations -> Gate 1 (deterministic validators) -> one keep-best repair pass ->
+// citations -> Gate 1 (deterministic validators) -> keep-best repair passes ->
 // createPost -> Gate 2 (cross-family judge) -> publish/hold routing.
 //
 // recap.ts and business-tracker.ts ran byte-identical copies of this, 158
@@ -13,7 +13,7 @@
 import type { Db } from "../db/index.ts";
 import type { GateFailure, GateReport } from "../gates/validators.ts";
 import { validateDraft } from "../gates/validators.ts";
-import { chat } from "../llm/client.ts";
+import { budgetFromEnv, chat } from "../llm/client.ts";
 import type { MeetingBundle } from "./bundle.ts";
 import { anyContentFlag, isTierC, judgeDraft } from "./judge.ts";
 import {
@@ -102,10 +102,122 @@ export function gatedPostInput(o: GatedRunOptions, draftMd: string): NewPost {
 	};
 }
 
+/**
+ * How many times a failing draft may be sent back before it goes to a human.
+ *
+ * One pass was consistently one failure short: across five W39 generations it
+ * took 3 or 4 failures down to exactly 1 every time and never to 0, holding
+ * episodes one edit from publishable. So a second pass is the one that
+ * finishes, and the third is slack for a draft that needs two rounds.
+ * repairVerdict already bounds the loop; this bounds what that costs.
+ */
+const MAX_REPAIR_PASSES = 3;
+
+// TimeoutStartSec in deploy/systemd/cvt-podcast.service, the only caller of
+// this pipeline that runs under a unit timeout at all (recap and
+// business-tracker are run by hand). Being SIGTERMed mid-attempt is the exact
+// failure the per-call budget in ../llm/client.ts exists to prevent, and it is
+// what killed the 2026-09-14 podcast.
+const UNIT_TIMEOUT_MS = 45 * 60_000;
+// Calls that must still fit after a repair pass is STARTED: that pass, the
+// judge, and the backup judge, each of which can spend a full budget.
+const CALLS_AFTER_REPAIR_START = 3;
+// Slack, so the ceiling is a ceiling and not a photo finish.
+const UNIT_HEADROOM_MS = 3 * 60_000;
+
+/**
+ * How long into the run new repair passes may still be STARTED.
+ *
+ * Derived rather than typed, because its two inputs move independently and
+ * live in other files — the unit's timeout and the per-call budget, which is
+ * tunable at runtime via CVT_LLM_BUDGET_MS. A hand-computed constant would
+ * keep its comforting value while one of them drifted out from under it,
+ * silently reopening the SIGTERM this whole mechanism exists to close.
+ *
+ * At the default 10-minute budget that is 45 - 3*10 - 3 = 12 minutes, so a pass
+ * started at 11:59 still gets its full budget and the run lands at 42. A budget
+ * too large to fit any pass gives a non-positive deadline, which correctly
+ * skips repairs entirely rather than starting one that cannot finish.
+ *
+ * Note this is deliberately independent of MAX_REPAIR_PASSES: what has to fit
+ * is the work remaining after a pass STARTS, so raising the pass cap cannot
+ * push the run past the unit — the deadline just stops the loop earlier.
+ *
+ * Repairs are the only optional work in the run, which is what makes them the
+ * right thing to drop under time pressure: the better draft is held either way.
+ *
+ * ponytail: a repair-phase deadline, not the per-run budget the whole pipeline
+ * wants. If the judge calls ever start timing out too, give runGatedPipeline
+ * one deadline it divides among every call, as ../llm/client.ts already notes.
+ */
+export function repairDeadlineMs(budgetMs = budgetFromEnv()): number {
+	return (
+		UNIT_TIMEOUT_MS - UNIT_HEADROOM_MS - CALLS_AFTER_REPAIR_START * budgetMs
+	);
+}
+
+/**
+ * What to do with a repair pass's result.
+ *
+ * - `done`: it passed; take it and stop.
+ * - `continue`: it strictly closed failures; take it and go again.
+ * - `stop`: it closed nothing, or traded one failure for another. Keep the
+ *   PREVIOUS draft and hand it to a human — strictly decreasing, not merely
+ *   non-increasing, because a pass that trades one failure for another is
+ *   looping, and another turn of the same crank will not converge either.
+ */
+export type RepairVerdict = "done" | "continue" | "stop";
+
+export function repairVerdict(
+	candidate: GateReport,
+	previous: GateReport,
+): RepairVerdict {
+	if (candidate.pass) return "done";
+	return candidate.failures.length < previous.failures.length
+		? "continue"
+		: "stop";
+}
+
+/**
+ * The repair message. Slim on purpose: it carries the draft, the failures and
+ * the citable URLs, and NOT the bundle — resending the full bundle costs ~75k
+ * tokens and trips per-minute rate limits when it follows the generation call.
+ */
+function repairPrompt(
+	allowedUrls: string[],
+	extraGuidance: string | undefined,
+	failures: GateFailure[],
+	draftMd: string,
+): string {
+	return (
+		"A draft you wrote failed deterministic validation. Fix ONLY the issues listed below and change " +
+		'nothing else. If a link URL is "not in the allowed source list", replace it with the closest URL ' +
+		'that IS in the citable list below, copied character-for-character. If a number "does not appear in ' +
+		'the input corpus", remove that claim entirely (you do not have the sources in this message — do not ' +
+		"guess a replacement number). " +
+		'If a name "does not appear in the input corpus", write the name exactly as the sources write it ' +
+		"or drop the name from the sentence. Do NOT invent a variant, a compound, or a longer " +
+		"official-sounding title to get around the failure — a reworded name fails the same check again. " +
+		"Dropping the name is always available and is usually the right move: an attribution the sources do " +
+		"not carry adds nothing to the story. " +
+		"Never split one source item into two, or merge two into one, while repairing. " +
+		(extraGuidance ?? "") +
+		'If a block "has no citation link", add a link from the citable list ' +
+		"that the surrounding claims already use, or delete the block. Return the complete corrected draft " +
+		"in the same format.\n\n" +
+		`Citable URLs:\n${allowedUrls.map((u) => `- ${u}`).join("\n")}\n\n` +
+		`Failures:\n${failures.map((f) => `- [${f.gate}] ${f.detail}`).join("\n")}\n\n` +
+		`DRAFT:\n\n${draftMd}`
+	);
+}
+
 // Terminates the process on the hold/skip paths, exactly as the two inlined
 // copies did — these run as one-shot CLI entry points, not as library calls.
 export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 	const { db, bundle } = o;
+
+	// Before the first call, so the deadline covers generation too.
+	const startedAt = Date.now();
 
 	console.log("Generating draft (Tier B, extractive contract)...");
 	const gen = await chat(
@@ -137,59 +249,62 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 		`Gate 1: ${gateReport.pass ? "PASS" : `FAIL (${gateReport.failures.length} failures)`}`,
 	);
 
-	// One repair pass: feed the deterministic failures back to the generator,
-	// then re-gate. Still failing after that -> held for human review.
+	// Repair passes: feed the deterministic failures back to the generator, then
+	// re-gate, and go again while each pass is strictly closing failures (see
+	// MAX_REPAIR_PASSES and repairVerdict).
+	//
+	// The loop only handles genuine generator reaches — a name the corpus does
+	// not carry, grabbed to build a sentence with on a thin week. It cannot talk
+	// a generator out of a name that is already correct, so a gate gap has to be
+	// fixed as one: BUILTIN_ALLOWLIST in ../gates/validators.ts.
+	const deadlineMs = repairDeadlineMs();
 	if (!gateReport.pass) {
-		console.log(
-			"Repair pass: sending Gate 1 failures back to the generator...",
-		);
-		// Slim payload: the repair only needs the draft, the failures, and the
-		// citable URL list — resending the full bundle costs ~75k tokens and trips
-		// per-minute rate limits when it follows the generation call.
-		const repair = await chat(
-			"generator",
-			[
-				{ role: "system", content: o.generatorSystem },
-				{
-					role: "user",
-					content:
-						"A draft you wrote failed deterministic validation. Fix ONLY the issues listed below and change " +
-						'nothing else. If a link URL is "not in the allowed source list", replace it with the closest URL ' +
-						'that IS in the citable list below, copied character-for-character. If a number "does not appear in ' +
-						'the input corpus", remove that claim entirely (you do not have the sources in this message — do not ' +
-						"guess a replacement number). " +
-						'If a name "does not appear in the input corpus", write the name exactly as the sources write it ' +
-						"or drop the name from the sentence. Do NOT invent a variant, a compound, or a longer " +
-						"official-sounding title to get around the failure — a reworded name fails the same check again. " +
-						"Never split one source item into two, or merge two into one, while repairing. " +
-						(o.repairGuidance ?? "") +
-						'If a block "has no citation link", add a link from the citable list ' +
-						"that the surrounding claims already use, or delete the block. Return the complete corrected draft " +
-						"in the same format.\n\n" +
-						`Citable URLs:\n${bundle.allowedUrls.map((u) => `- ${u}`).join("\n")}\n\n` +
-						`Failures:\n${gateReport.failures.map((f) => `- [${f.gate}] ${f.detail}`).join("\n")}\n\n` +
-						`DRAFT:\n\n${draftMd}`,
-				},
-			],
-			{ maxTokens: 4096 },
-		);
-		const originalDraft = draftMd;
-		const originalReport = gateReport;
-		draftMd = normalizeCitations(repair.content.trim());
-		gateReport = runGate1();
-		console.log(
-			`Gate 1 after repair: ${gateReport.pass ? "PASS" : `FAIL (${gateReport.failures.length} failures)`}`,
-		);
-		// A repair that makes things worse gets discarded — hold the better draft.
-		if (
-			!gateReport.pass &&
-			gateReport.failures.length >= originalReport.failures.length
-		) {
+		for (let pass = 1; pass <= MAX_REPAIR_PASSES; pass++) {
+			const elapsedMs = Date.now() - startedAt;
+			if (elapsedMs > deadlineMs) {
+				console.log(
+					`Repair budget spent (${Math.round(elapsedMs / 60_000)} min into the run); holding the draft for review.`,
+				);
+				break;
+			}
 			console.log(
-				"Repair did not improve the draft; keeping the original for review.",
+				`Repair pass ${pass}/${MAX_REPAIR_PASSES}: sending Gate 1 failures back to the generator...`,
 			);
-			draftMd = originalDraft;
-			gateReport = originalReport;
+			const repair = await chat(
+				"generator",
+				[
+					{ role: "system", content: o.generatorSystem },
+					{
+						role: "user",
+						content: repairPrompt(
+							bundle.allowedUrls,
+							o.repairGuidance,
+							gateReport.failures,
+							draftMd,
+						),
+					},
+				],
+				{ maxTokens: 4096 },
+			);
+			const previousDraft = draftMd;
+			const previousReport = gateReport;
+			// runGate1 reads draftMd, so the candidate has to land first.
+			draftMd = normalizeCitations(repair.content.trim());
+			const candidate = runGate1();
+			console.log(
+				`Gate 1 after repair ${pass}: ${candidate.pass ? "PASS" : `FAIL (${candidate.failures.length} failures)`}`,
+			);
+			const outcome = repairVerdict(candidate, previousReport);
+			if (outcome === "stop") {
+				console.log(
+					"Repair did not improve the draft; keeping the better one for review.",
+				);
+				draftMd = previousDraft;
+				gateReport = previousReport;
+				break;
+			}
+			gateReport = candidate;
+			if (outcome === "done") break;
 		}
 	}
 
