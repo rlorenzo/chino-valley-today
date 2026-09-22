@@ -181,12 +181,12 @@ describe("gatedPostInput", () => {
 			assert.match(readFileSync(queued, "utf8"), /DRAFT BODY/);
 
 			const extra: Partial<NewPost> = {
-				bodyMd: "## Cold open\n\n**Maya:** Hello.",
+				bodyMd: "## Opening\n\n**Maya:** Hello.",
 				audio: {
 					url: "https://chinovalley.today/audio/2026-w37.mp3",
 					bytes: 4_200_000,
 					durationSec: 512,
-					chapters: [{ title: "Cold open", startSec: 0 }],
+					chapters: [{ title: "Opening", startSec: 0 }],
 				},
 			};
 			const second = createPost(o.db, {

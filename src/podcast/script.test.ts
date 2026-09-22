@@ -8,6 +8,7 @@ import {
 	eventLine,
 	parseTurns,
 	podcastChecks,
+	podcastPromptBody,
 	podcastRepairGuidance,
 	podcastSystem,
 	spokenText,
@@ -21,18 +22,17 @@ function turn(host: string, text: string, url = A): string {
 	return `**${host}:** ${text} [source](${url})`;
 }
 
-// A minimally valid draft: three sections in order, alternating hosts, every
-// turn cited, and padded to clear the 600-word floor.
+// A minimally valid draft: both sections in order, alternating hosts, every
+// turn cited, and padded to clear the 600-word floor. No opening section —
+// composeTranscript adds that, and the model never writes it.
 function validDraft(padWords = 700): string {
 	const pad = Array.from({ length: padWords }, () => "word").join(" ");
 	return [
-		"## Cold open",
+		"## Last week",
 		"",
 		turn("Maya", "The council approved the contract on September 8."),
 		"",
 		turn("Dan", `The district met Thursday. ${pad}`, B),
-		"",
-		"## Last week",
 		"",
 		turn("Maya", "The sheriff's station said the road reopened."),
 		"",
@@ -65,8 +65,8 @@ describe("parseTurns", () => {
 		assert.deepEqual(
 			turns.map((t) => [t.section, t.host]),
 			[
-				["Cold open", "Maya"],
-				["Cold open", "Dan"],
+				["Last week", "Maya"],
+				["Last week", "Dan"],
 				["Last week", "Maya"],
 				["Week ahead", "Dan"],
 			],
@@ -75,24 +75,22 @@ describe("parseTurns", () => {
 
 	test("collects every citation URL on a turn", () => {
 		const turns = parseTurns(
-			`## Cold open\n\n**Maya:** Two links. [source](${A}) [also](${B})`,
+			`## Last week\n\n**Maya:** Two links. [source](${A}) [also](${B})`,
 		);
 		assert.deepEqual(turns[0].urls, [A, B]);
 	});
 
 	test("ignores lines that are not turns", () => {
-		assert.equal(parseTurns("## Cold open\n\nJust some prose.\n").length, 0);
+		assert.equal(parseTurns("## Last week\n\nJust some prose.\n").length, 0);
 	});
 });
 
 describe("podcastChecks", () => {
 	test("the spoken-length floor is the caller's, so a thin week can be short", () => {
 		const short = [
-			"## Cold open",
+			"## Last week",
 			"",
 			"**Maya:** One thing happened this week. [s](https://example.com/a)",
-			"",
-			"## Last week",
 			"",
 			"**Dan:** The council met on Tuesday. [s](https://example.com/a)",
 			"",
@@ -185,7 +183,9 @@ describe("podcastChecks", () => {
 		for (const bad of [
 			validDraft().replace("## Week ahead", "## The week ahead"),
 			validDraft().replace("## Last week", "## Cold open"),
-			validDraft().replace("## Cold open\n", ""),
+			validDraft().replace("## Last week\n", ""),
+			// The opening is fixed text the model must not write for itself.
+			`## Opening\n\n${validDraft()}`,
 		]) {
 			assert.ok(
 				podcastChecks(bad).some((f) =>
@@ -193,6 +193,75 @@ describe("podcastChecks", () => {
 				),
 			);
 		}
+	});
+
+	test("rejects a turn that cites a preview and says the meeting happened", () => {
+		// Purpose-built rather than a mutated validDraft: its other turns already
+		// say "approved" and "met", so mutating it cannot tell which turn tripped.
+		const draft = (claim: string) =>
+			[
+				"## Last week",
+				"",
+				`**Maya:** ${claim} [source](${B})`,
+				"",
+				"## Week ahead",
+				"",
+				turn("Dan", "The commission meets at 6:00 PM.", A),
+			].join("\n");
+		const previews = new Set([B]);
+		const previewFailures = (md: string, p = previews) =>
+			podcastChecks(md, 0, p).filter((f) => /PREVIEW/.test(f.detail));
+
+		assert.match(
+			previewFailures(
+				draft("The Board of Education held a regular meeting on September 17."),
+			)[0]?.detail ?? "",
+			/cites a meeting PREVIEW and says "held"/,
+		);
+		// The same sentence is fine when the cited post is not a preview...
+		assert.equal(
+			previewFailures(
+				draft("The Board of Education held a regular meeting on September 17."),
+				new Set(),
+			).length,
+			0,
+		);
+		// ...and a preview turn that stays in the future is fine too.
+		assert.equal(
+			previewFailures(
+				draft("The Board of Education is scheduled to meet on September 17."),
+			).length,
+			0,
+		);
+		// The future PASSIVE uses the same participles and is equally correct.
+		for (const future of [
+			"The meeting is scheduled to be held on Thursday.",
+			"The bond item will be discussed on Thursday.",
+			"The appeal is scheduled to be heard Thursday.",
+			// One adverb between the auxiliary and the participle is still future.
+			"The proposal will be formally discussed on Thursday.",
+			"The appeal is scheduled to be publicly heard on Thursday.",
+			"The council is scheduled to formally approve it Thursday.",
+		]) {
+			assert.equal(previewFailures(draft(future)).length, 0, future);
+		}
+		// Perfect and past passive still assert the thing happened.
+		for (const past of [
+			"The meeting was held on Thursday.",
+			"The bond item has been approved.",
+		]) {
+			assert.equal(previewFailures(draft(past)).length, 1, past);
+		}
+		// A valid future clause does not launder an unsupported past claim in the
+		// same turn.
+		assert.match(
+			previewFailures(
+				draft(
+					"The bond item will be discussed Thursday, and the board approved it.",
+				),
+			)[0]?.detail ?? "",
+			/cites a meeting PREVIEW and says "approved"/,
+		);
 	});
 
 	test("rejects a draft that is too short or too long", () => {
@@ -243,9 +312,9 @@ describe("thin-week prompts", () => {
 describe("composeTranscript", () => {
 	const out = composeTranscript(validDraft(), MONDAY);
 
-	test("opens on Cold open with the fixed intro before the generated turns", () => {
+	test("opens on Opening with the fixed intro before the generated turns", () => {
 		assert.ok(
-			out.startsWith("## Cold open\n\n**Maya:** Good morning, and welcome"),
+			out.startsWith("## Opening\n\n**Maya:** Good morning, and welcome"),
 		);
 		assert.ok(
 			out.indexOf("I'm Maya.") <
@@ -278,11 +347,30 @@ describe("composeTranscript", () => {
 		);
 	});
 
-	test("throws rather than publish a transcript with no cold open", () => {
+	test("throws rather than publish a draft that does not open on Last week", () => {
 		assert.throws(
-			() => composeTranscript("## Last week\n\n**Maya:** Hi.", MONDAY),
-			/no "## Cold open" heading/,
+			() => composeTranscript("## Week ahead\n\n**Maya:** Hi.", MONDAY),
+			/does not open on "## Last week"/,
 		);
+	});
+
+	test("adds the crisis line, and only when the episode raised it", () => {
+		assert.ok(!out.includes("988"));
+		const sensitive = composeTranscript(
+			validDraft().replace(
+				"The sheriff's station said the road reopened.",
+				"A Suicide Prevention Awareness event is scheduled Thursday.",
+			),
+			MONDAY,
+		);
+		assert.match(sensitive, /988 Suicide and Crisis Lifeline/);
+		// Still alternating across the seam the extra turn creates.
+		const hosts = parseTurns(sensitive)
+			.filter((t) => t.section === "Sign-off")
+			.map((t) => t.host);
+		assert.deepEqual(hosts, ["Maya", "Dan", "Maya"]);
+		// And composing it again must not speak it twice.
+		assert.equal(composeTranscript(sensitive, MONDAY), sensitive);
 	});
 });
 
@@ -302,6 +390,7 @@ describe("buildPodcastBundle", () => {
 				url: A,
 				publishedAt: "2026-09-03T14:00:00.000Z",
 				bodyMd: "The vote was 4-1.",
+				postType: "meeting_recap",
 			},
 		],
 		events: [event],
@@ -338,6 +427,28 @@ describe("buildPodcastBundle", () => {
 
 	test("carries the source bodies, which is what the numbers are traced against", () => {
 		assert.match(buildPodcastBundle(inputs, MONDAY).inputCorpus, /4-1/);
+	});
+
+	test("drops the pipeline's notes about its own reach", () => {
+		// On the page this note explains a thin preview honestly. Read aloud it is
+		// a machine discussing robots.txt with someone in their car, and W39 did
+		// exactly that. It is also not a fact about Chino Valley, so it must not be
+		// in the corpus that decides what a turn may say.
+		const withNote = {
+			...inputs,
+			posts: [
+				{
+					...inputs.posts[0],
+					bodyMd:
+						"The vote was 4-1.\n\n_No agenda item text is in our records for this meeting — CVUSD's agenda PDF host currently blocks automated fetching (robots.txt)._",
+				},
+			],
+		};
+		const corpus = buildPodcastBundle(withNote, MONDAY).inputCorpus;
+		assert.ok(!corpus.includes("robots.txt"));
+		assert.ok(!corpus.includes("in our records"));
+		assert.match(corpus, /4-1/); // the real content survives
+		assert.ok(!podcastPromptBody(withNote, MONDAY).includes("robots.txt"));
 	});
 });
 

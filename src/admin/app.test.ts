@@ -79,7 +79,7 @@ describe("admin approve — podcast hand-off", () => {
 			tier,
 			title: `Title for ${name}`,
 			bodyMd:
-				"## Cold open\n\n**Maya:** A thing happened. [s](https://chino.gov/a)",
+				"## Opening\n\n**Maya:** A thing happened. [s](https://chino.gov/a)",
 			sources: ["https://chino.gov/a"],
 		});
 		transitionPost(db, slug, "held", {

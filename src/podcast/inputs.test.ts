@@ -299,6 +299,11 @@ describe("podcastInputs — last week's posts", () => {
 	});
 });
 
+// `now` is passed explicitly throughout this block: the week ahead now drops
+// events that have already started (stillAhead), so a fixture anchored on a
+// fixed Monday must say when "now" is or the whole week reads as past. MONDAY
+// is noon Pacific on the episode day, which keeps that day's afternoon
+// listings and is what a real 06:30 or 12:30 run looks like.
 describe("podcastInputs — the week ahead", () => {
 	test("covers the episode Monday through the following Sunday", () => {
 		const db = openDb(":memory:");
@@ -334,8 +339,60 @@ describe("podcastInputs — the week ahead", () => {
 		);
 
 		assert.deepEqual(
-			podcastInputs(db, MONDAY).events.map((e) => e.title),
+			podcastInputs(db, MONDAY, MONDAY).events.map((e) => e.title),
 			["Episode Monday", "Closing Sunday"],
+		);
+	});
+
+	test("drops an episode-day event that already started before the run", () => {
+		// The W39 regression: the week ahead opens on the episode's own Monday, so
+		// an 11:30 AM listing was read out by an episode assembled at 12:30 PM.
+		// `now` here is noon Pacific.
+		const db = openDb(":memory:");
+		addEvent(
+			db,
+			"sbclib-events",
+			"over",
+			"2026-09-07T18:30:00.000Z", // 11:30 AM PT, already started
+			"Morning storytime",
+		);
+		addEvent(
+			db,
+			"sbclib-events",
+			"noon",
+			"2026-09-07T19:00:00.000Z", // 12:00 PM PT, starting exactly now
+			"Noon briefing",
+		);
+		addEvent(
+			db,
+			"sbclib-events",
+			"later",
+			"2026-09-08T01:00:00.000Z", // 6:00 PM PT the same day
+			"Evening meeting",
+		);
+		addEvent(
+			db,
+			"sbclib-events",
+			"untimed",
+			"2026-09-07", // no clock time at all: it may still be running
+			"All-day fair",
+		);
+		addEvent(
+			db,
+			"sbclib-events",
+			"tomorrow",
+			"2026-09-08T16:00:00.000Z", // 9:00 AM PT Tuesday, before noon but ahead
+			"Tuesday morning walk",
+		);
+
+		assert.deepEqual(
+			podcastInputs(db, MONDAY, MONDAY).events.map((e) => e.title),
+			[
+				"All-day fair",
+				"Noon briefing",
+				"Evening meeting",
+				"Tuesday morning walk",
+			],
 		);
 	});
 
@@ -359,7 +416,7 @@ describe("podcastInputs — the week ahead", () => {
 		);
 
 		assert.deepEqual(
-			podcastInputs(db, MONDAY).events.map((e) => e.title),
+			podcastInputs(db, MONDAY, MONDAY).events.map((e) => e.title),
 			["Library event"],
 		);
 	});
@@ -374,7 +431,7 @@ describe("podcastInputs — the week ahead", () => {
 			"Library event",
 		);
 		assert.equal(
-			podcastInputs(db, MONDAY).events[0].url,
+			podcastInputs(db, MONDAY, MONDAY).events[0].url,
 			"https://example.org/sbclib-events/lib",
 		);
 	});
@@ -414,7 +471,9 @@ describe("podcastInputs — the week ahead", () => {
 		);
 
 		assert.deepEqual(
-			podcastInputs(db, MONDAY).events.map((e) => e.title.toLowerCase()),
+			podcastInputs(db, MONDAY, MONDAY).events.map((e) =>
+				e.title.toLowerCase(),
+			),
 			["city council - regular meeting"],
 		);
 	});
@@ -570,10 +629,13 @@ describe("week-ahead curation", () => {
 		assert.ok(!standing.has("annual milkcan game"));
 	});
 
-	test("standingProgramTitles: a gap breaks the run, so meetings survive history", () => {
+	test("standingProgramTitles: no two weeks in a row, so meetings survive history", () => {
 		// The calendar keeps growing, so anything counted over all of it becomes
 		// standing eventually. These are the cases that must never be dropped no
-		// matter how many years accumulate.
+		// matter how many years accumulate. None of them ever runs two weeks in a
+		// row, which is the signal that separates a programme from a meeting —
+		// and the reason the run is allowed to tolerate a gap without sweeping
+		// these up with it.
 		const monthly = ["2026-01-13", "2026-02-10", "2026-03-10", "2026-04-14"];
 		const twiceMonthly = [
 			// First and third Tuesday: three distinct weeks inside one month, but
@@ -682,6 +744,46 @@ describe("week-ahead curation", () => {
 				`weekday offset ${offset} should be standing`,
 			);
 		}
+	});
+
+	test("standingProgramTitles: one missing week does not break a weekly run", () => {
+		// The W39 regression, exactly as it happened: Toddler Boot Camp ran every
+		// week to 2026-09-21 except the week of September 7, which was never
+		// scraped. An unbroken run reset to two and the programme was read out as
+		// news. The control never runs two weeks in a row and must still survive.
+		const items = [
+			...[
+				"2026-08-17",
+				"2026-08-24",
+				"2026-08-31",
+				// the week of 2026-09-07 is missing
+				"2026-09-14",
+				"2026-09-21",
+			].map((d) => ({
+				title: "Toddler Boot Camp",
+				occurred_at: `${d}T18:30:00Z`,
+			})),
+			...["2026-09-08", "2026-09-22"].map((d) => ({
+				title: "City Council - Regular Meeting",
+				occurred_at: `${d}T02:00:00Z`,
+			})),
+		];
+		const standing = standingProgramTitles(items, "2026-09-21");
+		assert.ok(standing.has("toddler boot camp"));
+		assert.ok(!standing.has("city council - regular meeting"));
+	});
+
+	test("standingProgramTitles: two gaps in a row do break the run", () => {
+		// A fortnightly programme is not a weekly one. Two consecutive misses is
+		// the line, or the tolerance would swallow every other cadence in the
+		// calendar.
+		const items = ["2026-08-31", "2026-09-21"].map((d) => ({
+			title: "Fortnightly Thing",
+			occurred_at: `${d}T18:30:00Z`,
+		}));
+		assert.ok(
+			!standingProgramTitles(items, "2026-09-21").has("fortnightly thing"),
+		);
 	});
 
 	test("standingProgramTitles: an unusable anchor names itself", () => {

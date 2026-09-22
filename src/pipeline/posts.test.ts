@@ -420,7 +420,7 @@ describe("podcast audio frontmatter", () => {
 				postType: "podcast",
 				tier: "B",
 				title: "Week in Review: September 7, 2026",
-				bodyMd: "## Cold open\n\n**Maya:** Good morning.",
+				bodyMd: "## Opening\n\n**Maya:** Good morning.",
 				meetingDate: "2026-09-07",
 				sources: [SOURCE],
 				...(audio ? { audio } : {}),
@@ -434,7 +434,7 @@ describe("podcast audio frontmatter", () => {
 		bytes: 8_412_160,
 		durationSec: 1042,
 		chapters: [
-			{ title: "Cold open", startSec: 0 },
+			{ title: "Opening", startSec: 0 },
 			{ title: "Last week", startSec: 47 },
 		],
 	};
@@ -447,10 +447,7 @@ describe("podcast audio frontmatter", () => {
 		);
 		assert.match(fm, /\naudio_bytes: 8412160\n/);
 		assert.match(fm, /\nduration_sec: 1042\n/);
-		assert.match(
-			fm,
-			/\nchapters:\n {2}- title: "Cold open"\n {4}start_sec: 0\n/,
-		);
+		assert.match(fm, /\nchapters:\n {2}- title: "Opening"\n {4}start_sec: 0\n/);
 		assert.match(fm, /\n {2}- title: "Last week"\n {4}start_sec: 47\n/);
 	});
 

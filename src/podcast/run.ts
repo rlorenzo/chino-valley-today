@@ -237,6 +237,15 @@ const minWords = thinWeek ? THIN_WEEK_MIN_WORDS : WORDS_MIN;
 if (thinWeek)
 	console.log(`  thin week: spoken-length floor lowered to ${minWords} words`);
 
+// Which citable URLs are previews, so a turn citing one can be stopped from
+// saying the meeting happened. Built here because run.ts is where the post
+// types are; podcastChecks only ever sees the draft text.
+const previewUrls = new Set(
+	inputs.posts
+		.filter((p) => p.postType === "meeting_preview")
+		.map((p) => p.url),
+);
+
 const bundle = buildPodcastBundle(inputs, monday);
 console.log(
 	`  bundle ${bundle.targetKey}: ${bundle.allowedUrls.length} citable URLs`,
@@ -253,7 +262,8 @@ await runGatedPipeline({
 	tier: "B",
 	meetingDate: mondayDate,
 	repairGuidance: podcastRepairGuidance(minWords),
-	extraChecks: (draftMd: string) => podcastChecks(draftMd, minWords),
+	extraChecks: (draftMd: string) =>
+		podcastChecks(draftMd, minWords, previewUrls),
 	beforePublish: withAudio,
 	afterPublish: () => publishEpisodeAudio(slug),
 });

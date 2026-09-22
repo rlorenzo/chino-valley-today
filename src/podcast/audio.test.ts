@@ -13,7 +13,7 @@ import {
 
 describe("parseTranscript", () => {
 	test("parses sections and turns, stripping links and collapsing whitespace", () => {
-		const md = `## Cold open
+		const md = `## Opening
 
 **Maya:** Good morning,   Chino Valley. [source](https://example.com/a)
 **Dan:** Big week ahead. [agenda](https://example.com/b) [also this](https://example.com/c)
@@ -24,7 +24,7 @@ describe("parseTranscript", () => {
 `;
 		const sections = parseTranscript(md);
 		assert.equal(sections.length, 2);
-		assert.equal(sections[0].title, "Cold open");
+		assert.equal(sections[0].title, "Opening");
 		assert.deepEqual(sections[0].turns, [
 			{ speaker: "Maya", text: "Good morning, Chino Valley." },
 			{ speaker: "Dan", text: "Big week ahead." },
@@ -36,13 +36,13 @@ describe("parseTranscript", () => {
 	});
 
 	test("ignores blank lines", () => {
-		const sections = parseTranscript("## Cold open\n\n\n**Maya:** hi\n\n");
+		const sections = parseTranscript("## Opening\n\n\n**Maya:** hi\n\n");
 		assert.equal(sections[0].turns.length, 1);
 	});
 
 	test("throws on a non-blank line that is neither a heading nor a turn", () => {
 		assert.throws(
-			() => parseTranscript("## Cold open\nsome stray narration\n"),
+			() => parseTranscript("## Opening\nsome stray narration\n"),
 			/unrecognized transcript line/,
 		);
 	});
@@ -181,7 +181,7 @@ describe("chapterTimes", () => {
 	test("derives start/end seconds from cumulative PCM byte counts", () => {
 		// 24000 samples/sec * 2 bytes/sample = 48000 bytes/sec
 		const chapters = chapterTimes([
-			{ title: "Cold open", bytes: 48000 * 10 },
+			{ title: "Opening", bytes: 48000 * 10 },
 			{ title: "Last week", bytes: 48000 * 20 },
 		]);
 		assert.equal(chapters[0].startSec, 0);

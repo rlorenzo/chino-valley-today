@@ -4,6 +4,7 @@ import { simpleParser } from "mailparser";
 import {
 	channelFromSender,
 	extractNixlePermalink,
+	isChinoRelease,
 	isNixleMessage,
 	messageToItemDraft,
 } from "./sbsheriff-nixle-mail.ts";
@@ -215,6 +216,120 @@ describe("mailbox filter", () => {
 	test("unrelated mail does not match even with an alias set", () => {
 		assert.equal(
 			isNixleMessage("to: someone@else", "statements@bank.example", alias),
+			false,
+		);
+	});
+});
+
+describe("isChinoRelease", () => {
+	// The W39 regression, from the release that caused it (alert 12668373).
+	// Its LOCATION(S) line says Rancho Cucamonga; the only "Chino Hills" in it
+	// is a standing paragraph about where the PROGRAMME operates. Scanning the
+	// whole body flagged it as local, it published as an alert, and it led the
+	// podcast.
+	const smashAndGrab = [
+		"Dear Nixle User,",
+		"",
+		"Advisory Message has been issued by the SBSD - Headquarters.",
+		"",
+		"Six Arrests Made During Targeted Crime Suppression-Operation Smash & Grab",
+		"",
+		"DATE: September 14, 2026,",
+		"",
+		"INCIDENT: Targeted Crime Suppression-Operation Smash & Grab",
+		"",
+		"LOCATION(S): Rancho Cucamonga",
+		"",
+		"SUMMARY: Between the weeks of August 29, 2026, and September 11, 2026,",
+		"investigators conducted a retail theft operation in the area of the",
+		"Rancho Cucamonga shopping corridors.",
+		"",
+		"Operation SMASH & Grab focuses its efforts on the Rancho Cucamonga, Apple",
+		"Valley, Hesperia, Victorville, and Chino Hills shopping districts to",
+		"disrupt and dismantle these retail store theft crews.",
+	].join("\n");
+
+	test("the LOCATION field decides, not a mention anywhere in the prose", () => {
+		assert.equal(
+			isChinoRelease(
+				"Six Arrests Made During Targeted Crime Suppression-Operation Smash & Grab",
+				smashAndGrab,
+			),
+			false,
+		);
+	});
+
+	test("a release whose LOCATION is Chino is relevant", () => {
+		assert.equal(
+			isChinoRelease(
+				"Advisory Message: Collision",
+				smashAndGrab.replace(
+					"LOCATION(S): Rancho Cucamonga",
+					"LOCATION(S): Chino Hills",
+				),
+			),
+			true,
+		);
+	});
+
+	test("a location naming both cities is relevant", () => {
+		assert.equal(
+			isChinoRelease(
+				"Advisory Message: Pursuit",
+				"LOCATION(S): Chino and Rancho Cucamonga\n\nSUMMARY: A pursuit.",
+			),
+			true,
+		);
+	});
+
+	test("a wrapped city list keeps the cities on the continuation line", () => {
+		assert.equal(
+			isChinoRelease(
+				"Advisory Message: Operation",
+				smashAndGrab.replace(
+					"LOCATION(S): Rancho Cucamonga",
+					"LOCATION(S): Rancho Cucamonga, Apple Valley, Hesperia, Victorville,\nChino Hills",
+				),
+			),
+			true,
+		);
+	});
+
+	test("a wrapped street address keeps the city on the next line", () => {
+		assert.equal(
+			isChinoRelease(
+				"Advisory Message: Collision",
+				"LOCATION: 13000 Block of Central Avenue,\nChino, CA\n\nSUMMARY: A collision.",
+			),
+			true,
+		);
+	});
+
+	test("the field stops at the next template field, not the boilerplate", () => {
+		// No blank line between fields, and the programme paragraph that caused
+		// the W39 regression still sits outside the location field.
+		assert.equal(
+			isChinoRelease(
+				"Advisory Message: Operation",
+				"LOCATION(S): Rancho Cucamonga\nSUMMARY: Operation SMASH & Grab covers the Chino Hills shopping districts.",
+			),
+			false,
+		);
+	});
+
+	test("a free-form release with no template falls back to the whole text", () => {
+		assert.equal(
+			isChinoRelease(
+				"Advisory Message: Road closure",
+				"SUMMARY: Central Avenue in Chino is closed this evening.",
+			),
+			true,
+		);
+		assert.equal(
+			isChinoRelease(
+				"Advisory Message: Road closure",
+				"SUMMARY: Foothill Boulevard in Upland is closed this evening.",
+			),
 			false,
 		);
 	});
