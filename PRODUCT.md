@@ -101,8 +101,14 @@ outlet's reporting as its own claim.
   incident data (endpoint unverified), secondary-press RSS for headline
   aggregation (The Champion, Daily Bulletin, regional TV), CIF-SS / school
   athletics results (team-level only), the JS-rendered calendars (CVUSD
-  district, Chaffey College, Shoppes at Chino Hills), and Ticketmaster
-  Discovery for ticketed regional events.
+  district, Chaffey College), and Ticketmaster Discovery for ticketed
+  regional events.
+- **Sources rejected on terms, not capability:** KTLA (2026-08-19), The
+  Champion (stopped 2026-08-26, pending written permission), and The Shops at
+  Chino Hills (2026-09-19). The last was previously filed above as a
+  JS-rendered calendar; it is not — its events are server-rendered and would
+  have been easy to ingest, which is exactly why the rejection is on the
+  terms. SOURCES.md and EDITORIAL.md carry the reasoning.
 - **Post types:** meeting previews, meeting recaps, business-tracker listings and
   narratives, news digests, alerts, and (Phase 4) the **daily brief** — a
   morning assembly of weather, overnight incidents, today's schedule, fresh

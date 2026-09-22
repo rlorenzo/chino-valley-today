@@ -55,6 +55,15 @@ whenever a source changes behavior.
   ingested as `alert` items; valid-but-empty on probe day, same steady-state
   logic as CVFD's Alert Center. Catalog page robots-blocked (noted above), so
   per-category alert CIDs are unverified.
+- **Calendar (ModID=58) is NOT ingested — probed 2026-09-19, gap flagged.**
+  `RSSFeed.aspx?ModID=58&CID=All-calendar.xml` returns 200 with structured
+  `calendarEvent:EventDates` / `EventTimes` / `Location` fields and item-level
+  `Calendar.aspx?EID=N` links; 18 real community events on the probe day
+  (blood drive, bulky-item drop-off, mulch giveaway, McCoy Arenas horse
+  shows). Neither `Calendar.aspx` nor `RSSFeed.aspx` is covered by any
+  robots.txt rule — only the `/RSS.aspx` catalog is, as noted above. Same
+  host and endpoint family as the two modules already ingested. Reasoning in
+  `reports/notes/shoppes-events.md`.
 - **Link-back depth:** item-level (`CivicAlerts.aspx?aid=N`, 302s to canonical).
 - **Reliability guess:** high.
 
@@ -339,6 +348,50 @@ whenever a source changes behavior.
 - **Volume:** ~1-2/month (monthly Hangar Talk + occasional special flights).
 - **Reliability guess:** medium — small-org custom CMS, no API contract, and
   the parser depends on presentational class names that a redesign would move.
+
+### shoppes-events — The Shops at Chino Hills — REJECTED on ToS (2026-09-19)
+
+- **Probed 2026-09-19, not built.** The property's Terms of Use (effective
+  2026-01-26) state: "You may not use spiders, robots, data mining techniques
+  or other automated devices or programs to catalog, download or otherwise
+  reproduce, store or distribute content available on the Site." That is the
+  Nixle / KTLA / Champion class — a binding prohibition on automated ingestion
+  of any kind, which binds regardless of robots posture. A separate clause
+  grants use of the Content for "personal, educational, noncommercial use
+  only" and forbids copying it "on any network computer", which forecloses the
+  raw archive as well as publication. No scraper file, no registry key, no
+  `tos-config.ts` entry (nothing to drift-check on a source that is not
+  ingested). Trail in `reports/notes/shoppes-events.md`.
+- **There is no robots.txt.** `/robots.txt` returns HTTP 200 carrying the
+  Next.js SPA shell, byte-identical to what a nonexistent path returns, so our
+  parser would read zero groups and allow everything. Absence of robots.txt is
+  not permission; it is one gate missing and the other one shut.
+- **Correct a wrong assumption while we are here:** PRODUCT.md filed this under
+  "the JS-rendered calendars" alongside CVUSD and Chaffey. It is not
+  JS-rendered. The whole event list is server-rendered into `__NEXT_DATA__` on
+  `/events` (`props.pageProps.sectionsData.events_list_container.events[]`),
+  per-event pages repeat it under `event_container` with a schema.org `Event`,
+  and `/sitemap.xml` lists every event permalink. Had the terms permitted it,
+  this would have been an easy HTML source — about a day's parsing work. The
+  one real quirk: `occurrence_type` is either `time_range` (dated one-offs) or
+  `date_range` with a null `end_date` (standing attractions), and the second
+  shape must not be stored as a one-day event.
+- **The events remain reachable through their organizers.** The Heritage
+  Farmers Market is already cited to `heritagefarmersmarket.org/chino-hills`
+  in the daily brief; the Wine Walk is a Chino Hills Community Foundation
+  event (`chinohillsfoundation.com`, robots fully open, terms not yet read);
+  the Moon Festival is CAACH's. The mall is the venue, not the publisher.
+- **"Title and link only" does not open a door (asked 2026-09-19).** Not for
+  an automated one: the robot clause governs the fetch, not the publication,
+  and `fetchDocument` plus `insertItem` trip it before anything renders. A
+  human hand-entering a line is a different and narrower question — the terms
+  carry no linking clause at all (the only `LINKS` section is outbound), and
+  facts are not theirs — but it puts a recurring manual task on an operator
+  this project is designed not to require, and buys nothing over citing the
+  organizer. Full reasoning in the note.
+- **Revisit only on a terms change or written permission** to
+  `webmaster@placewise.com` (the channel the terms name), covering automated
+  retrieval and storage, not just publication.
 
 ### champion-news — The Champion Newspapers (TownNews Blox CMS)
 

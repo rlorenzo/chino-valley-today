@@ -225,13 +225,27 @@ release and both still live hazards:
   publish without human review. The corrections policy below applies, and a
   correction here counts as an audit miss like any other.
 
-## Source channels (decision 2026-08-12)
+## Source channels (decision 2026-08-12, amended 2026-09-19)
 
 - Agency-operated notification channels (e.g. the Sheriff's Nixle channel)
   are primary sources. Ingestion must respect the platform's terms: Nixle is
   ingested via email subscription (its intended delivery), never page
   scraping. Cited URL = the nixle.us permalink in the message.
 - User-generated platforms (Facebook, Nextdoor) remain excluded as sources.
+- **Commercial venues are sourced from the event's organizer, not the venue's
+  own site, where the venue's terms prohibit automated access (amended
+  2026-09-19).** The Shops at Chino Hills was probed on 2026-09-19 and
+  rejected: its Terms of Use prohibit using "spiders, robots, data mining
+  techniques or other automated devices or programs to catalog, download or
+  otherwise reproduce, store or distribute content available on the Site", and
+  separately grant use of the content for "personal, educational,
+  noncommercial use only". Same rule as KTLA and the Champion, reached the
+  same way — the terms decide it, not robots.txt, and the site has no
+  robots.txt at all. The loss is smaller than it looks: a mall is a venue, and
+  the Wine Walk, the Moon Festival and the farmers market each have an
+  organizer who publishes the event themselves. Prefer the organizer anyway,
+  terms aside — the organizer is the party who can correct the record.
+  Reasoning and the full probe in `reports/notes/shoppes-events.md`.
 
 ## Corrections
 
