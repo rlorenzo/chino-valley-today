@@ -253,7 +253,7 @@ Team-level scores/schedules/standings for the four CVUSD high schools.
   Week in Review": a two-host script generated Mondays from last week's
   published posts plus the brief's week-ahead rail, gated by Gate 1 and Gate 2
   unchanged (every spoken turn cites its source post), rendered with Gemini
-  3.1 Flash TTS multi-speaker (Maya `Kore`, Dan `Charon`; free tier, two keys
+  3.8 Flash TTS multi-speaker (Maya `Kore`, Dan `Charon`; free tier, two keys
   from two Google projects, chunk cache so the three Monday timer firings only
   re-request what a 503 streak left missing), published as a `podcast` post
   with the MP3 shipped inside the site release (`site/public/audio/`, no Caddy
@@ -278,4 +278,4 @@ Team-level scores/schedules/standings for the four CVUSD high schools.
   if prompt caching never engages (~2-3¢/recap). DO prompt caching was closed
   as not-caller-fixable in 2026-08 — the feature is opportunistic Public
   Preview and never engaged for us despite verified-deterministic prompts.
-- TTS (Phase 3): Gemini 3.1 Flash TTS free tier, $0 at one episode a week; ~$0.25 per episode if billing is ever enabled. The DO Gradient audio models (Qwen3-TTS, ElevenLabs v2) are single-voice only and were not used.
+- TTS (Phase 3): Gemini 3.8 Flash TTS free tier, $0 at one episode a week; ~$0.12 per episode if billing is ever enabled. The DO Gradient audio models (Qwen3-TTS, ElevenLabs v2) are single-voice only and were not used.

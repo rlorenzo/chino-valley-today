@@ -1,5 +1,5 @@
-// Renders a podcast episode from a two-host transcript via Gemini multi-speaker
-// TTS, chunking long sections, caching per-chunk audio, and muxing the result
+// Renders a podcast episode from a two-host transcript via Gemini 3.8
+// multi-speaker TTS (Interactions API), chunking long sections, caching per-chunk audio, and muxing the result
 // with ffmpeg. Ported from the proven prototype at
 // scratchpad/podcast/render-gemini.mjs.
 import { execFileSync } from "node:child_process";
@@ -24,8 +24,10 @@ try {
 
 const agent = new Agent({ headersTimeout: 900_000, bodyTimeout: 900_000 });
 
+// 3.8 TTS reads input text verbatim, so direction rides in each turn's
+// speech_metadata annotation rather than a spoken preamble.
 const STYLE =
-	"Read this as a calm, warm public-radio local news program. Two hosts take turns; keep a steady, unhurried pace and natural pauses between turns. No dramatization.";
+	"calm, warm public-radio local news host; steady, unhurried pace; no dramatization";
 const MAX_CHUNK_CHARS = 3500;
 const MIN_REQUEST_GAP_MS = 21_000; // free tier: 3 requests/minute
 const MAX_DURATION_SEC = 660; // 11 min cap; caller holds the post past this
@@ -225,7 +227,7 @@ export async function renderEpisode(
 	opts: RenderEpisodeOpts,
 ): Promise<RenderEpisodeResult> {
 	const sections = parseTranscript(opts.transcriptMd);
-	const model = process.env.CVT_MODEL_TTS ?? "gemini-3.1-flash-tts-preview";
+	const model = process.env.CVT_MODEL_TTS ?? "gemini-3.8-flash-tts";
 	const voices = {
 		Maya: process.env.CVT_TTS_VOICE_MAYA ?? "Kore",
 		Dan: process.env.CVT_TTS_VOICE_DAN ?? "Charon",
@@ -249,25 +251,36 @@ export async function renderEpisode(
 	}
 
 	async function synth(chunkText: string): Promise<Buffer> {
-		const body = {
-			contents: [{ parts: [{ text: `${STYLE}\n\n${chunkText}` }] }],
-			generationConfig: {
-				responseModalities: ["AUDIO"],
-				speechConfig: {
-					multiSpeakerVoiceConfig: {
-						speakerVoiceConfigs: [
-							{
-								speaker: "Maya",
-								voiceConfig: {
-									prebuiltVoiceConfig: { voiceName: voices.Maya },
-								},
-							},
-							{
-								speaker: "Dan",
-								voiceConfig: { prebuiltVoiceConfig: { voiceName: voices.Dan } },
-							},
-						],
+		// chunkSection's `Speaker: text` lines back into one annotated item per turn.
+		const content = chunkText.split("\n").map((line) => {
+			const sep = line.indexOf(": ");
+			return {
+				type: "text",
+				text: line.slice(sep + 2),
+				annotations: [
+					{
+						type: "speech_metadata",
+						speaker: line.slice(0, sep),
+						style: STYLE,
 					},
+				],
+			};
+		});
+		const body = {
+			model,
+			input: [{ type: "user_input", content }],
+			response_format: {
+				type: "audio",
+				mime_type: "audio/l16",
+				sample_rate: SAMPLE_RATE,
+			},
+			generation_config: {
+				speech_config: {
+					mode: "conversational",
+					speakers: [
+						{ speaker: "Maya", voice: voices.Maya },
+						{ speaker: "Dan", voice: voices.Dan },
+					],
 				},
 			},
 		};
@@ -276,7 +289,7 @@ export async function renderEpisode(
 			let res: Awaited<ReturnType<typeof undiciFetch>>;
 			try {
 				res = await undiciFetch(
-					`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
+					"https://generativelanguage.googleapis.com/v1beta/interactions",
 					{
 						method: "POST",
 						headers: {
@@ -313,19 +326,17 @@ export async function renderEpisode(
 			}
 			if (!res.ok) throw new Error(`${res.status} ${await res.text()}`);
 			const json = (await res.json()) as {
-				candidates?: Array<{
-					content?: { parts?: Array<{ inlineData?: { data: string } }> };
-				}>;
+				steps?: Array<{ content?: Array<{ type?: string; data?: string }> }>;
 			};
-			const part = json.candidates?.[0]?.content?.parts?.find(
-				(p) => p.inlineData,
-			);
-			if (!part?.inlineData) {
+			const audio = json.steps
+				?.flatMap((st) => st.content ?? [])
+				.find((c) => c.type === "audio" && c.data);
+			if (!audio?.data) {
 				throw new Error(
 					`no audio in response: ${JSON.stringify(json).slice(0, 400)}`,
 				);
 			}
-			return Buffer.from(part.inlineData.data, "base64");
+			return Buffer.from(audio.data, "base64");
 		}
 	}
 
