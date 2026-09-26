@@ -429,6 +429,12 @@ whenever a source changes behavior.
 
 ### dailybulletin-news — Inland Valley Daily Bulletin (MediaNews Group WordPress)
 
+- **STOPPED 2026-09-26 — not ingested, pending written permission (#77).**
+  MediaNews Group's terms prohibit automated collection without written
+  permission and, separately, any use of content to ground AI systems. Same
+  lock as champion-news: out of `src/scrapers/registry.ts` and the press
+  group, `held` in `tos-config.ts`, file kept. Full reasoning in EDITORIAL.md.
+  Everything below describes the source as built.
 - **Added 2026-08-18 (Phase 4 Task 4.2).** Regional daily newspaper covering
   Chino and Chino Hills municipal news. Ingests articles from dedicated Chino
   and Chino Hills location hubs (`/location/california/san-bernardino-county/...`,
