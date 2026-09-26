@@ -183,6 +183,23 @@ filters apply per item.
     and the form it took, and re-register the scraper. Until then the source is
     out of `src/scrapers/registry.ts` and out of the press group, so nothing
     can invoke it.
+- **The Daily Bulletin is stopped on the same rule (decided 2026-09-26, #77).**
+  MediaNews Group's Terms of Use §3.1(iii) prohibit robots, crawlers or "other
+  automated scripts" collecting content "without written permission", and
+  §3.1(iv) separately prohibits using content for "retrieval augmented
+  generation, grounding" of AI systems without express prior written consent.
+  The scraper did the first, and briefs and podcast generation are the second.
+  - **Also not a drift.** The terms read "LAST CHANGED AS OF NOVEMBER 8, 2024",
+    before the 2026-08-18 approval. Stopping the Champion and not the Daily
+    Bulletin was the same unevenness, in the other direction.
+  - **The permission request asks for both clauses**, to
+    `termsofuse@medianewsgroup.com`, the address their terms designate. If
+    only retrieval is granted, Daily Bulletin items may appear on the site but
+    stay out of model-assisted paths, the podcast included. Record the answer
+    here with the date and the form it took.
+  - Items already in the corpus stay out of briefs: the source is `held` in
+    `src/gates/tos-config.ts`, which `checkHeadlinesFreshness` honours and a
+    fresh database inherits. No Daily Bulletin item has ever reached an episode.
 
 ## Agency alert channels (decided 2026-08-17, amended 2026-08-18)
 

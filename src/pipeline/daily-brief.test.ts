@@ -1655,7 +1655,7 @@ describe("headlines elsewhere deduplication and selection", () => {
 		// Without any scrape runs recorded
 		const freshMap1 = checkHeadlinesFreshness(db, NOW);
 		assert.equal(freshMap1["quest-news"].isFresh, false);
-		assert.equal(freshMap1["dailybulletin-news"].isFresh, false);
+		assert.equal(freshMap1["nbc4-news"].isFresh, false);
 
 		// Populate successful scrape runs
 		db.raw
@@ -1674,15 +1674,14 @@ describe("headlines elsewhere deduplication and selection", () => {
 				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
 				 VALUES (?, ?, ?, 'success', 1, 1)`,
 			)
-			.run(
-				"dailybulletin-news",
-				"2026-08-17T05:50:00.000Z",
-				"2026-08-17T06:00:00.000Z",
-			);
+			.run("nbc4-news", "2026-08-17T05:50:00.000Z", "2026-08-17T06:00:00.000Z");
 
 		const freshMap2 = checkHeadlinesFreshness(db, NOW);
 		assert.equal(freshMap2["quest-news"].isFresh, true);
-		assert.equal(freshMap2["dailybulletin-news"].isFresh, true);
+		assert.equal(freshMap2["nbc4-news"].isFresh, true);
+		// Held in the baseline registry (#77), so no scrape run can freshen it.
+		assert.equal(freshMap2["dailybulletin-news"].tosStatus, "held");
+		assert.equal(freshMap2["dailybulletin-news"].heldReason, "baseline_held");
 	});
 
 	test("a ToS hold outranks a perfectly fresh scrape run", () => {
@@ -1733,20 +1732,17 @@ describe("headlines elsewhere deduplication and selection", () => {
 				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, documents_count, items_count)
 				 VALUES (?, ?, NULL, 'running', 0, 0)`,
 			)
-			.run("dailybulletin-news", "2026-08-17T05:50:00.000Z");
+			.run("nbc4-news", "2026-08-17T05:50:00.000Z");
 
 		const freshness = checkHeadlinesFreshness(db, NOW);
 		assert.equal(freshness["quest-news"].isFresh, false);
 		assert.match(freshness["quest-news"].heldReason ?? "", /HTTP 503/);
-		assert.equal(freshness["dailybulletin-news"].isFresh, false);
-		assert.equal(
-			freshness["dailybulletin-news"].heldReason,
-			"scrape run in progress",
-		);
+		assert.equal(freshness["nbc4-news"].isFresh, false);
+		assert.equal(freshness["nbc4-news"].heldReason, "scrape run in progress");
 	});
 
 	test("each outlet is judged stale on its own publishing cadence", () => {
-		// Quest News is a weekly and the Daily Bulletin publishes daily, so one
+		// Quest News is a weekly and NBC4 is scraped for daily news, so one
 		// staleness threshold cannot serve both. This run is ~31h old: fine for
 		// the weekly's 8-day window, well past the daily's 26h one.
 		const db = openDb(":memory:");
@@ -1761,9 +1757,9 @@ describe("headlines elsewhere deduplication and selection", () => {
 
 		const freshness = checkHeadlinesFreshness(db, NOW);
 		assert.equal(freshness["quest-news"].isFresh, true);
-		assert.equal(freshness["dailybulletin-news"].isFresh, false);
+		assert.equal(freshness["nbc4-news"].isFresh, false);
 		assert.match(
-			freshness["dailybulletin-news"].heldReason ?? "",
+			freshness["nbc4-news"].heldReason ?? "",
 			/stale scrape run \(31\.1h old, max 26h\)/,
 		);
 	});

@@ -138,7 +138,31 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 	},
 	"dailybulletin-news": {
 		source_key: "dailybulletin-news",
-		status: "enabled",
+		// NOT INGESTED, by decision (2026-09-26, #77). Same lock as
+		// champion-news above: out of src/scrapers/registry.ts and out of the
+		// press group in scripts/run-group.sh.
+		//
+		// Why: MediaNews Group's terms §3.1(iii) prohibit robots, crawlers and
+		// "other automated scripts" collecting content "without written
+		// permission", which is what this scraper does. §3.1(iv) separately
+		// prohibits using content for "retrieval augmented generation,
+		// grounding" of AI systems without express prior written consent. The
+		// Champion was stopped on the first class of clause; leaving this
+		// source on was the same unevenness in the other direction.
+		//
+		// Not a drift either: the page reads "LAST CHANGED AS OF NOVEMBER 8,
+		// 2024", so the clauses predate the 2026-08-18 approval note below,
+		// which is wrong and kept as the record of what was approved.
+		//
+		// A permission request covering both (iii) and (iv) goes to
+		// termsofuse@medianewsgroup.com, the address their terms designate. If
+		// only retrieval is granted, items may appear on the site but stay out
+		// of model-assisted paths. Record the outcome here and in EDITORIAL.md.
+		//
+		// `held` keeps a fresh database from seeding this enabled, which keeps
+		// the items already in the corpus out of briefs, and makes
+		// resetSourceTosHold refuse.
+		status: "held",
 		terms_url: "https://www.medianewsgroup.com/terms-of-use/",
 		reviewed_hash:
 			"d48be59531c05ad31906a5d59c5d72533e14c3595f7345afdd2d3d066870fea5",

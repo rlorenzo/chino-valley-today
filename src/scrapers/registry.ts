@@ -29,7 +29,7 @@ export const SCRAPERS: Record<string, string> = {
 	// including a hand-run `node src/run-one.ts`, can invoke a scraper that is
 	// not here. The file is kept, not deleted: re-registering is one line if
 	// permission arrives. Reasoning in src/gates/tos-config.ts.
-	"dailybulletin-news": "./scrapers/dailybulletin-news.ts",
+	// dailybulletin-news is unregistered on the same rule (2026-09-26, #77).
 	// Press expansion (student papers + NBC4 keyword-filtered, 2026-08-19)
 	"quest-news": "./scrapers/quest-news.ts",
 	"bulldogtimes-news": "./scrapers/bulldogtimes-news.ts",

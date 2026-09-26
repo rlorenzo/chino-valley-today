@@ -13,9 +13,8 @@ function freshDb(): Db {
 	return openDb(":memory:");
 }
 
-// SOURCE_TOS_REGISTRY only has champion-news and dailybulletin-news today;
-// asserting that here means these tests fail loudly instead of silently
-// passing if a third entry is ever added.
+// Takes the first two SOURCE_TOS_REGISTRY entries (champion-news and
+// dailybulletin-news); nothing here depends on there being only two.
 const [registeredKey, otherRegisteredKey] = Object.keys(SOURCE_TOS_REGISTRY);
 
 describe("getSourceTosStatus fails closed", () => {
