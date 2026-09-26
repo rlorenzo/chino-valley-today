@@ -24,9 +24,12 @@
 // pipeline must never auto-publish items from this source (PLAN Phase 1 tier
 // rules; EDITORIAL.md).
 //
-// Mailbox access is read-only by design: messages are fetched with BODY.PEEK
-// (ImapFlow's default for `source`) and never flagged, moved, or deleted —
-// the mailbox itself remains the humans' archive.
+// Mailbox access: the scan covers All Mail (Gmail's \All special-use folder;
+// INBOX on servers without one), so a Gmail filter that archives Nixle mail
+// does not hide it. Messages are fetched with BODY.PEEK (ImapFlow's default
+// for `source`); once a message is ingested it is marked \Seen, and nothing
+// else is changed. Nothing is moved or deleted, and non-Nixle or
+// permalink-less mail stays unread — the mailbox remains the humans' archive.
 //
 // Config (.env):
 //   NIXLE_IMAP_USER      mailbox login (a Gmail address)
@@ -292,7 +295,8 @@ async function run(ctx: ScraperContext): Promise<void> {
 	});
 	await client.connect();
 	try {
-		const lock = await client.getMailboxLock("INBOX");
+		const allMail = (await client.list()).find((m) => m.specialUse === "\\All");
+		const lock = await client.getMailboxLock(allMail?.path ?? "INBOX");
 		try {
 			const searchResult = await client.search({ since }, { uid: true });
 			const uids = searchResult === false ? [] : searchResult;
@@ -354,6 +358,7 @@ async function run(ctx: ScraperContext): Promise<void> {
 					meta: draft.meta,
 				});
 				if (r.isNew) ingested++;
+				await client.messageFlagsAdd(String(uid), ["\\Seen"], { uid: true });
 			}
 			// Say which mode the filter actually ran in. An empty alias is
 			// normal (the address is deployment config, not a tracked default),
