@@ -1,22 +1,39 @@
 ---
 name: chinohills-minutes
-description: Stage hand-downloaded Chino Hills meeting minutes PDFs into the pipeline - inspect, rename to the canonical drop name, ship to the droplet, and ingest. Use after downloading minutes from the Laserfiche portal, or when asked to ingest, stage, or process Chino Hills minutes.
+description: Capture (supervised, via Claude in Chrome) or stage hand-downloaded Chino Hills meeting minutes, as PDF or WebLink plain text, into the pipeline - inspect, rename to the canonical drop name, ship to the droplet, and ingest. Use after downloading minutes from the Laserfiche portal, or when asked to ingest, stage, or process Chino Hills minutes.
 ---
 
 # Chino Hills minutes: stage and ingest
 
-Takes minutes PDFs a person downloaded by hand and carries them the rest of the
-way: inspect, rename, stage, ship to the droplet, ingest, report.
+Takes minutes a person pulled by hand (PDF, or WebLink's plain text saved as
+`.txt`) and carries them the rest of the way: inspect, rename, stage, ship to
+the droplet, ingest, report.
 
 ## The one thing this skill does not do
 
-**Never download from `publicportal.chinohills.org`.** That host's robots.txt
-disallows `/*.aspx`, which is every document URL it has. Retrieving from it
-programmatically is what this whole drop-directory arrangement exists to avoid.
+**Never fetch from `publicportal.chinohills.org` with a script** (curl, fetch,
+the pipeline). That host's robots.txt disallows `/*.aspx`, which is every
+document URL it has. Retrieving from it programmatically is what this whole
+drop-directory arrangement exists to avoid.
 
-A person downloads through a browser, where robots.txt does not apply. This
-skill starts from files already on disk. If the user has not downloaded
-anything yet, give them the folder links and stop:
+A person pulls minutes through a browser, where robots.txt does not apply.
+Rex decided on 2026-09-26 that Claude driving his Chrome (Claude in Chrome)
+counts, **while he watches**, at human pace, one document at a time. Without
+that, give the user the folder links below and stop.
+
+Text is preferred over the PDF: the pipeline only uses the text, and the site
+never serves the minutes file (citations link to the portal). To capture one
+document's text in Chrome:
+
+1. Open `DocView.aspx?id=<doc id>&dbid=0&repo=CoCH&page=<last page>`.
+   Text mode only loads pages up to the current one, so open the LAST page.
+2. Click "View plain text" in the viewer toolbar.
+3. Collect every `.textPageInner` element's `innerText`, trimmed, each
+   followed by `-- N of M --` (pdf-parse's page marker), and save it as a
+   Blob download named with the canonical `.txt` name. Clipboard copy does
+   not work without a real click.
+
+Downloads need the user's OK: list what will be pulled first.
 
 | Body | Minutes folder |
 |---|---|
@@ -35,11 +52,11 @@ If the City later grants automated access, this section is what changes.
 
 ### 1. Find the candidates
 
-Default to PDFs modified in the last day in `~/Downloads`. The user may pass a
+Default to PDFs and minutes `.txt` files modified in the last day in `~/Downloads`. The user may pass a
 different path or specific files instead.
 
 ```bash
-find ~/Downloads -maxdepth 1 -iname '*.pdf' -mtime -1 -print
+find ~/Downloads -maxdepth 1 \( -iname '*.pdf' -o -iname 'chinohills-*-minutes.txt' \) -mtime -1 -print
 ```
 
 Report what you found. If nothing, say so and stop.
@@ -114,17 +131,17 @@ re-run only has to clear the rejects.
 
 State plainly:
 
-- how many PDFs were present, newly archived, already held, rejected
+- how many files were present, newly archived, already held, rejected
 - how many new items were extracted
-- anything the scraper noted, particularly `no numbered items were parsed`
+- anything the scraper noted, particularly `no items were parsed`
   (archived and linked, but no item breakdown) or `no date found in the
   document text` (the date rests on the filename alone)
 
-The item splitter is deliberately conservative and **has not been validated
-against a real Chino Hills minutes PDF** - there was no permitted way to fetch
-one, so it was built against synthetic fixtures. On the first real drop, spot
-check the item count and titles against the document and say what you find. The
-document is archived and linked correctly regardless of how the split does.
+The item splitter keys on ALL-CAPS headings ("CONSENT CALENDAR [18:31]"),
+validated against the real City Council minutes of 2026-08-11 (31 items). Other
+bodies' minutes have not been seen yet: on the first drop from a new body, spot
+check the item count and titles against the document and say what you find.
+The document is archived and linked correctly regardless of how the split does.
 
 ## Notes
 

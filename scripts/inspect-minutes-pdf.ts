@@ -1,4 +1,4 @@
-// Reads a downloaded minutes PDF and proposes the canonical drop filename.
+// Reads a downloaded minutes PDF (or WebLink plain text saved as .txt) and proposes the canonical drop filename.
 //
 // The drop directory's contract is that the filename carries the body and the
 // meeting date (see src/scrapers/chinohills-minutes.ts). WebLink's own
@@ -7,11 +7,11 @@
 // mis-filing minutes under the wrong meeting is a false entry in the record,
 // so a person confirms before anything is renamed.
 //
-// Usage: node scripts/inspect-minutes-pdf.ts <file.pdf> [<file.pdf> ...]
+// Usage: node scripts/inspect-minutes-pdf.ts <file.pdf|.txt> [...]
 // Prints one JSON object per line: { file, date, body, suggested, confidence }.
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { extractPdfText } from "../src/pdf.ts";
+import { readMinutesText } from "../src/scrapers/chinohills-minutes.ts";
 
 const MONTHS = [
 	"january",
@@ -73,7 +73,9 @@ function findBody(head: string): string | null {
 
 const files = process.argv.slice(2);
 if (files.length === 0) {
-	console.error("usage: node scripts/inspect-minutes-pdf.ts <file.pdf> ...");
+	console.error(
+		"usage: node scripts/inspect-minutes-pdf.ts <file.pdf|.txt> ...",
+	);
 	process.exit(64);
 }
 
@@ -81,12 +83,14 @@ for (const file of files) {
 	const out: Record<string, unknown> = { file: basename(file) };
 	try {
 		const bytes = readFileSync(file);
-		if (!bytes.subarray(0, 5).toString("latin1").startsWith("%PDF-")) {
-			out.error = "not a PDF (no %PDF- header)";
+		const ext = /\.txt$/i.test(file) ? "txt" : "pdf";
+		const read = await readMinutesText(bytes, ext);
+		if (typeof read === "string") {
+			out.error = read;
 			console.log(JSON.stringify(out));
 			continue;
 		}
-		const { text, numPages } = await extractPdfText(bytes);
+		const { text, numPages } = read;
 		const head = text.slice(0, 4000);
 		const date = findDate(head);
 		const body = findBody(head);
@@ -95,7 +99,7 @@ for (const file of files) {
 		out.body = body;
 		out.looksLikeMinutes = /minutes/i.test(head);
 		out.suggested =
-			date && body ? `chinohills-${body}-${date}-minutes.pdf` : null;
+			date && body ? `chinohills-${body}-${date}-minutes.${ext}` : null;
 		// Everything the proposal rests on, so a reviewer can judge it without
 		// opening the PDF.
 		out.confidence =
