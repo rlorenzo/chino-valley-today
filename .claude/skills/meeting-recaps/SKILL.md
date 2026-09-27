@@ -1,6 +1,6 @@
 ---
 name: meeting-recaps
-description: Weekly meeting-recap pass on the droplet - find meetings that are ready and have no recap yet, generate the recaps through the gated pipeline, then walk Rex through what to review (held drafts, gate failures, judge findings) and apply his approve/reject decisions and rebuild the site. Use when asked to run recaps, do the recap pass, or when the Friday "CVT: run meeting recaps" reminder fires.
+description: Weekly meeting-recap pass on the droplet - pull the meeting transcripts the droplet is blocked from fetching, find meetings that are ready and have no recap yet, generate the recaps through the gated pipeline, then walk Rex through what to review (held drafts, gate failures, judge findings) and apply his approve/reject decisions and rebuild the site. Use when asked to run recaps, do the recap pass, or when the Friday "CVT: run meeting recaps" reminder fires.
 ---
 
 # Meeting recaps: generate and review
@@ -9,7 +9,8 @@ Recaps (`src/pipeline/recap.ts`) have no timer. This skill is the weekly
 manual pass. Friday is the target day, so what publishes lands in Monday's
 podcast, which reviews posts published the week before.
 
-Everything runs on the droplet, against production data:
+Everything except the transcript recording (step 2) runs on the droplet,
+against production data:
 
 ```bash
 H=root@24.199.115.162
@@ -26,7 +27,42 @@ Never `UPDATE posts` by hand.
 Ask whether any new Chino Hills minutes are waiting. If so, run the
 `chinohills-minutes` skill before continuing, so the minutes feed this pass.
 
-## 2. Find what is ready
+## 2. Pull transcripts
+
+YouTube (bot check) and Swagit (HTTP 403) block the droplet's IP, so the
+daily `cvt-scrape-media` run fails and meetings get no transcript. Record
+the three transcript scrapers on this Mac, then replay the recording on the
+droplet (`src/replay.ts`). A temp DB and raw root keep the local
+`data/` untouched and force a full fetch, because a local DB that already
+holds a video would skip downloading it and record nothing.
+
+```bash
+cd /Users/rexl/Projects/chino-valley-today
+T=$(mktemp -d); REC=$T/rec
+for k in chinohills-swagit chino-youtube-captions youtube-captions; do
+  CVT_DB=$T/rec.db CVT_RAW_ROOT=$T CVT_RECORD_DIR=$REC node src/run-one.ts $k | grep -E '^=== |^counts'
+done
+rsync -a --delete $REC/ $H:$R/data/incoming/replay/
+ssh $H "chown -R cvtoday:cvtoday $R/data/incoming/replay"
+for k in chinohills-swagit chino-youtube-captions youtube-captions; do
+  ssh $H "cd $R && sudo -u cvtoday CVT_REPLAY_DIR=data/incoming/replay node src/run-one.ts $k" | grep -E '^=== |^counts'
+done
+rm -rf $T
+```
+
+The replay counts should match the recording's `itemsSeen`, and on the
+droplet `itemsNew` is how many were actually new. A record-side failure
+means the source is down from here too: report it and carry on without
+that source. **Never put `CVT_REPLAY_DIR` in the droplet's `.env`.** The
+timer failing is the only sign that this pull is still needed.
+
+Coverage is what the scrapers pick, not a backfill: Swagit takes the newest
+Chino Hills meeting with a transcript, Chino YouTube the two newest
+meetings, CVUSD the newest board meeting. A meeting that falls out of that
+window between passes stays without a transcript. Say so when a candidate
+in step 3 is missing one.
+
+## 3. Find what is ready
 
 ```bash
 ssh $H "cd $R && sudo -u cvtoday npm run -s recap"
@@ -50,7 +86,7 @@ minutes are lagging, which is worth knowing even when nothing gets recapped.
 **Ask which targets to run.** A clean pass auto-publishes, and every run
 spends LLM calls.
 
-## 3. Generate
+## 4. Generate
 
 Run the chosen targets one at a time. Each run takes several minutes, since
 the generator and judge each have a 10-minute retry budget. Use
@@ -64,7 +100,7 @@ The last line gives the outcome: `PUBLISHED (auto, clean pass)` or held. A
 non-zero exit that is not a hold (LLM outage, timeout) gets reported as a
 failure. Leave that target for the next pass, because no post was created.
 
-## 4. Prompt Rex on what to review
+## 5. Prompt Rex on what to review
 
 Pull every held recap, including ones from earlier passes that nobody
 reviewed:
@@ -100,7 +136,7 @@ For recaps that auto-published this pass, list them with their URLs
 (`https://chinovalley.today/posts/<slug>/`) and suggest a 2-minute skim of
 each. Nothing blocks, but a clean pass is still unreviewed by a person.
 
-## 5. Apply decisions
+## 6. Apply decisions
 
 Only what Rex decided, one post at a time. The admin server listens on the
 droplet's loopback, so call it from there:
@@ -122,7 +158,7 @@ Rex can do the same in the dashboard instead:
 `ssh -N -L 8788:127.0.0.1:8788 root@24.199.115.162`, then open
 http://127.0.0.1:8788.
 
-## 6. Rebuild and report
+## 7. Rebuild and report
 
 If anything published (auto or approved):
 
