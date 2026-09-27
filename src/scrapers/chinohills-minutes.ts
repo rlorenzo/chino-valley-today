@@ -256,12 +256,11 @@ export interface MinutesItem {
 // with a paragraph recording the action. The numbered-item splitter this
 // replaces had been built on synthetic fixtures and found nothing in it.
 //
-// A heading is an all-caps line that starts a paragraph (blank line before it,
-// or a trailing video timestamp) and is not a labelled line ("PRESENT:", "AYES:" -- rosters and votes stay in
-// the body) or a bullet ("• TEEN ACTIVITY CENTER" is a sub-point). An all-caps
-// line straight after a heading is its wrap ("... - RESOLUTIONS" / "ADOPTED").
-// A heading with no text under it is a section label (PRESENTATIONS, CITY
-// DEPARTMENT BUSINESS) or the masthead, and is dropped.
+// A heading is an all-caps line that carries a video timestamp or is followed
+// by ordinary prose, and is not a labelled line ("PRESENT:", "AYES:" -- rosters
+// and votes stay in the body) or a bullet ("• TEEN ACTIVITY CENTER" is a
+// sub-point). A single-word heading, or one under a line ending in "-", is a
+// wrap and takes the line above. A heading with no text under it is dropped.
 //
 // Parsing stops at "Respectfully submitted": after it come the clerk's
 // signature and, on DocuSigned minutes, the envelope certificate, which
@@ -290,35 +289,50 @@ export function extractMinutesItems(rawText: string): MinutesItem[] {
 		/^(ALSO PRESENT|PRESENT|ABSENT|AYES|NOES|ABSTAIN|ABSTAINED|RECUSED)\s*:/.test(
 			l,
 		);
+	// Blank lines are not a signal: WebLink's text layer keeps them on some
+	// documents (2026-08-11) and drops every one on others (2026-01-13). So
+	// they go, and a heading is found by what follows it instead.
+	const text = lines.filter((l) => l !== "");
+	// The masthead runs down to its "REGULAR MEETING" line.
+	const mastEnd = text
+		.slice(0, 15)
+		.findIndex((l) => /^(REGULAR|SPECIAL|ADJOURNED|JOINT)\b.*MEETING$/.test(l));
+	const body = mastEnd >= 0 ? text.slice(mastEnd + 1) : text;
+
+	const candidate = (l: string | undefined) =>
+		l !== undefined && isCaps(l) && !isLabel(l) && !/^[•o] /.test(l);
+	// Prose starts with a mixed-case word ("Mayor Johsz called...", "• Fall
+	// Recreation..."); "RAY MARQUEZ (attended remotely)" is still a roster line.
+	const isProse = (l: string | undefined) =>
+		l !== undefined && /^(?:[•o]\s+)?\S*[a-z]/.test(l);
+	// A heading is a caps line with a timestamp, or one followed by prose. A
+	// roster name is followed by the next name, so it never qualifies.
+	const isHeading = (k: number) =>
+		candidate(body[k]) && (VIDEO_TS.test(body[k]) || isProse(body[k + 1]));
+
 	const sections: Array<{ heading: string; body: string[] }> = [];
 	let current: { heading: string; body: string[] } | null = null;
-	for (let i = 0; i < lines.length; i++) {
-		const l = lines[i];
-		// The document's first line is its masthead, not a paragraph start.
-		const prev = lines[i - 1] ?? "(start)";
-		if (
-			current &&
-			current.body.length === 0 &&
-			isCaps(l) &&
-			isCaps(prev) &&
-			!isLabel(l)
-		) {
-			current.heading += ` ${l}`;
-			continue;
-		}
-		// A trailing video timestamp marks a heading even with no blank line
-		// before it, which a page break can swallow ("[17:07]" on 2026-08-11).
-		if (
-			(prev === "" || VIDEO_TS.test(l)) &&
-			isCaps(l) &&
-			!isLabel(l) &&
-			!/^[•o] /.test(l)
-		) {
-			current = { heading: l, body: [] };
+	for (let k = 0; k < body.length; k++) {
+		const l = body[k];
+		if (isHeading(k)) {
+			let heading = l;
+			// A wrapped heading: "... - RESOLUTIONS" / "ADOPTED",
+			// "... PUMP ON-" / "CALL MAINTENANCE". Take the line above back
+			// from the previous section's body.
+			const prev = body[k - 1];
+			if (
+				candidate(prev) &&
+				!isHeading(k - 1) &&
+				(prev.endsWith("-") || !/\s/.test(l.replace(VIDEO_TS, "")))
+			) {
+				heading = `${prev} ${l}`;
+				current?.body.pop();
+			}
+			current = { heading, body: [] };
 			sections.push(current);
 			continue;
 		}
-		if (current && l) current.body.push(l);
+		if (current) current.body.push(l);
 	}
 
 	return sections

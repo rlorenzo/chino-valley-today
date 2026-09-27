@@ -25,13 +25,15 @@ Text is preferred over the PDF: the pipeline only uses the text, and the site
 never serves the minutes file (citations link to the portal). To capture one
 document's text in Chrome:
 
-1. Open `DocView.aspx?id=<doc id>&dbid=0&repo=CoCH&page=<last page>`.
-   Text mode only loads pages up to the current one, so open the LAST page.
+1. Open `DocView.aspx?id=<doc id>&dbid=0&repo=CoCH&page=<N>`.
 2. Click "View plain text" in the viewer toolbar.
-3. Collect every `.textPageInner` element's `innerText`, trimmed, each
-   followed by `-- N of M --` (pdf-parse's page marker), and save it as a
+3. Text mode loads only page 1 and the pages around the current one, so
+   step through `&page=2`, `&page=4`, ... to the last page, keeping each
+   `.textPageInner` element's `innerText` as it loads. Join the pages in
+   order, trimmed, each followed by `-- N of M --` (pdf-parse's page marker), and save it as a
    Blob download named with the canonical `.txt` name. Clipboard copy does
-   not work without a real click.
+   not work without a real click, and Chrome blocks a second automatic
+   download from the same page until the user allows multiple downloads.
 
 Downloads need the user's OK: list what will be pulled first.
 
@@ -97,6 +99,7 @@ The directory is gitignored (`data/`), so nothing here is committed.
 ### 5. Ship to the droplet
 
 ```bash
+ssh root@24.199.115.162 'mkdir -p /srv/chino-valley-today/data/incoming/chinohills-minutes'
 rsync -av -e ssh data/incoming/chinohills-minutes/ \
   root@24.199.115.162:/srv/chino-valley-today/data/incoming/chinohills-minutes/
 ssh root@24.199.115.162 'chown -R cvtoday:cvtoday /srv/chino-valley-today/data/incoming'
@@ -138,7 +141,8 @@ State plainly:
   document text` (the date rests on the filename alone)
 
 The item splitter keys on ALL-CAPS headings ("CONSENT CALENDAR [18:31]"),
-validated against the real City Council minutes of 2026-08-11 (31 items). Other
+validated against the real City Council minutes of 2026-08-11 (31 items) and
+2026-01-13 (33 items; its text layer has no blank lines at all). Other
 bodies' minutes have not been seen yet: on the first drop from a new body, spot
 check the item count and titles against the document and say what you find.
 The document is archived and linked correctly regardless of how the split does.
