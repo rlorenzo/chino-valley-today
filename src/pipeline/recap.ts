@@ -15,13 +15,13 @@ import { runGatedPipeline } from "./gate-run.ts";
 const GENERATOR_SYSTEM = `You write meeting recaps for Chino Valley Today, a local news brief for Chino and Chino Hills, CA. You are extractive, not creative: you may state ONLY facts present in the provided source materials.
 
 Hard rules (violations are rejected by machine gates downstream):
-1. Every paragraph and every fact-bearing list item ends with one or more INLINE markdown links: [short label](full URL copied EXACTLY from the citable source list). NEVER cite with shorthand — no [S1], no [1], no footnotes; a bare reference tag is not a citation and the draft will be rejected. Cite the most specific source for each claim (agenda item permalink for agenda facts, timestamped transcript URL for spoken material; vote claims cite the vote's own source link).
+1. Every paragraph and every fact-bearing list item ends with one or more INLINE markdown links: [short label](full URL copied EXACTLY from the citable source list). NEVER cite with shorthand — no [S1], no [1], no footnotes; a bare reference tag is not a citation and the draft will be rejected. Cite the most specific source for each claim (agenda item permalink for agenda facts, the minutes link for what the body recorded doing, timestamped transcript URL for spoken material; vote claims cite the vote's own source link).
 2. Numbers (votes, dollar amounts, dates, times, addresses) appear exactly as written in the sources - never compute, convert, or estimate.
-3. Names: use a person's name ONLY if it appears in agenda items or recorded votes. The transcript is machine-generated and garbles names - if a name appears only in the transcript, refer to the speaker by role instead ("a resident", "a staff member"). Never guess spellings.
-4. No characterization: no motives, tone, "sides", or adjectives of controversy. For contested items: what was decided, recorded votes, and direct quotes only.
+3. Names: use a person's name ONLY if it appears in agenda items, minutes, or recorded votes. The transcript is machine-generated and garbles names - if a name appears only in the transcript, refer to the speaker by role instead ("a resident", "a staff member"). Never guess spellings.
+4. No characterization: no motives, tone, "sides", or adjectives of controversy. For contested items: what was decided, recorded votes, and direct quotes only. When minutes are present, they are the authority on what was decided; the agenda says only what was scheduled.
 5. If the materials do not answer a question a reader would have, omit it - do not infer.
 
-Format: markdown. Start with a one-paragraph lede (what happened, when, which body). Then 2-5 short sections for the most consequential items. ### headings must be verbatim excerpts of the agenda item title (truncation is fine, re-wording and re-capitalizing are not - an invented Title Case phrase reads as a proper name and fails the name gate). End with a "Votes" section if recorded votes are present. 300-600 words. No title line - the pipeline adds it.`;
+Format: markdown. Start with a one-paragraph lede (what happened, when, which body). Then 2-5 short sections for the most consequential items. ### headings must be verbatim excerpts of an agenda or minutes item title (truncation is fine, re-wording and re-capitalizing are not - an invented Title Case phrase reads as a proper name and fails the name gate). End with a "Votes" section if recorded votes are present. 300-600 words. No title line - the pipeline adds it.`;
 
 const args = process.argv.slice(2);
 const db = openDb();
@@ -30,7 +30,7 @@ if (args.length === 0) {
 	const targets = listRecapTargets(db);
 	if (targets.length === 0) {
 		console.log(
-			"No recap targets available (need agenda items or transcript segments for a meeting date).",
+			"No recap targets available (need agenda items, minutes, or transcript segments for a meeting date).",
 		);
 	} else {
 		console.log("Available recap targets:");
@@ -52,7 +52,7 @@ if (!bundle) {
 }
 
 console.log(
-	`Bundle ${bundle.targetKey}: ${bundle.agendaItems.length} agenda items, ${bundle.votes.length} votes, ${bundle.transcriptSegments.length} transcript segments, ${bundle.allowedUrls.length} citable URLs`,
+	`Bundle ${bundle.targetKey}: ${bundle.agendaItems.length} agenda items, ${bundle.votes.length} votes, ${bundle.minutesItems.length} minutes items, ${bundle.transcriptSegments.length} transcript segments, ${bundle.allowedUrls.length} citable URLs`,
 );
 
 const slugBody = bundle.bodyName

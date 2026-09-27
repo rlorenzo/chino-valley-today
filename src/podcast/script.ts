@@ -459,6 +459,7 @@ export function buildPodcastBundle(
 		meetingDate: mondayDate,
 		agendaItems: eventItems,
 		votes: [],
+		minutesItems: [],
 		transcriptSegments: postItems,
 		allowedUrls: [...new Set(items.map((i) => i.sourceUrl))],
 		inputCorpus: corpus.join("\n"),

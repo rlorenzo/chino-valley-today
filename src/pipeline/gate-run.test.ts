@@ -136,6 +136,7 @@ const BUNDLE = {
 	meetingDate: "2026-09-07",
 	agendaItems: [],
 	votes: [],
+	minutesItems: [],
 	transcriptSegments: [],
 	allowedUrls: ["https://chinovalley.today/posts/a/"],
 	inputCorpus: "corpus",
