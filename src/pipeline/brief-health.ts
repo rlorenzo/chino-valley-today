@@ -9,6 +9,9 @@
 // "pipeline=fresh") fires. The next successful brief run rebuilds the whole
 // site, which restores the fresh stamp — nothing here ever un-flips.
 //
+// It also flips when any source is degraded (./source-health.ts): scrapers are
+// part of the pipeline, and the brief publishes around a dead one.
+//
 // The unit fails (exit 1) whenever the brief is missing or HTTP check fails,
 // flip or no flip, so `systemctl --failed` shows the real problem alongside the alert.
 //
@@ -17,10 +20,12 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
-import { QUIET_IS_HEALTHY } from "../scrapers/quiet-policy.ts";
 import { errorMessage } from "../utils/errors.ts";
 import { laDateOf } from "./daily-brief.ts";
 import { getPost } from "./posts.ts";
+import { checkDegradedSources } from "./source-health.ts";
+
+export { checkDegradedSources };
 
 const FRESH = "pipeline=fresh";
 const STALE = "pipeline=stale";
@@ -133,95 +138,6 @@ export async function verifyBriefHealth(
 	};
 }
 
-type ScrapeRunSummary = {
-	status: "running" | "success" | "failure";
-	items_count: number;
-	finished_at: string | null;
-};
-
-export interface SourceDegradedResult {
-	sourceKey: string;
-	degraded: boolean;
-	reason: string;
-	runs: ScrapeRunSummary[];
-}
-
-// Any source can keep "succeeding" while the site it reads silently drifts out
-// from under the scraper, extracting 0 items run after run — invisible to a
-// check that only looks at the latest run's status. This looks at the last 3
-// recorded runs per source and flags degraded only on two unambiguous patterns:
-// 3 straight failures, or 3 straight successes with 0 items. Anything mixed is
-// left alone — a single bad run, or a success/failure mix, isn't proof of
-// drift. Fewer than 3 recorded runs is insufficient evidence either way, so it
-// is never reported as degraded.
-//
-// The 3-failures rule applies to every source unconditionally — a source that
-// cannot even be fetched is broken regardless of how quiet it normally is.
-// The 3-zero-items rule needs to know whether quiet is this source's normal
-// state, which QUIET_IS_HEALTHY declares per source and a test holds to the
-// registry.
-//
-// This watches EVERY source, not just the six press outlets it originally
-// covered. chinohills-swagit ingested nothing for six days and no watchdog
-// could see it, because a transcript source was not in anything's list.
-export function checkDegradedSources(
-	db: Db,
-	sourceKeys: readonly string[] = Object.keys(QUIET_IS_HEALTHY),
-): SourceDegradedResult[] {
-	return sourceKeys.map((sourceKey) => {
-		const runs = db.raw
-			.prepare(
-				`SELECT status, items_count, finished_at
-				 FROM scrape_runs
-				 WHERE source_key = ?
-				 ORDER BY id DESC
-				 LIMIT 3`,
-			)
-			.all(sourceKey) as ScrapeRunSummary[];
-
-		if (runs.length < 3) {
-			return {
-				sourceKey,
-				degraded: false,
-				reason: `only ${runs.length} run(s) recorded; insufficient evidence`,
-				runs,
-			};
-		}
-
-		if (runs.every((r) => r.status === "failure")) {
-			return {
-				sourceKey,
-				degraded: true,
-				reason: "last 3 runs all failed",
-				runs,
-			};
-		}
-
-		if (runs.every((r) => r.status === "success" && r.items_count === 0)) {
-			const quietIsHealthy = QUIET_IS_HEALTHY[sourceKey] ?? null;
-			return quietIsHealthy
-				? {
-						sourceKey,
-						degraded: false,
-						reason: `last 3 runs all succeeded with 0 items; expected here — ${quietIsHealthy}`,
-						runs,
-					}
-				: {
-						sourceKey,
-						degraded: true,
-						reason: "last 3 runs all succeeded but extracted 0 items",
-						runs,
-					};
-		}
-		return {
-			sourceKey,
-			degraded: false,
-			reason: "runs are healthy or mixed",
-			runs,
-		};
-	});
-}
-
 async function main(): Promise<void> {
 	const now = new Date();
 	const slug = expectedBriefSlug(now);
@@ -233,18 +149,24 @@ async function main(): Promise<void> {
 		baseUrl: process.env.CVT_BASE_URL ?? "https://chinovalley.today",
 	});
 
-	// A degraded source never touches the health file or the brief itself, which
-	// has already published by the time this watchdog runs — the brief names its
-	// own missing sections, and only `nws-forecast` and `nws-alerts` can block
-	// it. This only needs to reach an operator, so it uses the same exit-code
-	// idiom as the rest of this watchdog: fail the unit so `systemctl --failed`
-	// surfaces it alongside any other alert.
+	// A degraded source is a pipeline failure too: the brief still publishes
+	// around a dead source (it names its own missing sections), so a brief-only
+	// check reads fresh while a source stays broken for weeks, which is how the
+	// transcript sources went a month unseen. The site build stamps the same
+	// verdict into /health (site/src/pages/health.ts); this flip covers the
+	// days no rebuild happens.
 	const degradedSources = checkDegradedSources(db).filter((s) => s.degraded);
 	for (const source of degradedSources) {
 		console.error(`DEGRADED SOURCE: ${source.sourceKey} — ${source.reason}`);
 	}
 	if (degradedSources.length > 0) {
-		process.exitCode = 1;
+		result.healthy = false;
+		result.error = [
+			result.error,
+			`degraded source(s): ${degradedSources.map((s) => s.sourceKey).join(", ")}`,
+		]
+			.filter(Boolean)
+			.join("; ");
 	}
 
 	if (result.healthy) {

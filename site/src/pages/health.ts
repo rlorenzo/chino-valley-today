@@ -1,4 +1,8 @@
 import { getCollection } from "astro:content";
+import { existsSync } from "node:fs";
+import { DatabaseSync } from "node:sqlite";
+import { checkDegradedSources } from "../../../src/pipeline/source-health.ts";
+import { DB_PATH } from "../lib/archive.ts";
 import {
 	briefsOnly,
 	expectedBriefDate,
@@ -37,6 +41,14 @@ import {
 // Configure the monitor to alert when `pipeline=fresh` is ABSENT, so a
 // flipped stamp, a mangled page, and a down site all fire the same alarm.
 //
+// `sources=` is the scrapers' half of the pipeline, stamped here from the
+// same checkDegradedSources verdict the 08:00 watchdog uses: `ok`, or
+// `degraded:<keys>`. Any degraded source stales pipeline= too. The brief
+// publishes around a dead source, so without this a broken scraper read as
+// fresh for as long as the rest kept working (the transcript sources: a
+// month). A build with no database (a dev checkout) reports `unknown` and
+// does not stale.
+//
 // The residual blind spot, recorded honestly: systemd's timers dying
 // wholesale (the watchdog included) while the web server keeps serving. That
 // failure needs the heartbeat monitors (deploy/README.md); the plain `ok`
@@ -57,6 +69,9 @@ export async function GET() {
 	const podcastFresh =
 		latestPodcast !== null && latestPodcast >= expectedPodcastSlug();
 
+	const degraded = degradedSources();
+	const sourcesOk = degraded === null || degraded.length === 0;
+
 	const body = [
 		// First line is the keyword an uptime monitor matches on, alone on the
 		// line so a substring match cannot pass accidentally on other content.
@@ -69,9 +84,10 @@ export async function GET() {
 		// or the next morning's brief rebuild would re-stamp it fresh and clear
 		// the alarm the Monday watchdog raised while the episode is still
 		// missing. Which half is wrong is on the lines around it.
-		`pipeline=${fresh && podcastFresh ? "fresh" : "stale"}`,
+		`pipeline=${fresh && podcastFresh && sourcesOk ? "fresh" : "stale"}`,
 		`latest_podcast=${latestPodcast ?? "none"}`,
 		`podcast=${podcastFresh ? "fresh" : "stale"}`,
+		`sources=${degraded === null ? "unknown" : sourcesOk ? "ok" : `degraded:${degraded.join(",")}`}`,
 	].join("\n");
 
 	return new Response(`${body}\n`, {
@@ -82,4 +98,17 @@ export async function GET() {
 			"cache-control": "no-store",
 		},
 	});
+}
+
+// Keys of the degraded sources, or null when there is no database to ask.
+function degradedSources(): string[] | null {
+	if (!DB_PATH || !existsSync(DB_PATH)) return null;
+	const raw = new DatabaseSync(DB_PATH, { readOnly: true });
+	try {
+		return checkDegradedSources({ raw })
+			.filter((s) => s.degraded)
+			.map((s) => s.sourceKey);
+	} finally {
+		raw.close();
+	}
 }

@@ -7,6 +7,8 @@
  * that serve it have to be built from it. Read-only throughout; the build must
  * never write to the pipeline's database.
  *
+ * DB_PATH is shared with pages/health.ts, which reads scrape_runs from it.
+ *
  * On a developer checkout there is usually no data/ at all (it is gitignored),
  * and that is not an error — it means zero archive pages. What IS an error is a
  * published post citing an archive page the build cannot produce, and
@@ -45,7 +47,7 @@ function findRepoRoot(): string | null {
 
 const REPO_ROOT = findRepoRoot();
 
-const DB_PATH =
+export const DB_PATH =
 	process.env.CVT_DB ??
 	(REPO_ROOT ? join(REPO_ROOT, "data", "cvtoday.db") : null);
 

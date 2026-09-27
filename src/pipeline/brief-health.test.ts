@@ -289,6 +289,63 @@ describe("checkDegradedSources", () => {
 		assert.match(res.reason, /0 items/);
 	});
 
+	function insertRunAt(
+		db: ReturnType<typeof openDb>,
+		sourceKey: string,
+		status: "success" | "failure",
+		startedAt: string,
+		errorMessage: string | null = null,
+	) {
+		db.raw
+			.prepare(
+				`INSERT OR IGNORE INTO sources (key, name, base_url, method)
+         VALUES (?, ?, 'https://example.test', 'html')`,
+			)
+			.run(sourceKey, sourceKey);
+		db.raw
+			.prepare(
+				`INSERT INTO scrape_runs (source_key, started_at, finished_at, status, error_message, items_count)
+         VALUES (?, ?, ?, ?, ?, 5)`,
+			)
+			.run(sourceKey, startedAt, startedAt, status, errorMessage);
+	}
+
+	test("a ToS-held source is not degraded: the hold waits on a person", () => {
+		const db = openDb(":memory:");
+		for (let i = 0; i < 3; i++)
+			insertRunAt(
+				db,
+				"nbc4-news",
+				"failure",
+				`2026-09-2${i}T12:00:00.000Z`,
+				"Scraper held: ToS hold active (terms_hash_drift)",
+			);
+		const [res] = checkDegradedSources(db, ["nbc4-news"]);
+		assert.equal(res.degraded, false);
+		assert.match(res.reason, /held for ToS review/);
+	});
+
+	test("a manual-pull source failing on its timer is healthy until the pull is overdue", () => {
+		const db = openDb(":memory:");
+		insertRunAt(db, "chinohills-swagit", "success", "2026-09-18T20:00:00.000Z");
+		for (let i = 0; i < 3; i++)
+			insertRunAt(
+				db,
+				"chinohills-swagit",
+				"failure",
+				`2026-09-2${i}T14:00:00.000Z`,
+			);
+
+		const within = new Date("2026-09-25T12:00:00.000Z");
+		const [ok] = checkDegradedSources(db, ["chinohills-swagit"], within);
+		assert.equal(ok.degraded, false);
+
+		const overdue = new Date("2026-09-27T12:00:00.000Z");
+		const [late] = checkDegradedSources(db, ["chinohills-swagit"], overdue);
+		assert.equal(late.degraded, true);
+		assert.match(late.reason, /pull is overdue/);
+	});
+
 	test("a quiet-is-healthy source with 3 failures is still degraded", () => {
 		const db = openDb(":memory:");
 		insertRun(db, "nbc4-news", "failure", 0);
