@@ -32,6 +32,7 @@ import * as cheerio from "cheerio";
 import {
 	type FeedItem,
 	ingestAlertCenter,
+	localDateTimeToIso,
 	parseRssItems,
 	resolveDocumentId,
 	rfc2822ToIso,
@@ -186,6 +187,41 @@ async function run(ctx: ScraperContext): Promise<void> {
 		});
 	}
 
+	// --- Calendar: the Community Calendar category (CID=14) as item_type
+	// 'event'. Not "All": that also carries the McCoy Open Ride calendar, one
+	// "Open Riding" entry per weekday, which would fill Today with the same line
+	// every morning. Same field layout as cityofchino.org's calendar feed. ---
+	const calUrl = `${BASE}/RSSFeed.aspx?ModID=58&CID=Community-Calendar-14`;
+	const calDoc = await ctx.fetchDocument(calUrl, {
+		docType: "feed",
+		title: "Calendar — Community Calendar",
+	});
+	const calItems = parseRssItems(calDoc.body.toString("utf8"));
+	ctx.note(
+		`Calendar (ModID=58, Community-Calendar-14): ${calItems.length} upcoming event(s).`,
+	);
+	for (const it of calItems) {
+		ctx.insertItem({
+			document_id: resolveDocumentId(ctx, calDoc.documentId, it.guid, "event"),
+			source_url: it.link,
+			item_type: "event",
+			external_id: it.guid,
+			title: it.title,
+			body: stripHtml(it.description),
+			occurred_at: localDateTimeToIso(
+				it.extra.EventDates ?? "",
+				(it.extra.EventTimes ?? "").split("-")[0],
+			),
+			meta: {
+				feedUrl: calUrl,
+				module: "Calendar (ModID=58)",
+				eventDates: it.extra.EventDates,
+				eventTimes: it.extra.EventTimes,
+				location: it.extra.Location,
+			},
+		});
+	}
+
 	// --- Alert Center: ingest as item_type 'alert' (All-0, ModID=63) via the
 	// shared CivicPlus helper. ---
 	await ingestAlertCenter(ctx, BASE);
@@ -201,7 +237,7 @@ async function run(ctx: ScraperContext): Promise<void> {
 
 const scraper: ScraperDef = {
 	key: "chinohills-news-rss",
-	name: "Chino Hills News (CivicPlus RSS: News Flash/CivicAlerts)",
+	name: "Chino Hills News (CivicPlus RSS: News Flash/CivicAlerts, Community Calendar)",
 	baseUrl: BASE,
 	method: "rss",
 	run,

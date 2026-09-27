@@ -429,6 +429,33 @@ describe("selectTodayEvents", () => {
 		assert.equal(out[0].title, "Garden class");
 	});
 
+	test("an edited CivicPlus event (new guid, same EID) renders once, freshest row", () => {
+		// Chino's 2026-09-16 City Council meeting, as stored: the guid's
+		// trailing ticks change on every edit.
+		const url = "https://www.cityofchino.org/Calendar.aspx?EID=1836";
+		const rows = [
+			item({
+				source_key: "chino-news-rss",
+				title: "City Council - Regular Meeting",
+				source_url: url,
+				external_id: `${url}/639032105440000000`,
+				occurred_at: "2026-08-18T01:00:00.000Z",
+			}),
+			item({
+				source_key: "chino-news-rss",
+				title: "City Council - Regular Meeting (Updated)",
+				source_url: url,
+				external_id: `${url}/639240344040000000`,
+				occurred_at: "2026-08-18T01:00:00.000Z",
+			}),
+		];
+		const out = selectTodayEvents(rows, NOW);
+		assert.deepEqual(
+			out.map((e) => e.title),
+			["City Council - Regular Meeting (Updated)"],
+		);
+	});
+
 	test("a matinee and an evening show sharing one season URL both survive", () => {
 		// chinotheatre-events cites the season page for every performance, so
 		// source_url alone cannot tell two same-day performances apart.

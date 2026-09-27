@@ -55,15 +55,18 @@ whenever a source changes behavior.
   ingested as `alert` items; valid-but-empty on probe day, same steady-state
   logic as CVFD's Alert Center. Catalog page robots-blocked (noted above), so
   per-category alert CIDs are unverified.
-- **Calendar (ModID=58) is NOT ingested — probed 2026-09-19, gap flagged.**
-  `RSSFeed.aspx?ModID=58&CID=All-calendar.xml` returns 200 with structured
-  `calendarEvent:EventDates` / `EventTimes` / `Location` fields and item-level
-  `Calendar.aspx?EID=N` links; 18 real community events on the probe day
-  (blood drive, bulky-item drop-off, mulch giveaway, McCoy Arenas horse
-  shows). Neither `Calendar.aspx` nor `RSSFeed.aspx` is covered by any
-  robots.txt rule — only the `/RSS.aspx` catalog is, as noted above. Same
-  host and endpoint family as the two modules already ingested. Reasoning in
-  `reports/notes/shoppes-events.md`.
+- **Calendar (ModID=58): Community Calendar ingested as `event` items
+  (2026-09-26).** Feed `RSSFeed.aspx?ModID=58&CID=Community-Calendar-14`,
+  structured `calendarEvent:EventDates` / `EventTimes` / `Location` fields,
+  item-level `Calendar.aspx?EID=N` links. Not the `All-calendar.xml` feed:
+  that adds the McCoy Open Ride calendar (CID 28), one "Open Riding" entry
+  per weekday plus arena closures, which would repeat in Today every
+  morning. McCoy horse shows are lost with it; revisit if that matters. Gap
+  first flagged 2026-09-19 in `reports/notes/shoppes-events.md`.
+  **Guid quirk:** a CivicPlus calendar guid is `<EID URL>/<last-modified
+  ticks>`, so an edited event arrives under a new guid. The brief's event
+  selectors key on the EID (`eventKey` in `daily-brief.ts`); this had been
+  double-listing edited Chino council meetings.
 - **Link-back depth:** item-level (`CivicAlerts.aspx?aid=N`, 302s to canonical).
 - **Reliability guess:** high.
 
