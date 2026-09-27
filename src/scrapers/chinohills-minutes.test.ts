@@ -74,6 +74,7 @@ after(() => {
 const COUNCIL_MINUTES = [
 	"CITY OF CHINO HILLS",
 	"August 11, 2026",
+	"REGULAR MEETING",
 	"CONVENE MEETING AND ROLL CALL [00:10]",
 	"The meeting was called to order at 7:00 p.m.",
 	"CONSENT CALENDAR [01:00]",
@@ -241,6 +242,31 @@ describe("extractMinutesItems", () => {
 		assert.ok(!items.some((i) => /Docusign/i.test(i.body)));
 	});
 
+	it("splits the real 2026-01-13 minutes, whose text has no blank lines", () => {
+		// WebLink kept no paragraph breaks in this one, so headings cannot be
+		// found by the blank line above them.
+		const items = extractMinutesItems(
+			readFileSync(
+				join(
+					import.meta.dirname,
+					"__fixtures__",
+					"chinohills-cc-minutes-2026-01-13.txt",
+				),
+				"utf8",
+			),
+		);
+		assert.equal(items.length, 33);
+		const titles = items.map((i) => i.title);
+		assert.equal(titles[0], "CONVENE MEETING AND ROLL CALL");
+		assert.equal(titles[3], "REAL PROPERTY NEGOTIATIONS");
+		assert.ok(titles.includes("MONTHLY FINANCIAL REPORT"));
+		assert.ok(titles.includes("ACCESSORY DWELLING UNITS - ORDINANCE ADOPTED"));
+		// Roster names and the masthead never become items.
+		assert.ok(
+			!titles.some((t) => /MARQUEZ|BOBADILLA|CITY OF CHINO HILLS/.test(t)),
+		);
+	});
+
 	it("splits the timestamp off the title", () => {
 		const [item] = extractMinutesItems(
 			"\nINVOCATION [01:20]\nLed by a pastor.",
@@ -405,6 +431,7 @@ describe("chinohills-minutes run", () => {
 			"chinohills-tres-hermanos-jpa-2026-08-11-minutes.pdf": makePdf([
 				"TRES HERMANOS JPA",
 				"August 11, 2026",
+				"REGULAR MEETING",
 				"No business was conducted.",
 			]),
 		});
