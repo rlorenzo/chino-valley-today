@@ -28,9 +28,8 @@ const MONTHS = [
 	"december",
 ];
 
-// Longest names first: "public works commission" must win over a bare
-// "commission", and "city council" must not match inside "city council
-// chambers" ambiguously.
+// Specific names only: "public works commission" rather than a bare
+// "commission". Ties on position cannot happen between these patterns.
 const BODY_PATTERNS: Array<[RegExp, string]> = [
 	[/employee\s+deferred\s+compensation/i, "deferred-compensation-committee"],
 	[/legislative\s+advocacy/i, "legislative-advocacy-committee"],
@@ -66,9 +65,17 @@ function findDate(head: string): string | null {
 	return dates[0] ?? null;
 }
 
+// The body named EARLIEST wins: the masthead names the meeting's own body
+// before the text mentions any other (Council minutes of 2026-04-14 thank the
+// Parks and Recreation Commission on page 3). A commission masthead that sits
+// in "CITY COUNCIL CHAMBERS" still names the commission first.
 function findBody(head: string): string | null {
-	for (const [re, slug] of BODY_PATTERNS) if (re.test(head)) return slug;
-	return null;
+	let best: { at: number; slug: string } | null = null;
+	for (const [re, slug] of BODY_PATTERNS) {
+		const at = head.search(re);
+		if (at >= 0 && (!best || at < best.at)) best = { at, slug };
+	}
+	return best?.slug ?? null;
 }
 
 const files = process.argv.slice(2);
