@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { bufferCodec, recorded, stringCodec } from "../replay.ts";
 import { readRaw, saveRaw } from "../store.ts";
 import type { ScraperContext } from "./types.ts";
 
@@ -79,17 +80,24 @@ export async function listRecentUploads(
 	channelUrl: string,
 	limit: number,
 ): Promise<PlaylistEntry[]> {
-	const { stdout } = await execFileAsync(
-		"yt-dlp",
-		[
-			"--flat-playlist",
-			"--print",
-			"%(id)s|%(title)s|%(duration_string)s",
-			"--playlist-end",
-			String(limit),
-			channelUrl,
-		],
-		{ maxBuffer: 10 * 1024 * 1024, timeout: 60_000 },
+	const stdout = await recorded(
+		`yt-dlp list ${channelUrl} ${limit}`,
+		async () =>
+			(
+				await execFileAsync(
+					"yt-dlp",
+					[
+						"--flat-playlist",
+						"--print",
+						"%(id)s|%(title)s|%(duration_string)s",
+						"--playlist-end",
+						String(limit),
+						channelUrl,
+					],
+					{ maxBuffer: 10 * 1024 * 1024, timeout: 60_000 },
+				)
+			).stdout,
+		stringCodec,
 	);
 	return stdout
 		.trim()
@@ -215,7 +223,18 @@ export function mergeCuesIntoSegments(
 	return segs;
 }
 
-export async function downloadAutoCaptions(
+export function downloadAutoCaptions(
+	videoId: string,
+	watchUrl: string,
+): Promise<Buffer> {
+	return recorded(
+		`yt-dlp captions ${videoId}`,
+		() => fetchAutoCaptions(videoId, watchUrl),
+		bufferCodec,
+	);
+}
+
+async function fetchAutoCaptions(
 	videoId: string,
 	watchUrl: string,
 ): Promise<Buffer> {
