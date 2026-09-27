@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, it } from "node:test";
@@ -8,6 +8,7 @@ import scraper, {
 	dateCorroboration,
 	extractMinutesItems,
 	parseFilename,
+	readMinutesText,
 } from "./chinohills-minutes.ts";
 
 // A real, parseable PDF built in-process. The alternative was checking a
@@ -72,15 +73,26 @@ after(() => {
 
 const COUNCIL_MINUTES = [
 	"CITY OF CHINO HILLS",
-	"CITY COUNCIL MINUTES",
 	"August 11, 2026",
-	"1. CALL TO ORDER",
+	"CONVENE MEETING AND ROLL CALL [00:10]",
 	"The meeting was called to order at 7:00 p.m.",
-	"2. CONSENT CALENDAR",
+	"CONSENT CALENDAR [01:00]",
 	"Approved as submitted.",
-	"3. PUBLIC HEARING",
+	"PUBLIC HEARING [05:00]",
 	"Villa Borba tract map extension.",
 ];
+
+// The real City Council minutes of 2026-08-11, captured from WebLink's text
+// mode: pages 1-8, cut before page 9 (DocuSign's envelope certificate, which
+// names a staff email and IP address and is not ours to republish).
+const REAL_MINUTES = readFileSync(
+	join(
+		import.meta.dirname,
+		"__fixtures__",
+		"chinohills-cc-minutes-2026-08-11.txt",
+	),
+	"utf8",
+);
 
 describe("parseFilename", () => {
 	it("parses a well-formed name into body, url and date", () => {
@@ -173,49 +185,89 @@ describe("dateCorroboration", () => {
 	});
 });
 
+describe("readMinutesText", () => {
+	it("reads .txt as-is and counts its page markers", async () => {
+		const read = await readMinutesText(Buffer.from(REAL_MINUTES), "txt");
+		assert.ok(typeof read !== "string");
+		assert.equal(read.text, REAL_MINUTES);
+		assert.equal(read.numPages, 8);
+	});
+
+	it("rejects HTML saved as .txt and non-PDF bytes saved as .pdf", async () => {
+		const html = Buffer.from("  <!DOCTYPE html><html></html>");
+		assert.match(String(await readMinutesText(html, "txt")), /looks like HTML/);
+		assert.match(String(await readMinutesText(html, "pdf")), /not a PDF/);
+	});
+});
+
 describe("extractMinutesItems", () => {
-	it("splits numbered items and keeps their order", () => {
+	it("splits the real 2026-08-11 minutes at every heading, checked by eye", () => {
+		const items = extractMinutesItems(REAL_MINUTES);
+		assert.equal(items.length, 31);
+		assert.deepEqual(
+			items.map((i) => i.num),
+			Array.from({ length: 31 }, (_, i) => i + 1),
+		);
+		const titles = items.map((i) => i.title);
+		assert.equal(titles[0], "CONVENE MEETING AND ROLL CALL");
+		assert.equal(titles.at(-1), "ADJOURN IN MEMORIAM");
+		// A consent item is its own entry, not folded into CONSENT CALENDAR.
+		const payments = items.find((i) => i.title === "PAYMENT REGISTER");
+		assert.match(payments?.body ?? "", /\$6,882,362\.17/);
+		// A heading wrapped across two lines is joined.
+		assert.ok(
+			titles.includes(
+				"MEASURE I FIVE-YEAR CAPITAL IMPROVEMENT PLAN - RESOLUTIONS ADOPTED",
+			),
+		);
+		// A timestamped heading straight after a page break, with no blank line.
+		const closed = items.find(
+			(i) => i.title === "ANNOUNCEMENT OF ACTION TAKEN IN CLOSED SESSION",
+		);
+		assert.equal(closed?.videoOffset, "17:07");
+		// Section labels with nothing under them, page headers, rosters and
+		// votes never become items.
+		for (const t of [
+			"PRESENTATIONS",
+			"CITY DEPARTMENT BUSINESS",
+			"REGULAR MEETINGLAR MEETING",
+		]) {
+			assert.ok(!titles.includes(t), t);
+		}
+		assert.ok(!titles.some((t) => /^(PRESENT|AYES|NOES|ABSENT)\b/.test(t)));
+		assert.ok(!titles.some((t) => t.startsWith("CHINO HILLS CITY COUNCIL")));
+		// Nothing past "Respectfully submitted" (signature, DocuSign stamp).
+		assert.ok(!items.at(-1)?.body.includes("CHERYL BALZ"));
+		assert.ok(!items.some((i) => /Docusign/i.test(i.body)));
+	});
+
+	it("splits the timestamp off the title", () => {
+		const [item] = extractMinutesItems(
+			"\nINVOCATION [01:20]\nLed by a pastor.",
+		);
+		assert.equal(item.title, "INVOCATION");
+		assert.equal(item.videoOffset, "01:20");
+	});
+
+	it("keeps bulleted all-caps sub-points inside their item", () => {
 		const items = extractMinutesItems(
-			"1. CALL TO ORDER\nCalled at 7pm.\n2. CONSENT CALENDAR\nApproved.\n3. ADJOURN\nAt 9pm.",
+			"\nCOUNCIL REPORTS [33:13]\nCouncil Member Rogers\n\n• DESALTER AUTHORITY BOARD\nMet Tuesday.",
 		);
-		assert.deepEqual(
-			items.map((i) => i.num),
-			[1, 2, 3],
-		);
-		assert.equal(items[0].title, "CALL TO ORDER");
-		assert.match(items[1].body, /Approved/);
+		assert.equal(items.length, 1);
+		assert.match(items[0].body, /DESALTER AUTHORITY BOARD Met Tuesday/);
 	});
 
-	it("does not open a new item for a numbered list inside an item", () => {
-		// A motion's numbered conditions restart at 1. An earlier "keep any
-		// increasing number" rule turned the nested "2." into a spurious
-		// top-level item, which is the failure this rule exists to prevent.
+	it("keeps colon headings and strips other bodies' page headers", () => {
 		const items = extractMinutesItems(
-			"1. FIRST\nConditions:\n1. one\n2. two\n5. FIFTH\nBody.",
+			"\nPUBLIC HEARING: FEE STUDY [05:00]\nHeard.\nPARKS & RECREATION COMMISSION 2026-7\nSPECIAL MEETING\nContinued.\n\nAYES: ALL\nDone.\n  Respectfully submitted,\nCLERK",
 		);
-		assert.deepEqual(
-			items.map((i) => i.num),
-			[1],
-		);
+		assert.equal(items.length, 1);
+		assert.equal(items[0].title, "PUBLIC HEARING: FEE STUDY");
+		assert.equal(items[0].body, "Heard. Continued. AYES: ALL Done.");
 	});
 
-	it("stops at a gap rather than guessing across it", () => {
-		// Under-extraction by design: a missing item is a gap in the breakdown,
-		// a fabricated one is a false entry in the record. The document is
-		// archived and linked either way.
-		const items = extractMinutesItems("1. ONE\na\n2. TWO\nb\n7. SEVEN\nc");
-		assert.deepEqual(
-			items.map((i) => i.num),
-			[1, 2],
-		);
-	});
-
-	it("ignores numbering that does not start at 1", () => {
-		assert.deepEqual(extractMinutesItems("3. THREE\na\n4. FOUR\nb"), []);
-	});
-
-	it("returns nothing for text with no numbered items", () => {
-		assert.deepEqual(extractMinutesItems("No numbering here at all."), []);
+	it("returns nothing for text with no headings", () => {
+		assert.deepEqual(extractMinutesItems("No headings here at all."), []);
 	});
 });
 
@@ -244,6 +296,11 @@ describe("chinohills-minutes run", () => {
 
 		assert.equal(fake.items.length, 3);
 		assert.equal(fake.items[0].item_type, "agenda_item");
+		assert.equal(fake.items[1].title, "CONSENT CALENDAR");
+		assert.equal(
+			(fake.items[1].meta as { videoOffset: string }).videoOffset,
+			"01:00",
+		);
 		assert.equal(fake.items[0].external_id, "city-council-2026-08-11-1");
 		assert.equal(fake.items[0].occurred_at, "2026-08-11");
 		assert.equal(
@@ -355,6 +412,30 @@ describe("chinohills-minutes run", () => {
 		assert.equal(threw, null);
 		assert.equal(fake.ingested.length, 1);
 		assert.equal(fake.items.length, 0);
-		assert.ok(fake.notes.some((n) => /no numbered items were parsed/.test(n)));
+		assert.ok(fake.notes.some((n) => /no items were parsed/.test(n)));
+	});
+
+	it("ingests WebLink plain text saved as .txt, archiving the text itself", async () => {
+		const dir = dropWith({
+			"chinohills-city-council-2026-08-11-minutes.txt": REAL_MINUTES,
+		});
+		const { fake, threw } = await runOn(dir);
+		assert.equal(threw, null, `unexpected throw: ${threw?.message}`);
+		assert.equal(fake.ingested.length, 1);
+		assert.equal(fake.ingested[0].meta.ext, "txt");
+		assert.equal(fake.ingested[0].bytes.toString("utf8"), REAL_MINUTES);
+		assert.equal(fake.items.length, 31);
+		assert.ok(fake.notes.some((n) => /1 newly archived/.test(n)));
+	});
+
+	it("rejects an HTML error page saved with a .txt name", async () => {
+		const dir = dropWith({
+			"chinohills-city-council-2026-08-11-minutes.txt":
+				"<!DOCTYPE html><html><body>Session expired</body></html>",
+		});
+		const { fake, threw } = await runOn(dir);
+		assert.ok(threw);
+		assert.match(threw.message, /looks like HTML/);
+		assert.equal(fake.ingested.length, 0);
 	});
 });

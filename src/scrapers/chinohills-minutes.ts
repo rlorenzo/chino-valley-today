@@ -21,8 +21,13 @@
 // empty in every meeting sampled across August, June and February 2026.
 //
 // So there is no permitted automated path to minutes, and this scraper does not
-// invent one. A person downloads the PDFs through a browser, which robots.txt
+// invent one. A person pulls the minutes through a browser, which robots.txt
 // does not govern, and drops them in DROP_DIR. This ingests what it finds.
+//
+// Either form is accepted: the PDF, or the text of WebLink's "View plain text"
+// mode saved as .txt (pages separated by "-- N of M --", the same marker
+// pdf-parse emits). The text is what the pipeline uses either way, and the
+// site never serves the minutes file itself -- citations link to the portal.
 //
 // If the City ever grants access (the request is drafted; City Clerk,
 // 909-364-2620, cityclerk@chinohills.org), a fetch step can be added in front
@@ -30,8 +35,8 @@
 //
 // FILE NAMING
 //
-// Files must be named:  chinohills-<body>-<YYYY-MM-DD>-minutes.pdf
-// e.g.                  chinohills-city-council-2026-08-11-minutes.pdf
+// Files must be named:  chinohills-<body>-<YYYY-MM-DD>-minutes.(pdf|txt)
+// e.g.                  chinohills-city-council-2026-08-11-minutes.txt
 //
 // The name carries the body and the meeting date because the drop is the only
 // place that information reliably exists: WebLink's own filenames are
@@ -41,7 +46,7 @@
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
-import { extractPdfText } from "../pdf.ts";
+import { extractPdfText, type PdfText } from "../pdf.ts";
 import type { ScraperContext, ScraperDef } from "./types.ts";
 
 const repoRoot = join(import.meta.dirname, "..", "..");
@@ -102,13 +107,16 @@ const BODIES: Record<string, { name: string; minutesUrl: string }> = {
 	},
 };
 
-const FILENAME_RE = /^chinohills-([a-z-]+?)-(\d{4}-\d{2}-\d{2})-minutes\.pdf$/i;
+const FILENAME_RE =
+	/^chinohills-([a-z-]+?)-(\d{4}-\d{2}-\d{2})-minutes\.(pdf|txt)$/i;
+const NAME_SHAPE = "chinohills-<body>-<YYYY-MM-DD>-minutes.(pdf|txt)";
 
 export interface ParsedName {
 	bodySlug: string;
 	bodyName: string;
 	minutesUrl: string;
 	date: string;
+	ext: "pdf" | "txt";
 }
 
 // Returns the parsed name, or a string explaining why it is unusable. Callers
@@ -116,7 +124,7 @@ export interface ParsedName {
 export function parseFilename(filename: string): ParsedName | string {
 	const m = filename.match(FILENAME_RE);
 	if (!m) {
-		return `filename does not match chinohills-<body>-<YYYY-MM-DD>-minutes.pdf`;
+		return `filename does not match ${NAME_SHAPE}`;
 	}
 	const bodySlug = m[1].toLowerCase();
 	const body = BODIES[bodySlug];
@@ -135,7 +143,13 @@ export function parseFilename(filename: string): ParsedName | string {
 	) {
 		return `"${date}" is not a real calendar date`;
 	}
-	return { bodySlug, bodyName: body.name, minutesUrl: body.minutesUrl, date };
+	return {
+		bodySlug,
+		bodyName: body.name,
+		minutesUrl: body.minutesUrl,
+		date,
+		ext: m[3].toLowerCase() as "pdf" | "txt",
+	};
 }
 
 // Does the document text corroborate the date the filename claims? Minutes
@@ -191,75 +205,136 @@ export function dateCorroboration(
 	return { ok: list.includes(expected), found: list };
 }
 
+const PAGE_MARKER = /^-- \d+ of \d+ --$/;
+
+// The text of a dropped file, or a string explaining why it is unusable.
+// An HTML error page or a truncated download saved under the right name is the
+// most likely bad input here, and it would otherwise reach the parse as a
+// confusing error or, for .txt, as "text".
+export async function readMinutesText(
+	bytes: Buffer,
+	ext: ParsedName["ext"],
+): Promise<PdfText | string> {
+	if (ext === "txt") {
+		const text = bytes.toString("utf8");
+		if (/^\s*</.test(text.slice(0, 200))) {
+			return "looks like HTML, not the minutes text (a saved error page?)";
+		}
+		const numPages = text
+			.split("\n")
+			.filter((l) => PAGE_MARKER.test(l.trim())).length;
+		return { text, numPages: numPages || 1 };
+	}
+	if (!bytes.subarray(0, 5).toString("latin1").startsWith("%PDF-")) {
+		return "not a PDF (no %PDF- header; a saved error page or a truncated download?)";
+	}
+	try {
+		return await extractPdfText(bytes);
+	} catch (err) {
+		return `PDF text extraction failed (${err})`;
+	}
+}
+
+// A trailing video timestamp on a heading: "CONSENT CALENDAR [18:31]".
+const VIDEO_TS = /\s*\[(\d{1,2}:\d{2}(?::\d{2})?)\]$/;
+
 export interface MinutesItem {
 	num: number;
 	title: string;
 	body: string;
+	/** Offset into the meeting video, as printed: "[18:31]" -> "18:31". */
+	videoOffset: string | null;
 }
 
-// Splits minutes text into numbered items.
+// Splits minutes text into items at their ALL-CAPS headings.
 //
-// CONSERVATIVE ON PURPOSE, AND PROVISIONAL.
+// Chino Hills minutes are not numbered. Validated against the real City
+// Council minutes of 2026-08-11 (the first one pulled, 2026-09-26): every item
+// is an upper-case heading line, often ending in a video timestamp --
+// "PROCLAMATION - NATIONAL CRIME PREVENTION WEEK [12:03]", "CONSENT CALENDAR
+// [18:31]" -- and each consent item is its own heading ("PAYMENT REGISTER")
+// with a paragraph recording the action. The numbered-item splitter this
+// replaces had been built on synthetic fixtures and found nothing in it.
 //
-// Distinguishing a top-level item from a numbered list INSIDE one (a motion's
-// conditions, findings in a resolution) is genuinely ambiguous once a PDF is
-// flattened to text: both are "N." at the start of a line. A first attempt here
-// kept any increasing number and duly turned the "2." of a nested list into a
-// spurious top-level item, because it followed a kept "1.".
+// A heading is an all-caps line that starts a paragraph (blank line before it,
+// or a trailing video timestamp) and is not a labelled line ("PRESENT:", "AYES:" -- rosters and votes stay in
+// the body) or a bullet ("• TEEN ACTIVITY CENTER" is a sub-point). An all-caps
+// line straight after a heading is its wrap ("... - RESOLUTIONS" / "ADOPTED").
+// A heading with no text under it is a section label (PRESENTATIONS, CITY
+// DEPARTMENT BUSINESS) or the masthead, and is dropped.
 //
-// So this uses the same rule chinohills-agendas.ts uses: a numbered line counts
-// only while the sequence runs 1, 2, 3, ... incrementing by exactly one, and the
-// scan stops at the first break. It reaches that rule by a different route --
-// the agenda splitter needs it to find the boundary where a packet's backup
-// materials begin, while minutes have no backup materials and need it to avoid
-// nested lists -- which is why the two are not shared: same rule today, but they
-// would drift for unrelated reasons, and a shared helper would hide that.
-//
-// The cost is under-extraction: minutes that restart numbering per section stop
-// at the first restart. That is the right way to be wrong here. A missing item
-// is a gap in the breakdown, while a fabricated one is a false entry in a record
-// whose whole promise is that every claim traces to a source.
-//
-// NOT YET VALIDATED against a real Chino Hills minutes PDF -- there is no
-// permitted way to fetch one (see the header), so this was built against
-// synthetic fixtures. The first real drop should be checked by eye: compare the
-// item count and titles this produces against the document. The document itself
-// is archived and linked regardless of how this does, so a poor split degrades
-// the breakdown, never the record.
+// Parsing stops at "Respectfully submitted": after it come the clerk's
+// signature and, on DocuSigned minutes, the envelope certificate, which
+// carries a staff email and IP address and is nobody's agenda item.
 export function extractMinutesItems(rawText: string): MinutesItem[] {
-	const text = rawText
-		// pdf-parse page-boundary markers and bare page-number lines.
-		.replace(/^-- \d+ of \d+ --[ \t]*$/gm, "")
-		.replace(/^\d{1,4}\/\d{1,4}[ \t]*$/gm, "");
-	const matches: Array<{ num: number; start: number; end: number }> = [];
-	for (const m of text.matchAll(/^(\d{1,3})\.[ \t]+/gm)) {
-		matches.push({
-			num: parseInt(m[1], 10),
-			start: m.index,
-			end: m.index + m[0].length,
+	const end = rawText.search(/^[ \t]*Respectfully submitted/im);
+	// Body name ("PARKS & RECREATION COMMISSION") and minute-book page number.
+	const runningHeader = /^[A-Z][A-Z &]+ \d{4}-\d{1,4}$/;
+	const lines = (end >= 0 ? rawText.slice(0, end) : rawText)
+		.split("\n")
+		.map((l) => l.trim())
+		// Page furniture: page markers, the running header ("CHINO HILLS CITY
+		// COUNCIL 2026-156" over "REGULAR MEETING..."), DocuSign stamps.
+		.filter(
+			(l, i, all) =>
+				!PAGE_MARKER.test(l) &&
+				!/^Docusign Envelope ID:/i.test(l) &&
+				!runningHeader.test(l) &&
+				!(runningHeader.test(all[i - 1] ?? "") && /MEETING/.test(l)),
+		);
+
+	const isCaps = (l: string) => /[A-Z]{3}/.test(l) && l === l.toUpperCase();
+	// Roster and vote labels; any other colon ("PUBLIC HEARING: ...") can sit in
+	// a heading.
+	const isLabel = (l: string) =>
+		/^(ALSO PRESENT|PRESENT|ABSENT|AYES|NOES|ABSTAIN|ABSTAINED|RECUSED)\s*:/.test(
+			l,
+		);
+	const sections: Array<{ heading: string; body: string[] }> = [];
+	let current: { heading: string; body: string[] } | null = null;
+	for (let i = 0; i < lines.length; i++) {
+		const l = lines[i];
+		// The document's first line is its masthead, not a paragraph start.
+		const prev = lines[i - 1] ?? "(start)";
+		if (
+			current &&
+			current.body.length === 0 &&
+			isCaps(l) &&
+			isCaps(prev) &&
+			!isLabel(l)
+		) {
+			current.heading += ` ${l}`;
+			continue;
+		}
+		// A trailing video timestamp marks a heading even with no blank line
+		// before it, which a page break can swallow ("[17:07]" on 2026-08-11).
+		if (
+			(prev === "" || VIDEO_TS.test(l)) &&
+			isCaps(l) &&
+			!isLabel(l) &&
+			!/^[•o] /.test(l)
+		) {
+			current = { heading: l, body: [] };
+			sections.push(current);
+			continue;
+		}
+		if (current && l) current.body.push(l);
+	}
+
+	return sections
+		.filter((sec) => sec.body.length > 0)
+		.map((sec, i) => {
+			const ts = sec.heading.match(VIDEO_TS);
+			return {
+				num: i + 1,
+				title: (ts ? sec.heading.slice(0, ts.index) : sec.heading).slice(
+					0,
+					120,
+				),
+				body: sec.body.join(" ").replace(/\s+/g, " ").trim(),
+				videoOffset: ts ? ts[1] : null,
+			};
 		});
-	}
-	const kept: typeof matches = [];
-	for (const m of matches) {
-		const prev = kept[kept.length - 1];
-		if (!prev && m.num === 1) kept.push(m);
-		else if (prev && m.num === prev.num + 1) kept.push(m);
-		else if (prev) break;
-	}
-	return kept.map((m, i) => {
-		const stop = i + 1 < kept.length ? kept[i + 1].start : text.length;
-		const chunk = text.slice(m.end, stop);
-		const firstLine =
-			chunk
-				.split("\n")
-				.map((l) => l.trim())
-				.find((l) => l.length > 0) ?? "";
-		return {
-			num: m.num,
-			title: firstLine.slice(0, 120),
-			body: chunk.replace(/\s+/g, " ").trim(),
-		};
-	});
 }
 
 function sha256(buf: Buffer): string {
@@ -268,7 +343,7 @@ function sha256(buf: Buffer): string {
 
 const scraper: ScraperDef = {
 	key: "chinohills-minutes",
-	name: "Chino Hills meeting minutes (hand-dropped PDFs)",
+	name: "Chino Hills meeting minutes (hand-dropped PDF or text)",
 	baseUrl: "https://publicportal.chinohills.org",
 	method: "pdf",
 	async run(ctx: ScraperContext) {
@@ -276,7 +351,7 @@ const scraper: ScraperDef = {
 		let filenames: string[];
 		try {
 			filenames = readdirSync(dir)
-				.filter((f) => f.toLowerCase().endsWith(".pdf"))
+				.filter((f) => /\.(pdf|txt)$/i.test(f))
 				.sort();
 		} catch {
 			// A missing drop directory is the normal state on a machine nobody has
@@ -285,7 +360,7 @@ const scraper: ScraperDef = {
 			// files knows where they were looked for.
 			ctx.note(
 				`No drop directory at ${dir} — nothing to ingest. Create it and add ` +
-					"files named chinohills-<body>-<YYYY-MM-DD>-minutes.pdf.",
+					`files named ${NAME_SHAPE}.`,
 			);
 			return;
 		}
@@ -318,31 +393,19 @@ const scraper: ScraperDef = {
 			}
 
 			const bytes = readFileSync(join(dir, filename));
-			// An HTML error page or a truncated download saved with a .pdf name is
-			// the most likely bad input here, and it would otherwise reach
-			// extractPdfText as a confusing parser error.
-			if (!bytes.subarray(0, 5).toString("latin1").startsWith("%PDF-")) {
-				rejected.push(
-					`${filename}: not a PDF (no %PDF- header; a saved error page or a truncated download?)`,
-				);
-				continue;
-			}
-
+			// A bad file is never archived, so it cannot match a held hash and
+			// always reaches the check in readMinutesText.
 			if (seenHash.get(sha256(bytes))) {
 				skipped++;
 				continue;
 			}
 
-			let text: string;
-			let numPages: number;
-			try {
-				const out = await extractPdfText(bytes);
-				text = out.text;
-				numPages = out.numPages;
-			} catch (err) {
-				rejected.push(`${filename}: PDF text extraction failed (${err})`);
+			const read = await readMinutesText(bytes, parsed.ext);
+			if (typeof read === "string") {
+				rejected.push(`${filename}: ${read}`);
 				continue;
 			}
+			const { text, numPages } = read;
 
 			const corroboration = dateCorroboration(text, parsed.date);
 			if (!corroboration.ok) {
@@ -363,7 +426,7 @@ const scraper: ScraperDef = {
 			const { documentId } = ctx.ingestLocal(bytes, {
 				url: parsed.minutesUrl,
 				docType: "minutes",
-				ext: "pdf",
+				ext: parsed.ext,
 				title,
 				meetingDate: parsed.date,
 			});
@@ -372,7 +435,7 @@ const scraper: ScraperDef = {
 			const items = extractMinutesItems(text);
 			if (items.length === 0) {
 				ctx.note(
-					`${filename}: archived (${numPages} pages) but no numbered items were ` +
+					`${filename}: archived (${numPages} pages) but no items were ` +
 						"parsed from it — the document is stored and linked, with no item breakdown.",
 				);
 			}
@@ -389,6 +452,7 @@ const scraper: ScraperDef = {
 						body: parsed.bodyName,
 						bodySlug: parsed.bodySlug,
 						itemNumber: item.num,
+						videoOffset: item.videoOffset,
 						// Distinguishes an outcome recorded in minutes from the same
 						// item as it appeared on the agenda beforehand.
 						record: "minutes",
@@ -400,12 +464,12 @@ const scraper: ScraperDef = {
 		}
 
 		ctx.note(
-			`Drop ingest from ${dir}: ${filenames.length} PDF(s) present, ${ingested} newly ` +
+			`Drop ingest from ${dir}: ${filenames.length} file(s) present, ${ingested} newly ` +
 				`archived, ${skipped} already held (content hash matched an existing document), ` +
 				`${itemsInserted} new item(s), ${rejected.length} rejected.`,
 		);
 		ctx.note(
-			"Scope: this archives minutes and splits them into numbered items. It does " +
+			"Scope: this archives minutes and splits them into items at their headings. It does " +
 				"NOT extract votes or roll calls — recorded votes are the obvious next " +
 				"step and deliberately out of scope here, since a mis-parsed vote is a " +
 				"factual error in the record rather than a missing one.",
