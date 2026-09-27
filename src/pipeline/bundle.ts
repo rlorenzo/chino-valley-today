@@ -1,5 +1,5 @@
 // Meeting bundle assembly: gather everything the DB knows about one meeting
-// (agenda items, votes, transcript segments) into a synthesis input whose
+// (agenda items, votes, minutes, transcript segments) into a synthesis input whose
 // every element carries a source_url. The bundle is the ONLY material the
 // generator may draw from, and its URL set is the only citable set.
 import type { Db } from "../db/index.ts";
@@ -30,6 +30,9 @@ export interface MeetingBundle {
 	meetingDate: string; // ISO date
 	agendaItems: BundleItem[];
 	votes: BundleItem[];
+	// Items split from the official minutes: what the body recorded doing,
+	// as opposed to what the agenda said it would take up.
+	minutesItems: BundleItem[];
 	transcriptSegments: BundleItem[];
 	allowedUrls: string[];
 	inputCorpus: string;
@@ -91,6 +94,7 @@ const TARGET_SHAPES: Array<{
 	cityPrefix?: string;
 	agenda: { key: string; type: string } | null;
 	votes: { key: string; type: string } | null;
+	minutes: { key: string; type: string } | null;
 	transcript: { key: string; type: string } | null;
 }> = [
 	{
@@ -99,6 +103,7 @@ const TARGET_SHAPES: Array<{
 		cityPrefix: "Chino",
 		agenda: { key: "chino-legistar", type: "agenda_item" },
 		votes: { key: "chino-legistar", type: "vote" },
+		minutes: null, // Legistar carries outcomes on the agenda items and votes
 		transcript: { key: "chino-youtube-captions", type: "transcript_segment" }, // chinotv3 channel
 	},
 	{
@@ -106,7 +111,8 @@ const TARGET_SHAPES: Array<{
 		bodyName: "Chino Hills City Council",
 		cityPrefix: "Chino Hills",
 		agenda: { key: "chinohills-agendas", type: "agenda_item" },
-		votes: null, // Chino Hills votes are in minutes (robots-blocked Laserfiche)
+		votes: null, // not parsed out of the minutes yet; see chinohills-minutes.ts
+		minutes: { key: "chinohills-minutes", type: "agenda_item" }, // hand-dropped from Laserfiche
 		transcript: { key: "chinohills-swagit", type: "transcript_segment" },
 	},
 	{
@@ -114,6 +120,7 @@ const TARGET_SHAPES: Array<{
 		bodyName: "CVUSD Board of Education",
 		agenda: { key: "cvusd-board", type: "agenda_item" }, // empty today (robots-blocked PDFs); listing events excluded — not agenda content
 		votes: null,
+		minutes: null,
 		transcript: { key: "youtube-captions", type: "transcript_segment" },
 	},
 ];
@@ -135,22 +142,18 @@ export function listRecapTargets(db: Db): Array<{
 			.prepare(
 				`SELECT DISTINCT substr(COALESCE(i.occurred_at, d.meeting_date, ''), 1, 10) AS day
          FROM items i JOIN documents d ON i.document_id = d.id JOIN sources s ON d.source_id = s.id
-         WHERE s.key IN (?, ?, ?) AND i.item_type IN ('agenda_item','transcript_segment')
+         WHERE s.key IN (?, ?, ?, ?) AND i.item_type IN ('agenda_item','transcript_segment')
            AND day != '' ORDER BY day DESC`,
 			)
 			.all(
 				shape.agenda?.key ?? shape.sourceKey,
 				shape.transcript?.key ?? shape.sourceKey,
+				shape.minutes?.key ?? shape.sourceKey,
 				shape.sourceKey,
 			) as unknown as Array<{ day: string }>;
 		for (const { day } of dateRows) {
 			const bundle = assembleBundle(db, shape.sourceKey, day);
 			if (!bundle) continue;
-			if (
-				bundle.agendaItems.length === 0 &&
-				bundle.transcriptSegments.length === 0
-			)
-				continue;
 			out.push({
 				targetKey: bundle.targetKey,
 				bodyName: bundle.bodyName,
@@ -158,6 +161,7 @@ export function listRecapTargets(db: Db): Array<{
 				counts: {
 					agendaItems: bundle.agendaItems.length,
 					votes: bundle.votes.length,
+					minutesItems: bundle.minutesItems.length,
 					transcriptSegments: bundle.transcriptSegments.length,
 				},
 			});
@@ -179,17 +183,25 @@ export function assembleBundle(
 	const votes = shape.votes
 		? itemsFor(db, shape.votes.key, shape.votes.type, isoDate)
 		: [];
+	const minutesItems = shape.minutes
+		? itemsFor(db, shape.minutes.key, shape.minutes.type, isoDate)
+		: [];
 	const transcriptSegments = shape.transcript
 		? itemsFor(db, shape.transcript.key, shape.transcript.type, isoDate)
 		: [];
-	if (agendaItems.length === 0 && transcriptSegments.length === 0) return null;
+	if (
+		agendaItems.length === 0 &&
+		minutesItems.length === 0 &&
+		transcriptSegments.length === 0
+	)
+		return null;
 
 	// The shape's bodyName is a default: a date can belong to a different body
 	// on the same platform (Legistar hosts Planning Commission too), so prefer
 	// the body name the agenda items themselves carry.
 	let bodyName = shape.bodyName;
-	const metaBody =
-		agendaItems[0]?.meta.eventBodyName ?? agendaItems[0]?.meta.body;
+	const bodySource = agendaItems[0] ?? minutesItems[0];
+	const metaBody = bodySource?.meta.eventBodyName ?? bodySource?.meta.body;
 	if (typeof metaBody === "string" && metaBody.trim()) {
 		const name = metaBody.trim();
 		bodyName =
@@ -201,11 +213,18 @@ export function assembleBundle(
 
 	const allowedUrls = [
 		...new Set(
-			[...agendaItems, ...votes, ...transcriptSegments].map((i) => i.sourceUrl),
+			[...agendaItems, ...votes, ...minutesItems, ...transcriptSegments].map(
+				(i) => i.sourceUrl,
+			),
 		),
 	];
 	const corpusParts: string[] = [bodyName, isoDate];
-	for (const it of [...agendaItems, ...votes, ...transcriptSegments]) {
+	for (const it of [
+		...agendaItems,
+		...votes,
+		...minutesItems,
+		...transcriptSegments,
+	]) {
 		if (it.title) corpusParts.push(it.title);
 		if (it.body) corpusParts.push(it.body);
 		for (const v of Object.values(it.meta)) {
@@ -220,6 +239,7 @@ export function assembleBundle(
 		meetingDate: isoDate,
 		agendaItems,
 		votes,
+		minutesItems,
 		transcriptSegments,
 		allowedUrls,
 		inputCorpus: corpusParts.join("\n"),
@@ -259,6 +279,17 @@ export function renderBundleForPrompt(
 		for (const v of b.votes) {
 			lines.push(`- ${v.title ?? ""} ${JSON.stringify(v.meta)}`);
 			lines.push(`  source: ${v.sourceUrl}`);
+		}
+	}
+	if (b.minutesItems.length) {
+		lines.push(
+			"",
+			"## Minutes (the official record of what the body did; verbatim):",
+		);
+		for (const it of b.minutesItems) {
+			lines.push(`- ${it.title ?? "(untitled)"}`);
+			lines.push(`  source: ${it.sourceUrl}`);
+			if (it.body) lines.push(`  detail: ${it.body}`);
 		}
 	}
 	if (b.transcriptSegments.length) {
@@ -509,6 +540,7 @@ export function assembleBusinessBundle(
 		meetingDate: isoWeek, // week label rides in the MeetingBundle date slot
 		agendaItems: allItems,
 		votes: [],
+		minutesItems: [],
 		transcriptSegments: [],
 		allowedUrls,
 		inputCorpus: corpusParts.join("\n"),
