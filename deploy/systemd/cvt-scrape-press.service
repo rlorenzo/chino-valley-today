@@ -1,5 +1,5 @@
 [Unit]
-Description=Chino Valley Today — press scrapers (The Champion, Daily Bulletin)
+Description=Chino Valley Today — press scrapers (student papers, NBC4)
 Documentation=https://github.com/rlorenzo/chino-valley-today
 After=network-online.target
 Wants=network-online.target
