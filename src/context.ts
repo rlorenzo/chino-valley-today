@@ -1,5 +1,6 @@
 import type { Db } from "./db/index.ts";
-import { type FetchOpts, politeFetch } from "./fetch.ts";
+import { type FetchOpts, politeFetch, type RawResult } from "./fetch.ts";
+import { type Codec, recorded, recording } from "./replay.ts";
 import type { ScraperContext, ScraperDef } from "./scrapers/types.ts";
 import { extFor, readRaw, saveRaw } from "./store.ts";
 
@@ -45,6 +46,23 @@ function applyFetchDefaults(
 	};
 }
 
+const rawResultCodec: Codec<RawResult> = {
+	encode: (r) =>
+		Buffer.from(JSON.stringify({ ...r, body: r.body.toString("base64") })),
+	decode: (b) => {
+		const r = JSON.parse(b.toString("utf8"));
+		return { ...r, body: Buffer.from(r.body, "base64") };
+	},
+};
+
+// Every network read goes through here so a recording captures all of it
+// (see replay.ts). The key is the method and URL: a POST's body is part of
+// what was asked, so it is part of the key too.
+function fetchVia(url: string, opts: FetchOpts): Promise<RawResult> {
+	const key = `fetch ${url} ${opts.jsonBody === undefined ? "" : JSON.stringify(opts.jsonBody)}`;
+	return recorded(key, () => politeFetch(url, opts), rawResultCodec);
+}
+
 export function buildContext(
 	db: Db,
 	def: ScraperDef,
@@ -72,13 +90,15 @@ export function buildContext(
 			console.log(`  [${def.key}] ${msg}`);
 		},
 		fetchRaw: (url, opts) =>
-			politeFetch(url, applyFetchDefaults(def, url, opts ?? {})),
+			fetchVia(url, applyFetchDefaults(def, url, opts ?? {})),
 		async fetchDocument(url, meta) {
-			const prev = db.latestDocument(url);
+			// No conditional GET while recording: a 304 answers this machine's
+			// DB, and the machine replaying it may not hold that document.
+			const prev = recording() ? undefined : db.latestDocument(url);
 			// A jsonBody makes this a POST, and politeFetch drops the conditional
 			// headers in that case: a POST has no cached representation to
 			// revalidate. So the 304 branch below stays reachable only for GETs.
-			const res = await politeFetch(
+			const res = await fetchVia(
 				url,
 				applyFetchDefaults(def, url, {
 					etag: prev?.etag ?? undefined,
