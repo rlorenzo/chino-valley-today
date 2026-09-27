@@ -691,6 +691,27 @@ function byStartThenTitle(a: TodayEvent, b: TodayEvent): number {
 	);
 }
 
+// external_id first, source_url only as the fallback (same rule as the
+// forecast and ABC-licence selectors): a season page links every one of its
+// performances to the same URL, so keying on the URL alone would drop the
+// matinee of a matinee-plus-evening day.
+//
+// A CivicPlus calendar guid is "<Calendar.aspx?EID=N URL>/<last-modified
+// ticks>", so editing an event mints a new guid and the old row stays behind:
+// Chino's City Council meetings of 2026-09-02 and 09-16 each rendered twice.
+// The EID alone names the occurrence (every date of a recurring event gets its
+// own). Rows arrive in id order and dedupeByKey keeps the last, so the freshest
+// scrape wins. Dedupe stays AFTER the date filter: sources without an
+// external_id share one URL across every recurrence.
+// ponytail: an edit that MOVES the date leaves the old row on the old day;
+// a DB cleanup of superseded guids fixes that if it ever shows up.
+function eventKey(row: ItemRow): string {
+	return (row.external_id ?? row.source_url).replace(
+		/(Calendar\.aspx\?EID=\d+)\/\d+$/,
+		"$1",
+	);
+}
+
 export function selectTodayEvents(
 	eventItems: ItemRow[],
 	now: Date,
@@ -699,11 +720,7 @@ export function selectTodayEvents(
 	const todays = eventItems.filter(
 		(row) => isRenderableEvent(row) && laDateOf(row.occurred_at) === laToday,
 	);
-	// external_id first, source_url only as the fallback (same rule as the
-	// forecast and ABC-licence selectors): a season page links every one of its
-	// performances to the same URL, so keying on the URL alone would drop the
-	// matinee of a matinee-plus-evening day.
-	return dedupeByKey(todays, (r) => r.external_id ?? r.source_url)
+	return dedupeByKey(todays, eventKey)
 		.map(eventRowToEntry)
 		.sort(byStartThenTitle);
 }
@@ -843,8 +860,8 @@ export function railTimeLabel(label: string | null): string | null {
 }
 
 // The month ahead, exclusive of today (today's events live in the brief
-// body): LA days (today, today + horizonDays], deduped by external_id
-// (falling back to source_url) — see selectTodayEvents.
+// body): LA days (today, today + horizonDays], deduped by eventKey — see
+// selectTodayEvents.
 // Rendered by the site from frontmatter, not by the markdown body — the
 // calendar page shows the first week openly and the rest behind a native
 // disclosure, so the horizon here is coverage, not page length.
@@ -861,7 +878,7 @@ export function selectUpcomingEvents(
 		const day = laDateOf(row.occurred_at);
 		return day !== null && day > laToday && day <= horizon;
 	});
-	return dedupeByKey(ahead, (r) => r.external_id ?? r.source_url)
+	return dedupeByKey(ahead, eventKey)
 		.map((row) => ({
 			...eventRowToEntry(row),
 			date: laDateOf(row.occurred_at) as string,
