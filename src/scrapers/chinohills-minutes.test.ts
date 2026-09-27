@@ -292,6 +292,61 @@ describe("extractMinutesItems", () => {
 		assert.equal(items[0].body, "Heard. Continued. AYES: ALL Done.");
 	});
 
+	it("joins a heading wrapped after prose, but not a roster or a label", () => {
+		const items = extractMinutesItems(
+			[
+				"REGULAR MEETING",
+				"CONSENT CALENDAR [15:57]",
+				"Approved.",
+				"AGREEMENT AMENDMENT - MAINTENANCE OF CREEK AREA WITHIN",
+				"MORNINGSIDE PARK",
+				"The City Council authorized Amendment No. 2.",
+				"PRESENTATIONS",
+				"HOLIDAY HOME DECORATING CONTEST WINNERS [01:56]",
+				"Mayor Johsz presented gift cards.",
+			].join("\n"),
+		);
+		assert.deepEqual(
+			items.map((i) => i.title),
+			[
+				"CONSENT CALENDAR",
+				"AGREEMENT AMENDMENT - MAINTENANCE OF CREEK AREA WITHIN MORNINGSIDE PARK",
+				"HOLIDAY HOME DECORATING CONTEST WINNERS",
+			],
+		);
+	});
+
+	it("keeps capital-O bullets and their wraps inside the item", () => {
+		const items = extractMinutesItems(
+			[
+				"REGULAR MEETING",
+				"COUNCIL REPORTS [01:25:05]",
+				"Council Member Rogers",
+				"O COMMUNITY, ECONOMIC, AND HUMAN DEVELOPMENT",
+				"COMMITTEE",
+				"Met on Thursday.",
+			].join("\n"),
+		);
+		assert.deepEqual(
+			items.map((i) => i.title),
+			["COUNCIL REPORTS"],
+		);
+	});
+
+	it("never takes a page-header date into a heading", () => {
+		const items = extractMinutesItems(
+			[
+				"REGULAR MEETING",
+				"CITY BUDGET",
+				"Discussed.",
+				"ING JUNE 9, 2026",
+				"ADJOURNMENT",
+				"The meeting was adjourned at 7:38 p.m.",
+			].join("\n"),
+		);
+		assert.equal(items.at(-1)?.title, "ADJOURNMENT");
+	});
+
 	it("returns nothing for text with no headings", () => {
 		assert.deepEqual(extractMinutesItems("No headings here at all."), []);
 	});
