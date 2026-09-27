@@ -28,7 +28,7 @@ export interface SourceDegradedResult {
 // (src/replay.ts, the meeting-recaps skill's weekly pull). Their failing runs
 // are expected; going this long without ANY success is not, because it means
 // the pull was missed.
-export const MANUAL_PULL_GRACE_DAYS: Record<string, number> = {
+const MANUAL_PULL_GRACE_DAYS: Record<string, number> = {
 	"chinohills-swagit": 8,
 	"chino-youtube-captions": 8,
 	"youtube-captions": 8,
