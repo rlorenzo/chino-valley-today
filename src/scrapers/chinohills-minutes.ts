@@ -300,15 +300,23 @@ export function extractMinutesItems(rawText: string): MinutesItem[] {
 	const body = mastEnd >= 0 ? text.slice(mastEnd + 1) : text;
 
 	const candidate = (l: string | undefined) =>
-		l !== undefined && isCaps(l) && !isLabel(l) && !/^[•o] /.test(l);
+		l !== undefined && isCaps(l) && !isLabel(l) && !/^[•oO] /.test(l);
 	// Prose starts with a mixed-case word ("Mayor Johsz called...", "• Fall
 	// Recreation..."); "RAY MARQUEZ (attended remotely)" is still a roster line.
 	const isProse = (l: string | undefined) =>
 		l !== undefined && /^(?:[•o]\s+)?\S*[a-z]/.test(l);
 	// A heading is a caps line with a timestamp, or one followed by prose. A
 	// roster name is followed by the next name, so it never qualifies.
+	// A caps line under a caps bullet is that bullet wrapping ("O COMMUNITY,
+	// ECONOMIC, AND HUMAN DEVELOPMENT" / "COMMITTEE"), not a heading.
+	const bulletWrap = (k: number) =>
+		/^[•oO] /.test(body[k - 1] ?? "") &&
+		isCaps(body[k - 1]) &&
+		!VIDEO_TS.test(body[k]);
 	const isHeading = (k: number) =>
-		candidate(body[k]) && (VIDEO_TS.test(body[k]) || isProse(body[k + 1]));
+		candidate(body[k]) &&
+		!bulletWrap(k) &&
+		(VIDEO_TS.test(body[k]) || isProse(body[k + 1]));
 
 	const sections: Array<{ heading: string; body: string[] }> = [];
 	let current: { heading: string; body: string[] } | null = null;
@@ -316,14 +324,25 @@ export function extractMinutesItems(rawText: string): MinutesItem[] {
 		const l = body[k];
 		if (isHeading(k)) {
 			let heading = l;
-			// A wrapped heading: "... - RESOLUTIONS" / "ADOPTED",
-			// "... PUMP ON-" / "CALL MAINTENANCE". Take the line above back
+			// A wrapped heading: "... - RESOLUTIONS" / "ADOPTED", "... PUMP
+			// ON-" / "CALL MAINTENANCE", "... CREEK AREA WITHIN" / "MORNINGSIDE
+			// PARK" (a caps line straight after prose starts a heading; a roster
+			// name follows another name). A multi-word timestamped line only
+			// takes a line ending "-", so "PRESENTATIONS" stays a label; a
+			// single-word one ("ADOPTED [42:14]") always wraps. A page-header
+			// date ("ING JUNE 9, 2026") is never taken. Take the line above back
 			// from the previous section's body.
 			const prev = body[k - 1];
+			const oneWord = !/\s/.test(l.replace(VIDEO_TS, ""));
+			const wraps =
+				prev?.endsWith("-") ||
+				oneWord ||
+				(!VIDEO_TS.test(l) && !isCaps(body[k - 2] ?? ""));
 			if (
 				candidate(prev) &&
 				!isHeading(k - 1) &&
-				(prev.endsWith("-") || !/\s/.test(l.replace(VIDEO_TS, "")))
+				!/[A-Z]+ \d{1,2}, \d{4}$/.test(prev) &&
+				wraps
 			) {
 				heading = `${prev} ${l}`;
 				current?.body.pop();
