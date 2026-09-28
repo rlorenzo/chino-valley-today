@@ -92,6 +92,12 @@ function renderHeld(db: Db): string {
 		.map((p) => {
 			const raw = readPostBody(p);
 			const parsed = parsePostFile(raw);
+			// An approved episode stays held until the podcast timer renders its
+			// audio and publishes it (see the approve handler below). Showing the
+			// approve button again made the approval look like it never happened.
+			const audioApproved =
+				p.post_type === "podcast" &&
+				(p.held_reason ?? "").startsWith("audio:approved");
 			const ackBlock =
 				p.tier === "C"
 					? `<label class="ack"><input type="checkbox" name="ack" value="1" required> I have reviewed this item naming private individuals</label>`
@@ -104,10 +110,14 @@ function renderHeld(db: Db): string {
         <h4>Draft</h4>
         <div class="draft">${renderMarkdown(parsed.body)}</div>
         <div class="actions">
-          <form class="inline" method="post" action="/posts/${encodeURIComponent(p.slug)}/approve">
+          ${
+						audioApproved
+							? '<span class="badge badge-pass">Approved</span> <span class="muted">Audio renders and the episode publishes on the next podcast run (Mondays 6:30, 9:30, 12:30 Pacific).</span>'
+							: `<form class="inline" method="post" action="/posts/${encodeURIComponent(p.slug)}/approve">
             ${ackBlock}
-            <button type="submit" class="approve">${p.post_type === "podcast" ? "Approve &rarr; render audio" : "Approve &rarr; publish"}</button>
-          </form>
+            <button type="submit" class="approve">Approve</button>${p.post_type === "podcast" ? ' <span class="muted">Audio renders on the next podcast run, then it publishes.</span>' : ""}
+          </form>`
+					}
           <form class="inline" method="post" action="/posts/${encodeURIComponent(p.slug)}/reject">
             <button type="submit" class="reject">Reject</button>
           </form>
