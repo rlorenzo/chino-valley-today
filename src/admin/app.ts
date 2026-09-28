@@ -18,6 +18,7 @@ import {
 	TIER_C_ACK,
 	transitionPost,
 } from "../pipeline/posts.ts";
+import { checkDegradedSources } from "../pipeline/source-health.ts";
 import { ROOT } from "../store.ts";
 import {
 	AUDIT_RATE,
@@ -220,14 +221,11 @@ function renderAudit(db: Db): string {
 
 // --- Section d: Pipeline health ------------------------------------------------
 
-interface PocRunResult {
-	key: string;
-	ok: boolean;
-	implemented: boolean;
-	error?: string;
-	durationMs: number;
-}
-
+// Status comes from scrape_runs, the table every scraper run writes, judged
+// by the same checkDegradedSources verdict that stamps /health. It used to
+// read reports/poc-data.json, the output of a one-off proof-of-concept run on
+// 2026-08-13: every status was frozen at that date, and sources added since
+// showed "no run data".
 function renderPipelineHealth(db: Db): string {
 	const sources = db.raw
 		.prepare(
@@ -248,33 +246,41 @@ function renderPipelineHealth(db: Db): string {
 		.all(weekStart) as Array<{ key: string; cnt: number }>;
 	const weekMap = new Map(weekCounts.map((r) => [r.key, r.cnt]));
 
-	const dataPath = join(ROOT, "reports", "poc-data.json");
-	let runData: { ranAt: string; results: PocRunResult[] } | null = null;
-	if (existsSync(dataPath)) {
-		try {
-			runData = JSON.parse(readFileSync(dataPath, "utf8")) as {
-				ranAt: string;
-				results: PocRunResult[];
-			};
-		} catch {
-			runData = null;
-		}
-	}
-	const runByKey = new Map((runData?.results ?? []).map((r) => [r.key, r]));
+	const lastOk = new Map(
+		(
+			db.raw
+				.prepare(
+					`SELECT source_key AS key, MAX(started_at) AS at FROM scrape_runs
+           WHERE status = 'success' GROUP BY source_key`,
+				)
+				.all() as Array<{ key: string; at: string }>
+		).map((r) => [r.key, r.at]),
+	);
+	const verdicts = new Map(
+		checkDegradedSources(
+			db,
+			sources.map((s) => s.key),
+		).map((v) => [v.sourceKey, v]),
+	);
 
 	const rows = sources
 		.map((s) => {
-			const run = runByKey.get(s.key);
-			const status = !run
-				? '<span class="muted">no run data</span>'
-				: !run.implemented
-					? '<span class="muted">not implemented</span>'
-					: run.ok
-						? '<span class="badge badge-pass">OK</span>'
-						: `<span class="badge badge-fail">FAILED</span> ${esc(run.error ?? "")}`;
+			const v = verdicts.get(s.key);
+			const last = v?.runs[0];
+			const status = !last
+				? '<span class="muted">never run</span>'
+				: v.reason.startsWith("held for ToS review")
+					? `<span class="badge badge-warn">HELD</span> ${esc(last.error_message ?? "")}`
+					: v.degraded
+						? `<span class="badge badge-fail">DEGRADED</span> ${esc(v.reason)}${last.error_message ? `: ${esc(last.error_message.slice(0, 200))}` : ""}`
+						: last.status === "failure"
+							? `<span class="badge badge-warn">LAST RUN FAILED</span> ${esc(v.reason)}`
+							: '<span class="badge badge-pass">OK</span>';
 			return `<tr>
         <td>${esc(s.key)}</td>
         <td>${esc(s.name)}</td>
+        <td>${last ? esc(last.started_at) : '<span class="muted">never</span>'}</td>
+        <td>${esc(lastOk.get(s.key) ?? "never")}</td>
         <td>${s.last_fetched ? esc(s.last_fetched) : '<span class="muted">never</span>'}</td>
         <td>${weekMap.get(s.key) ?? 0}</td>
         <td>${status}</td>
@@ -282,10 +288,13 @@ function renderPipelineHealth(db: Db): string {
 		})
 		.join("\n");
 
-	return `<p class="muted">Last scraper run recorded: ${
-		runData ? esc(runData.ranAt) : "no reports/poc-data.json found"
-	}</p>
-  <table><tr><th>Source</th><th>Name</th><th>Last fetched_at</th><th>Documents this ISO week</th><th>Last run status</th></tr>${rows}</table>`;
+	const latest = (
+		db.raw.prepare("SELECT MAX(started_at) AS at FROM scrape_runs").get() as {
+			at: string | null;
+		}
+	).at;
+	return `<p class="muted">Last scraper run recorded: ${esc(latest ?? "none")}</p>
+  <table><tr><th>Source</th><th>Name</th><th>Last run</th><th>Last success</th><th>Last fetched_at</th><th>Documents this ISO week</th><th>Status</th></tr>${rows}</table>`;
 }
 
 // --- App -----------------------------------------------------------------------
