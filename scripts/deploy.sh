@@ -351,7 +351,9 @@ KEYS
 	# If some later unit's first run has side effects you do not want on a
 	# deploy (cvt-tiera publishing a backlog was exactly this), enable it by
 	# hand once, deliberately, before it ships here.
-	echo "==> enabling timers"
+	# Path units (cvt-admin-restart.path) are triggers exactly like timers, with
+	# the same failure mode when left disabled, so they get the same treatment.
+	echo "==> enabling timers and path units"
 	# A failure to enable must FAIL the deploy. Swallowing it (`enable ... &&
 	# record`) left `enabled_now` empty on error, so the run went on to print
 	# "all units already enabled" — a false all-clear over the exact silent gap
@@ -365,7 +367,8 @@ KEYS
 	ssh "$HOST" '
 		enabled_now=""
 		enable_failed=""
-		for unit in /etc/systemd/system/cvt-*.timer; do
+		for unit in /etc/systemd/system/cvt-*.timer /etc/systemd/system/cvt-*.path; do
+			[ -e "$unit" ] || continue
 			name="$(basename "$unit")"
 			systemctl is-enabled --quiet "$name" 2>/dev/null && continue
 			if systemctl enable --now "$name" >/dev/null 2>&1; then
@@ -386,20 +389,21 @@ KEYS
 		fi
 
 		inactive=""
-		for unit in /etc/systemd/system/cvt-*.timer; do
+		for unit in /etc/systemd/system/cvt-*.timer /etc/systemd/system/cvt-*.path; do
+			[ -e "$unit" ] || continue
 			name="$(basename "$unit")"
 			systemctl is-active --quiet "$name" 2>/dev/null ||
 				inactive="$inactive $name"
 		done
 		if [ -n "$inactive" ]; then
-			echo "  ERROR: timer(s) installed but NOT running:$inactive" >&2
+			echo "  ERROR: timer/path unit(s) installed but NOT running:$inactive" >&2
 			for name in $inactive; do
 				systemctl status "$name" --no-pager -n 5 2>&1 | sed "s/^/    /" >&2
 			done
 			exit 1
 		fi
 		if [ -z "$enabled_now" ]; then
-			echo "  all cvt-*.timer units already running"
+			echo "  all cvt-*.timer and cvt-*.path units already running"
 		fi
 		exit 0
 	'

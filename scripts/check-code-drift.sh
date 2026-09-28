@@ -127,7 +127,8 @@ if [ -n "$installed_dir" ]; then
 fi
 
 # Installed and byte-identical is still not RUNNING — cvt-tiera sat installed
-# and disabled for weeks. Only timers: services here are either timer-started
+# and disabled for weeks. Timers and path units (triggers, which stay active
+# while armed), not services: services here are either timer-started
 # oneshots (active for seconds, so is-active would false-alarm hourly) or
 # cvt-admin, which is enabled by hand on purpose. And only timers present in
 # the installed dir: a missing timer is already reported above, and piling an
@@ -136,7 +137,7 @@ fi
 # Skipped without systemd (developer machines, the integration test's happy
 # path stubs it instead) — the file comparison above still runs everywhere.
 if [ -n "$installed_dir" ] && command -v systemctl >/dev/null 2>&1; then
-	for repo_unit in "$units_dir"/*.timer; do
+	for repo_unit in "$units_dir"/*.timer "$units_dir"/*.path; do
 		[ -f "$repo_unit" ] || continue
 		name="$(basename "$repo_unit")"
 		[ -f "$installed_dir/$name" ] || continue

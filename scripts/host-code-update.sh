@@ -90,6 +90,18 @@ if [ ${#divergent[@]} -gt 0 ]; then
 	exit 75
 fi
 
+before="$(git rev-parse HEAD)"
 git reset --hard --quiet origin/main
 npm ci --omit=dev --silent
 git log --oneline -1
+
+# Long-running services keep the code they started with. The review
+# dashboard (cvt-admin) ran September 16 code for two weeks of merges, because
+# this runs as cvtoday and cannot restart a system service. So it writes a
+# marker instead, and cvt-admin-restart.path (root) does the restart when the
+# marker changes. Only on a real code change: a deploy that moved nothing
+# should not bounce the dashboard mid-review.
+if [ "$(git rev-parse HEAD)" != "$before" ]; then
+	mkdir -p data
+	git rev-parse HEAD >data/code-updated
+fi
