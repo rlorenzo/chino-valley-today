@@ -178,3 +178,35 @@ describe("admin approve — podcast hand-off", () => {
 		}
 	});
 });
+
+describe("admin pipeline health", () => {
+	test("status comes from scrape_runs, not a frozen report", async () => {
+		const db = openDb(":memory:");
+		const run = db.raw.prepare(
+			`INSERT INTO scrape_runs (source_key, started_at, status, error_message, items_count)
+       VALUES (?, ?, ?, ?, 5)`,
+		);
+		for (const key of ["health-ok", "health-broken"])
+			db.raw
+				.prepare(
+					`INSERT INTO sources (key, name, base_url, method) VALUES (?, ?, 'https://example.test', 'html')`,
+				)
+				.run(key, key);
+		run.run("health-ok", "2026-09-28T12:00:00.000Z", "success", null);
+		for (let i = 0; i < 3; i++)
+			run.run(
+				"health-broken",
+				`2026-09-2${i}T12:00:00.000Z`,
+				"failure",
+				"HTTP 403",
+			);
+
+		const page = await (await createApp(db).request("/")).text();
+		const row = (key: string) =>
+			page.slice(page.indexOf(`<td>${key}</td>`)).split("</tr>")[0];
+		assert.match(row("health-ok"), /badge-pass">OK/);
+		assert.match(row("health-broken"), /DEGRADED.*HTTP 403/s);
+		assert.match(page, /Last scraper run recorded: 2026-09-28T12:00:00.000Z/);
+		assert.doesNotMatch(page, /no run data/);
+	});
+});
