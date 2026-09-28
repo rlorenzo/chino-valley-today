@@ -118,6 +118,25 @@ describe("admin approve — podcast hand-off", () => {
 		}
 	});
 
+	test("an approved podcast shows as approved, with no second approve button", async () => {
+		const db = openDb(":memory:");
+		const slug = heldPost(db, "shown-approved", "podcast");
+		try {
+			const app = createApp(db);
+			const approveAction = `/posts/${encodeURIComponent(slug)}/approve"`;
+			assert.ok(
+				(await (await app.request("/")).text()).includes(approveAction),
+			);
+
+			await approve(app, slug);
+			const page = await (await app.request("/")).text();
+			assert.ok(!page.includes(approveAction), "approve form still rendered");
+			assert.match(page, /Approved<\/span>/);
+		} finally {
+			cleanup(slug);
+		}
+	});
+
 	// The judge escalates a flagged episode to Tier C, so this branch is
 	// reachable — and the acknowledgment marker is the only durable record
 	// that a human ticked the box before the render job publishes it.
