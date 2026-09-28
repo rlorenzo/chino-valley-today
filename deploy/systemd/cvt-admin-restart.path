@@ -1,0 +1,13 @@
+[Unit]
+Description=Restart the review dashboard when a deploy changes the code
+Documentation=https://github.com/rlorenzo/chino-valley-today
+
+[Path]
+# Written by scripts/host-code-update.sh (as cvtoday) only when the checkout's
+# commit changed. cvt-admin is the one long-running service; everything else
+# is a oneshot that picks up new code on its next firing.
+PathChanged=/srv/chino-valley-today/data/code-updated
+Unit=cvt-admin-restart.service
+
+[Install]
+WantedBy=paths.target

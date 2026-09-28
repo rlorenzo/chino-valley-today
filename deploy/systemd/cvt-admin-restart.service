@@ -1,0 +1,9 @@
+[Unit]
+Description=Restart the review dashboard onto freshly deployed code
+Documentation=https://github.com/rlorenzo/chino-valley-today
+
+[Service]
+Type=oneshot
+# Runs as root: the deploy user cannot restart a system service, which is the
+# whole reason this unit exists (see cvt-admin-restart.path).
+ExecStart=/bin/systemctl restart cvt-admin.service
