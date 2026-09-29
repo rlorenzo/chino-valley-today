@@ -43,7 +43,7 @@
 		"mailparser": "^3.9.20",
 		"pdf-parse": "^2.4.5",
 		"rtf-stream-parser": "4.0.0",
-		"undici": "^8.10.0"
+		"undici": "^8.11.2"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.7",
