@@ -63,7 +63,9 @@ export const QUIET_IS_HEALTHY: Record<string, string | null> = {
 	"cvusd-calendar": null,
 	"chinotheatre-events": null,
 
-	// --- Secondary press. The student papers and NBC4 are quiet by design. ---
+	// --- Secondary press. The two dailies/weeklies must produce; the student
+	// papers and NBC4 are quiet by design. ---
+	"dailybulletin-news": null,
 	"quest-news": "a student paper is dormant between issues and over the summer",
 	"bulldogtimes-news":
 		"a student paper is dormant between issues and over the summer",

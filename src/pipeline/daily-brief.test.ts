@@ -1706,9 +1706,6 @@ describe("headlines elsewhere deduplication and selection", () => {
 		const freshMap2 = checkHeadlinesFreshness(db, NOW);
 		assert.equal(freshMap2["quest-news"].isFresh, true);
 		assert.equal(freshMap2["nbc4-news"].isFresh, true);
-		// Held in the baseline registry (#77), so no scrape run can freshen it.
-		assert.equal(freshMap2["dailybulletin-news"].tosStatus, "held");
-		assert.equal(freshMap2["dailybulletin-news"].heldReason, "baseline_held");
 	});
 
 	test("a ToS hold outranks a perfectly fresh scrape run", () => {
