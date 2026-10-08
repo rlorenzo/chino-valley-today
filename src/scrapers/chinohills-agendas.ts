@@ -135,10 +135,11 @@ function parseAqListing($: cheerio.CheerioAPI): AqMeeting[] {
 		const parsed = parseAqDate(m[1]);
 		if (!parsed) return;
 		const bodyName = m[2].trim();
+		if (/cancell?ation/i.test(bodyName)) return; // cancellations carry no agenda items
 		const row = $(h3).closest(".row.align-items-center");
 		const agendaA = row.find('a[href^="agenda.cfm?seq="]').first();
 		const href = agendaA.attr("href");
-		if (!href) return; // e.g. "Notice of Cancellation" rows have no agenda link
+		if (!href) return; // e.g. rows without an agenda link
 		const seqMatch = href.match(/seq=(\d+)/);
 		if (!seqMatch) return;
 		out.push({
@@ -263,7 +264,7 @@ function countHtmlTopLevelItems($: cheerio.CheerioAPI): number {
 async function ingestMeeting(
 	ctx: ScraperContext,
 	meeting: AqMeeting,
-): Promise<void> {
+): Promise<boolean> {
 	// Fetch the packet PDF (brief spec: docType 'agenda', meetingDate set, extractPdfText).
 	const detailDoc = await ctx.fetchDocument(meeting.agendaHref, {
 		docType: "listing",
@@ -281,7 +282,7 @@ async function ingestMeeting(
 		ctx.note(
 			`${meeting.bodyName} ${meeting.dateIso} (seq=${meeting.seq}): no PDF link found on ${meeting.agendaHref} — skipped.`,
 		);
-		return;
+		return false;
 	}
 	const pdfUrl = new URL(pdfHrefRaw, meeting.agendaHref).toString();
 	const pdfDoc = await ctx.fetchDocument(pdfUrl, {
@@ -320,6 +321,7 @@ async function ingestMeeting(
 			},
 		});
 	}
+	return true;
 }
 
 // Targeted backfill: `npm run one chinohills-agendas -- YYYY-MM-DD` ingests
@@ -453,26 +455,19 @@ async function run(ctx: ScraperContext, args: string[] = []): Promise<void> {
 	}
 
 	const byRecency = [...allMeetings].sort((a, b) => b.dateMs - a.dateMs);
-	const mostRecentCouncil = byRecency.find((m) =>
-		/city council/i.test(m.bodyName),
-	);
-	const mostRecentCommission = byRecency.find((m) =>
-		/commission/i.test(m.bodyName),
-	);
-	const selected = [mostRecentCouncil, mostRecentCommission].filter(
-		(m): m is AqMeeting => !!m,
-	);
-	if (!mostRecentCommission) {
+	const councils = byRecency.filter((m) => /city council/i.test(m.bodyName));
+	const commissions = byRecency.filter((m) => /commission/i.test(m.bodyName));
+	if (commissions.length === 0) {
 		ctx.note(
 			"No commission-type meeting (name matching /commission/i) found in the current or prior month's AgendaQuick listing — proceeding with City Council only.",
 		);
 	}
-	ctx.note(
-		`Selected ${selected.length} meeting(s) for item extraction: ${selected.map((m) => `${m.dateIso} ${m.bodyName} (seq=${m.seq})`).join("; ")}.`,
-	);
 
-	for (const meeting of selected) {
-		await ingestMeeting(ctx, meeting);
+	for (const council of councils) {
+		if (await ingestMeeting(ctx, council)) break;
+	}
+	for (const commission of commissions) {
+		if (await ingestMeeting(ctx, commission)) break;
 	}
 
 	// --- Step 5: minutes availability + video cross-reference. ---
