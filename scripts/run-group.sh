@@ -57,16 +57,15 @@ case "$group" in
 	# champion-news is deliberately absent, and unregistered besides (2026-08-26):
 	# its terms prohibit the access this project performs, and a written
 	# permission request is with the Publisher. See src/gates/tos-config.ts.
-	# dailybulletin-news is out on the same rule (2026-09-26, #77).
 	#
-	# Secondary press reporting (three student
+	# Secondary press reporting (Daily Bulletin, three student
 	# papers, NBC4 keyword-filtered). Politeness budget: runs 4 times daily
 	# (05:00, 11:00, 17:00, 23:00 PT), fail-closed robots.txt, ToS tracking,
 	# and redirect validation. The student papers and NBC4 go quiet or empty
 	# on most runs by design (dormant between issues / no Chino match) — see
 	# src/scrapers/quiet-policy.ts, which declares that per source.
 	press)
-		keys=(quest-news bulldogtimes-news breeze-news nbc4-news)
+		keys=(dailybulletin-news quest-news bulldogtimes-news breeze-news nbc4-news)
 		;;
 	*)
 		echo "usage: $0 <frequent|daily|media|press>" >&2

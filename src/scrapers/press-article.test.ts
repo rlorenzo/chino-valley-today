@@ -4,6 +4,7 @@ import { fakeScraperContext } from "./__fixtures__/fake-context.ts";
 import {
 	type ArticleCandidate,
 	collectArticleLinks,
+	headOnly,
 	ingestArticles,
 	type PressArticle,
 	parseArticleHead,
@@ -325,4 +326,12 @@ test("ingestArticles", async (t) => {
 			assert.deepEqual(requested, ["https://site.example/news/real-story"]);
 		},
 	);
+});
+
+test("headOnly drops the article body but keeps the head", () => {
+	const html =
+		"<html><head><title>T</title></head><body><p>full story</p></body></html>";
+	const out = headOnly(Buffer.from(html)).toString();
+	assert.equal(out, "<html><head><title>T</title></head>");
+	assert.equal(headOnly(Buffer.from("no head")).toString(), "no head");
 });
