@@ -33,7 +33,7 @@
 		"prepare": "git config core.hooksPath .githooks"
 	},
 	"overrides": {
-		"smol-toml": "1.8.0"
+		"smol-toml": "1.9.0"
 	},
 	"dependencies": {
 		"cheerio": "^1.2.0",
@@ -51,7 +51,7 @@
 		"@types/node": "^26.2.0",
 		"domhandler": "5.0.3",
 		"fallow": "3.14.0",
-		"markdownlint-cli2": "0.23.2",
+		"markdownlint-cli2": "0.23.3",
 		"typescript": "^7.0.2"
 	}
 }
