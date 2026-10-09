@@ -97,6 +97,15 @@ const pathname = (url: string): string => {
 	}
 };
 
+/** Everything up to and including `</head>`; the whole page if it has none. */
+export function headOnly(body: Buffer): Buffer {
+	const html = body.toString("utf8");
+	const end = html.search(/<\/head\s*>/i);
+	return end < 0
+		? body
+		: Buffer.from(html.slice(0, html.indexOf(">", end) + 1));
+}
+
 /**
  * Collects same-site links whose pathname the outlet recognizes as an article,
  * resolved against `baseUrl` so relative hrefs work. Order is preserved and
@@ -177,6 +186,9 @@ export async function ingestArticles(
 		try {
 			const doc = await ctx.fetchDocument(candidate.url, {
 				docType: ITEM_TYPE,
+				// extract() reads only <head>, so archive only <head>: the article
+				// body is never stored (EDITORIAL.md, headlines-elsewhere limits).
+				stripVolatile: headOnly,
 			});
 			const url = doc.finalUrl || candidate.url;
 
