@@ -9,11 +9,14 @@ import type { MeetingBundle } from "./bundle.ts";
 import {
 	type GatedRunOptions,
 	gatedPostInput,
+	judgeFindings,
+	judgeNeedsRepair,
 	mergeExtraFailures,
 	normalizeCitations,
 	repairDeadlineMs,
 	repairVerdict,
 } from "./gate-run.ts";
+import type { JudgeVerdict } from "./judge.ts";
 import { createPost, type NewPost } from "./posts.ts";
 
 // The generator wobbles between citation syntaxes. normalizeCitations rewrites
@@ -235,6 +238,87 @@ describe("repairVerdict", () => {
 
 	test("more failures than before stops and keeps the better draft", () => {
 		assert.equal(repairVerdict(report(5), report(2)), "stop");
+	});
+});
+
+describe("judge repair", () => {
+	const verdict = (over: Partial<JudgeVerdict> = {}): JudgeVerdict => ({
+		overall: "pass",
+		faithfulness_score: 1,
+		claims: [],
+		flags: {
+			allegation: false,
+			crime: false,
+			private_individual: false,
+			minor: false,
+			personnel: false,
+			characterization: false,
+			legal_matter: false,
+		},
+		reasons: [],
+		...over,
+	});
+	const flagged = (flag: keyof JudgeVerdict["flags"]) =>
+		verdict({
+			flags: { ...verdict().flags, [flag]: true },
+		});
+
+	test("a clean pass is not repaired", () => {
+		assert.equal(judgeNeedsRepair(verdict()), false);
+	});
+
+	test("an unsupported claim is sent back", () => {
+		assert.equal(
+			judgeNeedsRepair(
+				verdict({
+					overall: "fail",
+					claims: [{ text: "x", verdict: "unsupported" }],
+				}),
+			),
+			true,
+		);
+	});
+
+	test("a characterization flag is sent back", () => {
+		assert.equal(judgeNeedsRepair(flagged("characterization")), true);
+	});
+
+	test("Tier C is never repaired, even when it also failed", () => {
+		for (const f of [
+			"crime",
+			"private_individual",
+			"minor",
+			"personnel",
+			"legal_matter",
+		] as const)
+			assert.equal(judgeNeedsRepair(flagged(f)), false, f);
+		assert.equal(
+			judgeNeedsRepair({ ...flagged("crime"), overall: "fail" }),
+			false,
+		);
+	});
+
+	test("findings carry the claim, its reason, its source and the flags", () => {
+		const lines = judgeFindings(
+			verdict({
+				overall: "fail",
+				claims: [
+					{
+						text: "The vote was 5-0",
+						verdict: "distorted",
+						reason: "it was 4-1",
+						source_url: "https://example.gov/a",
+					},
+				],
+				flags: { ...verdict().flags, allegation: true },
+				reasons: ["one distorted claim"],
+			}),
+		);
+		assert.deepEqual(lines, [
+			'- [distorted] "The vote was 5-0": it was 4-1 (https://example.gov/a)',
+			"- [flag: allegation] the judge flagged this draft",
+			"- one distorted claim",
+		]);
 	});
 });
 
