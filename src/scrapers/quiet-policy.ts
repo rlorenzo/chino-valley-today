@@ -49,7 +49,8 @@ export const QUIET_IS_HEALTHY: Record<string, string | null> = {
 	"sbsheriff-nixle-mail":
 		"Nixle alerts arrive as email when the Sheriff sends one; most runs find no new mail",
 	"sbcfire-news": null,
-	"cvfd-news": null,
+	"cvfd-news":
+		"the district posts news rarely (its News Flash feed has never held an item here), and the Alert Center and calendar feeds are empty between events",
 	"abc-licenses":
 		"a weekly ABC report often lists no Chino or Chino Hills license activity at all",
 
