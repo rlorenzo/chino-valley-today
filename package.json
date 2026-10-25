@@ -52,7 +52,7 @@
 		"@types/mailparser": "^3.4.6",
 		"@types/node": "^26.2.0",
 		"domhandler": "5.0.3",
-		"fallow": "3.14.0",
+		"fallow": "3.34.1",
 		"markdownlint-cli2": "0.23.3",
 		"typescript": "^7.0.2"
 	}
