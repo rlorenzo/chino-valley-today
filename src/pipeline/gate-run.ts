@@ -279,6 +279,9 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 	// Before the first call, so the deadline covers generation too.
 	const startedAt = Date.now();
 
+	// The generator is a reasoning model: hidden reasoning tokens count against
+	// max_tokens, and at 4096 they left an empty completion (2026-10-31, w43).
+	// "low" is the floor the model accepts ("none"/"minimal" are HTTP 400).
 	console.log("Generating draft (Tier B, extractive contract)...");
 	const gen = await chat(
 		"generator",
@@ -286,7 +289,7 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 			{ role: "system", content: o.generatorSystem },
 			{ role: "user", content: o.promptBody },
 		],
-		{ maxTokens: 4096 },
+		{ maxTokens: 16384, reasoningEffort: "low" },
 	);
 
 	let draftMd = normalizeCitations(gen.content.trim());
@@ -344,7 +347,7 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 						),
 					},
 				],
-				{ maxTokens: 4096 },
+				{ maxTokens: 16384, reasoningEffort: "low" },
 			);
 			const previousDraft = draftMd;
 			const previousReport = gateReport;
@@ -430,7 +433,7 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 						),
 					},
 				],
-				{ maxTokens: 4096 },
+				{ maxTokens: 16384, reasoningEffort: "low" },
 			);
 			draftMd = normalizeCitations(repair.content.trim());
 			const candidate = runGate1();
