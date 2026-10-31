@@ -74,6 +74,26 @@ describe("validateDraft — happy path", () => {
 	});
 });
 
+describe("validateDraft — podcast connectives", () => {
+	test("sentence-initial handoffs the podcast prompt asks for are not names", () => {
+		const url = "https://example.com/a";
+		for (const lead of [
+			"Turning to",
+			"Staying with",
+			"Right, and on",
+			"Thanks. On",
+			"Moving to",
+		]) {
+			const report = validateDraft({
+				bodyMd: `${lead} the council, a vote was held. [source](${url})`,
+				allowedUrls: [url],
+				inputCorpus: "a vote was held at the council",
+			});
+			assert.deepEqual(failuresFor(report.failures, "proper_names"), [], lead);
+		}
+	});
+});
+
 // ---------------------------------------------------------------------------
 // Gate 1a — citations
 // ---------------------------------------------------------------------------

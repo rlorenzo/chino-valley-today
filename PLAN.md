@@ -119,7 +119,7 @@ summarized below; their detail is in git history and the PRs they link.
 - **LLM inference:** DigitalOcean Gradient serverless (OpenAI-compatible).
   Single `src/llm/client.ts` with per-task `{model, endpoint}` config, so any
   task can be repointed (including to Anthropic) without code changes.
-  Generator `deepseek-4-flash`; judge `qwen3.5-397b-a17b` (backup `glm-5.2`);
+  Generator `deepseek-v4.1-flash-1017`; judge `glm-5.3` (backup `kimi-k3`);
   escalation `kimi-k3`. Judge must be a different model **family** than the
   generator — same vendor is fine, the point is uncorrelated failure modes.
   Gradient rejects `max_tokens` combined with `response_format: json_object`;

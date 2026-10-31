@@ -29,7 +29,7 @@ const DO_ENDPOINT = (
 export const LLM_TASKS: Record<LlmTask, TaskConfig> = {
 	// Long-context generator: full transcript + agenda packet in one call.
 	generator: {
-		model: process.env.CVT_MODEL_GENERATOR ?? "deepseek-4-flash",
+		model: process.env.CVT_MODEL_GENERATOR ?? "deepseek-v4.1-flash-1017",
 		endpoint: DO_ENDPOINT,
 		temperature: 0.1,
 	},
