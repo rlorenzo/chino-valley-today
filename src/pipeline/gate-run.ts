@@ -188,7 +188,9 @@ export function repairVerdict(
  * the citable URLs, and NOT the bundle — resending the full bundle costs ~75k
  * tokens and trips per-minute rate limits when it follows the generation call.
  */
-function repairPrompt(
+// Consumed by the uncommitted model bake-off harness.
+// fallow-ignore-next-line unused-export
+export function repairPrompt(
 	allowedUrls: string[],
 	extraGuidance: string | undefined,
 	failures: GateFailure[],
@@ -249,7 +251,8 @@ export function judgeFindings(v: JudgeVerdict): string[] {
  * bundle, so the writer cannot check a claim against the sources: the only
  * moves it is offered are the ones that never add a fact.
  */
-function judgeRepairPrompt(
+// fallow-ignore-next-line unused-export
+export function judgeRepairPrompt(
 	allowedUrls: string[],
 	extraGuidance: string | undefined,
 	verdict: JudgeVerdict,
