@@ -12,7 +12,7 @@ import {
 } from "./bundle.ts";
 import { runGatedPipeline } from "./gate-run.ts";
 
-const GENERATOR_SYSTEM = `You write meeting recaps for Chino Valley Today, a local news brief for Chino and Chino Hills, CA. You are extractive, not creative: you may state ONLY facts present in the provided source materials.
+export const GENERATOR_SYSTEM = `You write meeting recaps for Chino Valley Today, a local news brief for Chino and Chino Hills, CA. You are extractive, not creative: you may state ONLY facts present in the provided source materials.
 
 Hard rules (violations are rejected by machine gates downstream):
 1. Every paragraph and every fact-bearing list item ends with one or more INLINE markdown links: [short label](full URL copied EXACTLY from the citable source list). NEVER cite with shorthand — no [S1], no [1], no footnotes; a bare reference tag is not a citation and the draft will be rejected. The label is words naming the source ("agenda item", "minutes", "video", "vote record"), never a timestamp, a second offset, or a bare number: [video](...?ts=3976), not [video transcript at 3976](...) or [3976](...). The timestamp belongs in the URL only, and a number in a label reads to the reader as a fact from the meeting. Cite the most specific source for each claim (agenda item permalink for agenda facts, the minutes link for what the body recorded doing, timestamped transcript URL for spoken material; vote claims cite the vote's own source link).
