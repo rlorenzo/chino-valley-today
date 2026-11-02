@@ -1,6 +1,16 @@
 // npm run llm:check — verify configured model names against the DigitalOcean
-// Inference catalog.
+// Inference catalog. anthropic/<model> tasks go to the Claude API and are
+// skipped here; the DO key is only required while a DO task remains.
 import { apiKeyFor, LLM_TASKS } from "./config.ts";
+
+const doTasks = Object.entries(LLM_TASKS).filter(
+	([, cfg]) => !cfg.model.startsWith("anthropic/"),
+);
+for (const [task, cfg] of Object.entries(LLM_TASKS)) {
+	if (cfg.model.startsWith("anthropic/"))
+		console.log(`SKIP ${task}: ${cfg.model}  (Claude API, not checked)`);
+}
+if (doTasks.length === 0) process.exit(0);
 
 const endpoint = LLM_TASKS.generator.endpoint;
 let key: string;
@@ -27,7 +37,7 @@ console.log(`Endpoint ${endpoint} — ${available.length} models available:`);
 for (const id of available) console.log(`  ${id}`);
 
 let ok = true;
-for (const [task, cfg] of Object.entries(LLM_TASKS)) {
+for (const [task, cfg] of doTasks) {
 	const found = available.includes(cfg.model);
 	if (!found) ok = false;
 	console.log(

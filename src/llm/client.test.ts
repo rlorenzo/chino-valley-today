@@ -13,10 +13,35 @@ let requests = 0;
 // Undefined: accept the connection and never answer, so every attempt ends at
 // its own timeout rather than on a response.
 let emptyReplies: number | undefined;
+const anthropicBodies: Record<string, unknown>[] = [];
 
 before(async () => {
-	server = createServer((_req, res) => {
+	server = createServer((req, res) => {
 		requests++;
+		if (req.url?.startsWith("/v1/messages")) {
+			// Claude API shape: one empty turn, then text.
+			let raw = "";
+			req.on("data", (c) => {
+				raw += c;
+			});
+			req.on("end", () => {
+				anthropicBodies.push(JSON.parse(raw));
+				const empty = anthropicBodies.length === 1;
+				res.setHeader("content-type", "application/json");
+				res.end(
+					JSON.stringify({
+						id: "msg_test",
+						type: "message",
+						role: "assistant",
+						model: "claude-sonnet-5-5",
+						content: empty ? [] : [{ type: "text", text: "ok" }],
+						stop_reason: empty ? "max_tokens" : "end_turn",
+						usage: { input_tokens: 10, output_tokens: 2 },
+					}),
+				);
+			});
+			return;
+		}
 		if (emptyReplies === undefined) return;
 		const content = requests <= emptyReplies ? null : "ok";
 		res.setHeader("content-type", "application/json");
@@ -30,6 +55,8 @@ before(async () => {
 	const { port } = server.address() as { port: number };
 	process.env.LLM_ENDPOINT = `http://127.0.0.1:${port}/v1`;
 	process.env.DO_INFERENCE_API_KEY = "test-key";
+	process.env.ANTHROPIC_BASE_URL = `http://127.0.0.1:${port}`;
+	process.env.ANTHROPIC_API_KEY = "test-key";
 });
 
 after(() => server.close());
@@ -101,6 +128,34 @@ describe("chat retry budget", () => {
 			assert.equal(requests, 2);
 		} finally {
 			emptyReplies = undefined;
+		}
+	});
+
+	test("an anthropic/ model goes to the Claude API, without temperature", async () => {
+		const { chat } = await import("./client.ts");
+		const { LLM_TASKS } = await import("./config.ts");
+		const previous = LLM_TASKS.generator.model;
+		LLM_TASKS.generator.model = "anthropic/claude-sonnet-5-5";
+		try {
+			const res = await chat(
+				"generator",
+				[
+					{ role: "system", content: "sys" },
+					{ role: "user", content: "hi" },
+				],
+				{ reasoningEffort: "low", budgetMs: 30_000 },
+			);
+			assert.equal(res.content, "ok");
+			// The empty first answer was retried.
+			assert.equal(anthropicBodies.length, 2);
+			const body = anthropicBodies[0];
+			assert.equal(body.model, "claude-sonnet-5-5");
+			assert.equal(body.system, "sys");
+			assert.equal(body.temperature, undefined);
+			assert.deepEqual(body.output_config, { effort: "low" });
+			assert.deepEqual(body.messages, [{ role: "user", content: "hi" }]);
+		} finally {
+			LLM_TASKS.generator.model = previous;
 		}
 	});
 
