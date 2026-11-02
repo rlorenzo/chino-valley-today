@@ -39,3 +39,24 @@ test("Chino Hills minutes join the recap bundle, even with no agenda or transcri
 	assert.equal(target.targetKey, "chinohills-swagit:2026-08-11");
 	assert.equal(target.counts.minutesItems, 1);
 });
+
+test("closed-session case captions never reach the prompt or the gate corpus", () => {
+	const db = openDb(":memory:");
+	db.raw.exec(`
+		INSERT OR IGNORE INTO sources (key, name, base_url, method)
+		  VALUES ('chino-legistar', 'Chino Legistar', 'https://chino.legistar.com', 'api');
+		INSERT INTO documents (id, source_id, url, doc_type, meeting_date, fetched_at, content_hash, raw_path)
+		  SELECT 1, id, 'https://chino.legistar.com/m', 'agenda', '2026-10-06', '2026-10-07', 'h', 'x'
+		  FROM sources WHERE key = 'chino-legistar';
+		INSERT INTO items (document_id, source_url, item_type, external_id, title, body, meta, occurred_at)
+		  VALUES (1, 'https://chino.legistar.com/i1', 'agenda_item', 'a1',
+		    'CONFERENCE WITH LEGAL COUNSEL',
+		    'Name of case: Jane Roe and John Roe v. Estate of Sam Doe, City of Chino; No. CIV 1',
+		    '{}', '2026-10-06');
+	`);
+	const bundle = assembleBundle(db, "chino-legistar", "2026-10-06");
+	assert.ok(bundle);
+	assert.doesNotMatch(renderBundleForPrompt(bundle), /Roe|Doe/);
+	assert.doesNotMatch(bundle.inputCorpus, /Roe|Doe/);
+	assert.match(renderBundleForPrompt(bundle), /Name of case: \[withheld/);
+});

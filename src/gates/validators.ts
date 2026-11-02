@@ -602,6 +602,21 @@ function runNumericGate(
 		}
 	}
 
+	// "$68,42" is a caption garble. It tokenizes as two small numbers that
+	// each ground on their own, so it is caught on the raw text: a dollar
+	// amount never has a 1-2 digit group after a comma (bake-off, 2026-11-01).
+	for (const m of scanText.matchAll(/\$\d{1,3},\d{1,2}(?![\d,])/g)) {
+		numbersFailed++;
+		failures.push({
+			gate: "numeric",
+			detail: `amount "${m[0]}" is malformed (comma not followed by three digits); likely a transcript error`,
+			excerpt: contextAround(scanText, {
+				start: m.index,
+				end: m.index + m[0].length,
+			}),
+		});
+	}
+
 	return {
 		failures,
 		stats: {

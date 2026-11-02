@@ -1115,3 +1115,19 @@ describe("proper names: adjacent allowlist entries", () => {
 		assert.equal(names("Chino Board of Education").length, 1);
 	});
 });
+
+describe("Gate 1 — malformed numbers", () => {
+	test("a caption-garbled amount fails even when the corpus carries the same garble", () => {
+		const r = validateDraft({
+			bodyMd: `The council approved $68,42 for paving. [src](${ITEM_URL})\n`,
+			allowedUrls: [ITEM_URL],
+			inputCorpus: "approved $68,42 for paving",
+		});
+		assert.equal(
+			failuresFor(r.failures, "numeric").some((f) =>
+				f.detail.includes("malformed"),
+			),
+			true,
+		);
+	});
+});
