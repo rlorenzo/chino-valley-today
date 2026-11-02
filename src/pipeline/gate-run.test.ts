@@ -11,9 +11,11 @@ import {
 	gatedPostInput,
 	judgeFindings,
 	judgeNeedsRepair,
+	judgeRepairPrompt,
 	mergeExtraFailures,
 	normalizeCitations,
 	repairDeadlineMs,
+	repairPrompt,
 	repairVerdict,
 } from "./gate-run.ts";
 import type { JudgeVerdict } from "./judge.ts";
@@ -354,5 +356,36 @@ describe("repairDeadlineMs", () => {
 		// Non-positive means the elapsed check fails on the first iteration, so
 		// no pass is started that provably cannot finish.
 		assert.ok(repairDeadlineMs(14 * MIN) <= 0);
+	});
+});
+
+describe("repair prompts", () => {
+	const urls = ["https://example.org/a"];
+	test("the Gate 1 repair carries the failures, the citable URLs and the draft, and no bundle", () => {
+		const p = repairPrompt(
+			urls,
+			"EXTRA ",
+			[{ gate: "numeric", detail: "number 5 missing" }],
+			"DRAFT BODY",
+		);
+		for (const part of [
+			"[numeric] number 5 missing",
+			"- https://example.org/a",
+			"DRAFT:\n\nDRAFT BODY",
+			"EXTRA ",
+		])
+			assert.ok(p.includes(part), part);
+	});
+	test("the judge repair wraps findings and draft as data", () => {
+		const v = {
+			overall: "fail",
+			faithfulness_score: 0.5,
+			claims: [{ text: "X happened", verdict: "unsupported" }],
+			flags: {},
+			reasons: [],
+		} as unknown as JudgeVerdict;
+		const p = judgeRepairPrompt(urls, undefined, v, "DRAFT BODY");
+		assert.match(p, /<reviewer_findings>\n- \[unsupported\] "X happened"/);
+		assert.match(p, /<draft>\nDRAFT BODY\n<\/draft>/);
 	});
 });
