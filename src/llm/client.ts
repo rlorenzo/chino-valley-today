@@ -1,4 +1,6 @@
-// Minimal OpenAI-compatible chat client for DigitalOcean serverless inference.
+// Minimal OpenAI-compatible chat client for DigitalOcean serverless inference,
+// plus the Claude API for any task whose model is "anthropic/<model id>".
+import Anthropic from "@anthropic-ai/sdk";
 import { Agent, fetch as undiciFetch } from "undici";
 import { apiKeyFor, LLM_TASKS, type LlmTask } from "./config.ts";
 
@@ -67,6 +69,8 @@ export async function chat(
 	} = {},
 ): Promise<ChatResult> {
 	const cfg = LLM_TASKS[task];
+	if (cfg.model.startsWith(ANTHROPIC_PREFIX))
+		return chatAnthropic(task, messages, opts);
 	const body: Record<string, unknown> = {
 		model: cfg.model,
 		messages,
@@ -207,6 +211,72 @@ export async function chat(
 			);
 		}
 		return { content, model: data.model ?? cfg.model, usage: data.usage };
+	}
+}
+
+const ANTHROPIC_PREFIX = "anthropic/";
+let anthropic: Anthropic | undefined;
+
+// Claude through the official SDK (reads ANTHROPIC_API_KEY). Differences from
+// the DO path, all deliberate: no temperature (current Claude models reject
+// it with HTTP 400), reasoningEffort maps to output_config.effort, and there is
+// no json_object mode, so the judge's "Return ONLY a JSON object" prompt plus
+// parseJsonResponse's fence stripping carry it. The SDK retries 429/5xx and
+// network errors itself; the budget bounds the whole call through one signal.
+async function chatAnthropic(
+	task: LlmTask,
+	messages: ChatMessage[],
+	opts: Parameters<typeof chat>[2] = {},
+): Promise<ChatResult> {
+	const model = LLM_TASKS[task].model.slice(ANTHROPIC_PREFIX.length);
+	anthropic ??= new Anthropic({ maxRetries: 4 });
+	const signal = AbortSignal.timeout(
+		Math.min(Math.floor(opts.budgetMs ?? budgetFromEnv()), MAX_TIMER_MS),
+	);
+	const system = messages
+		.filter((m) => m.role === "system")
+		.map((m) => m.content)
+		.join("\n\n");
+	// ponytail: three tries on an empty answer, mirroring the DO path's
+	// empty-completion retry without its backoff; the signal still caps it.
+	for (let attempt = 1; ; attempt++) {
+		const res = await anthropic.beta.messages.create(
+			{
+				model,
+				max_tokens: opts.maxTokens ?? 4096,
+				...(system && { system }),
+				messages: messages
+					.filter((m) => m.role !== "system")
+					.map((m) => ({
+						role: m.role as "user" | "assistant",
+						content: m.content,
+					})),
+				...(opts.reasoningEffort && {
+					output_config: { effort: opts.reasoningEffort },
+				}),
+				// A policy decline reruns on the server's default fallback model
+				// instead of failing the run; a no-op on models without fallbacks.
+				betas: ["server-side-fallback-2026-07-01"],
+				fallbacks: "default",
+			},
+			// timeout caps each SDK attempt like the DO path's perAttemptMs; the
+			// signal still caps the whole call.
+			{ signal, ...(opts.timeoutMs && { timeout: opts.timeoutMs }) },
+		);
+		const content = res.content
+			.flatMap((b) => (b.type === "text" ? [b.text] : []))
+			.join("");
+		const usage = {
+			prompt_tokens: res.usage.input_tokens,
+			completion_tokens: res.usage.output_tokens,
+		};
+		if (content) return { content, model: res.model, usage };
+		const why = `stop_reason=${res.stop_reason} usage=${JSON.stringify(usage)}`;
+		if (res.stop_reason === "refusal" || attempt >= 3)
+			throw new Error(`LLM ${task} (${model}) returned no text (${why})`);
+		console.log(
+			`LLM ${task} empty completion (attempt ${attempt}, ${why}) — retrying`,
+		);
 	}
 }
 

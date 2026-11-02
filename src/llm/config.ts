@@ -1,7 +1,7 @@
 // Per-task LLM config (PLAN.md model ladder). Every task is repointable via
-// env without code changes — including to Anthropic (any OpenAI-compatible
-// endpoint). Verify configured model names against the DigitalOcean Inference
-// catalog with `npm run llm:check`.
+// env without code changes. A model named "anthropic/<id>" goes to the Claude
+// API (ANTHROPIC_API_KEY) instead of DO; everything else is a DO model name,
+// verifiable against the DigitalOcean Inference catalog with `npm run llm:check`.
 import { join } from "node:path";
 import { ROOT } from "../store.ts";
 
