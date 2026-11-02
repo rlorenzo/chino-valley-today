@@ -96,10 +96,14 @@ export async function chat(
 	const budgetMs = opts.budgetMs ?? budgetFromEnv();
 	const startedAt = Date.now();
 	const remainingMs = () => startedAt + budgetMs - Date.now();
-	// True when another attempt plus its backoff would run past the budget, so
-	// we stop instead of starting work that is certain to be killed.
+	// True when the backoff would leave less than a useful attempt, so we stop
+	// instead of starting work that is certain to be cut short. Each attempt is
+	// already capped at the remaining budget, so a retry need not fit a whole
+	// perAttemptMs: requiring that made the defaults (600s timeout, 600s
+	// budget) refuse every retry, including after an instant empty reply.
+	const MIN_ATTEMPT_MS = 60_000;
 	const outOfBudget = (backoffMs: number) =>
-		Date.now() + backoffMs + perAttemptMs > startedAt + budgetMs;
+		remainingMs() - backoffMs < Math.min(perAttemptMs, MIN_ATTEMPT_MS);
 
 	let attempt = 0;
 	for (;;) {
