@@ -59,12 +59,22 @@ function toBundleItem(r: RawItemRow): BundleItem {
 	}
 	return {
 		title: r.title,
-		body: r.body,
+		body: r.body ? redactCaseCaptions(r.body) : r.body,
 		sourceUrl: r.source_url,
 		meta,
 		occurredAt: r.occurred_at,
 		contentHash: r.content_hash,
 	};
+}
+
+// Closed-session agenda items carry "Name of case: X v. Y" with the private
+// parties to a lawsuit. Neither the writer nor the name gate should ever see
+// them: the bake-off (2026-11-01) had 5 of 10 Chino recaps print the caption.
+function redactCaseCaptions(text: string): string {
+	return text.replace(
+		/(name of case:)[^\n]*/gi,
+		"$1 [withheld: pending legal matter]",
+	);
 }
 
 function itemsFor(
