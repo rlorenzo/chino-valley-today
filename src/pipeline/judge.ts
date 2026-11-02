@@ -6,10 +6,17 @@ import type { MeetingBundle } from "./bundle.ts";
 import { renderBundleForPrompt } from "./bundle.ts";
 
 // The judge gets all agenda items and votes, but only the transcript segments
-// the draft actually cites (±1 neighbor for context) — a 397B judge over the
+// the draft actually cites (±JUDGE_CONTEXT neighbors for context) — a 397B judge over the
 // full transcript is slow and expensive without adding rigor: uncited claims
 // fail Gate 1 before the judge ever runs, so every claim it must verify
 // already points at a specific source.
+// Transcript segments are ~5-second caption fragments, each with its own URL.
+// A draft sentence summarizing a minute of discussion cites one fragment, so a
+// ±1 window (about 15 seconds) left the judge unable to find claims the source
+// does support: every Chino Hills 2026-10-13 recap failed on it (bake-off,
+// 2026-11-01). 15 each side is about a minute and a half either way.
+const JUDGE_CONTEXT = 15;
+
 function bundleForJudge(bundle: MeetingBundle, draftMd: string): MeetingBundle {
 	const cited = new Set<string>();
 	for (const m of draftMd.matchAll(/\]\((https?:\/\/[^)\s]+)\)/g))
@@ -17,9 +24,7 @@ function bundleForJudge(bundle: MeetingBundle, draftMd: string): MeetingBundle {
 	const keep = new Set<number>();
 	bundle.transcriptSegments.forEach((seg, i) => {
 		if (cited.has(seg.sourceUrl)) {
-			keep.add(i - 1);
-			keep.add(i);
-			keep.add(i + 1);
+			for (let k = i - JUDGE_CONTEXT; k <= i + JUDGE_CONTEXT; k++) keep.add(k);
 		}
 	});
 	const transcriptSegments = bundle.transcriptSegments.filter((_, i) =>
