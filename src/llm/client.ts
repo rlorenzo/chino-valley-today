@@ -180,12 +180,32 @@ export async function chat(
 			);
 		}
 		const data = (await res.json()) as {
-			choices: Array<{ message: { content: string } }>;
+			choices: Array<{
+				message: { content: string | null };
+				finish_reason?: string;
+			}>;
 			model?: string;
 			usage?: { prompt_tokens?: number; completion_tokens?: number };
 		};
 		const content = data.choices?.[0]?.message?.content;
-		if (!content) throw new Error(`LLM ${task} returned an empty completion`);
+		if (!content) {
+			// An HTTP 200 with no text: a provider hiccup, or hidden reasoning
+			// that spent all of max_tokens (2026-10-31 w43, 2026-11-02 w45 podcast
+			// generator). Log why, then retry like a 5xx — a fresh sample usually
+			// answers, and a failed firing otherwise costs the podcast hours.
+			const why = `finish_reason=${data.choices?.[0]?.finish_reason ?? "?"} usage=${JSON.stringify(data.usage ?? {})}`;
+			const backoff = attempt * 5_000;
+			if (attempt <= 4 && !outOfBudget(backoff)) {
+				console.log(
+					`LLM ${task} empty completion (attempt ${attempt}, ${why}) — retrying`,
+				);
+				await new Promise((r) => setTimeout(r, backoff));
+				continue;
+			}
+			throw new Error(
+				`LLM ${task} (${cfg.model}) returned an empty completion (${why})`,
+			);
+		}
 		return { content, model: data.model ?? cfg.model, usage: data.usage };
 	}
 }
