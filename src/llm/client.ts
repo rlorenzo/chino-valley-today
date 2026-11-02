@@ -96,10 +96,14 @@ export async function chat(
 	const budgetMs = opts.budgetMs ?? budgetFromEnv();
 	const startedAt = Date.now();
 	const remainingMs = () => startedAt + budgetMs - Date.now();
-	// True when another attempt plus its backoff would run past the budget, so
-	// we stop instead of starting work that is certain to be killed.
+	// True when the backoff would leave less than a useful attempt, so we stop
+	// instead of starting work that is certain to be cut short. Each attempt is
+	// already capped at the remaining budget, so a retry need not fit a whole
+	// perAttemptMs: requiring that made the defaults (600s timeout, 600s
+	// budget) refuse every retry, including after an instant empty reply.
+	const MIN_ATTEMPT_MS = 60_000;
 	const outOfBudget = (backoffMs: number) =>
-		Date.now() + backoffMs + perAttemptMs > startedAt + budgetMs;
+		remainingMs() - backoffMs < Math.min(perAttemptMs, MIN_ATTEMPT_MS);
 
 	let attempt = 0;
 	for (;;) {
@@ -176,12 +180,32 @@ export async function chat(
 			);
 		}
 		const data = (await res.json()) as {
-			choices: Array<{ message: { content: string } }>;
+			choices: Array<{
+				message: { content: string | null };
+				finish_reason?: string;
+			}>;
 			model?: string;
 			usage?: { prompt_tokens?: number; completion_tokens?: number };
 		};
 		const content = data.choices?.[0]?.message?.content;
-		if (!content) throw new Error(`LLM ${task} returned an empty completion`);
+		if (!content) {
+			// An HTTP 200 with no text: a provider hiccup, or hidden reasoning
+			// that spent all of max_tokens (2026-10-31 w43, 2026-11-02 w45 podcast
+			// generator). Log why, then retry like a 5xx — a fresh sample usually
+			// answers, and a failed firing otherwise costs the podcast hours.
+			const why = `finish_reason=${data.choices?.[0]?.finish_reason ?? "?"} usage=${JSON.stringify(data.usage ?? {})}`;
+			const backoff = attempt * 5_000;
+			if (attempt <= 4 && !outOfBudget(backoff)) {
+				console.log(
+					`LLM ${task} empty completion (attempt ${attempt}, ${why}) — retrying`,
+				);
+				await new Promise((r) => setTimeout(r, backoff));
+				continue;
+			}
+			throw new Error(
+				`LLM ${task} (${cfg.model}) returned an empty completion (${why})`,
+			);
+		}
 		return { content, model: data.model ?? cfg.model, usage: data.usage };
 	}
 }

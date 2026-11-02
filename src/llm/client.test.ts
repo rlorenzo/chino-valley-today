@@ -9,12 +9,22 @@ import { after, before, describe, test } from "node:test";
 
 let server: Server;
 let requests = 0;
+// How many requests get an HTTP 200 with empty content before a real answer.
+// Undefined: accept the connection and never answer, so every attempt ends at
+// its own timeout rather than on a response.
+let emptyReplies: number | undefined;
 
 before(async () => {
-	// Accepts the connection and never answers, so every attempt ends at its
-	// own timeout rather than on a response.
-	server = createServer((_req, _res) => {
+	server = createServer((_req, res) => {
 		requests++;
+		if (emptyReplies === undefined) return;
+		const content = requests <= emptyReplies ? null : "ok";
+		res.setHeader("content-type", "application/json");
+		res.end(
+			JSON.stringify({
+				choices: [{ message: { content }, finish_reason: "length" }],
+			}),
+		);
 	});
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
 	const { port } = server.address() as { port: number };
@@ -77,6 +87,21 @@ describe("chat retry budget", () => {
 			(err: Error) => !/out of range/i.test(err.message),
 		);
 		assert.equal(requests, 1);
+	});
+
+	test("retries an empty completion instead of failing the run", async () => {
+		const { chat } = await import("./client.ts");
+		requests = 0;
+		emptyReplies = 1;
+		try {
+			// No timeoutMs/budgetMs: the podcast generator's own call shape, where
+			// the defaults once left no room for any retry.
+			const res = await chat("generator", [{ role: "user", content: "hi" }]);
+			assert.equal(res.content, "ok");
+			assert.equal(requests, 2);
+		} finally {
+			emptyReplies = undefined;
+		}
 	});
 
 	test("an unparseable CVT_LLM_BUDGET_MS falls back instead of disabling the budget", async () => {
