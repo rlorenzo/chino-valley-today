@@ -515,7 +515,7 @@ FACTS
 - Never say a story was reported by us or anyone else, and never refer to previous episodes.
 
 PEOPLE
-- Name elected officials, senior public employees acting in their official capacity, and business principals in the context of their own license or application. Nobody else.
+- Name elected officials, senior public employees acting in their official capacity, and business principals in the context of their own license or application. Nobody else: staff below department-head level, residents, award recipients and public speakers are described by role, never by name or street. 
 - Never name or identifiably describe a minor, under any circumstances, even if the source material names them. Sports items are team-level only: scores, records and schedules, never a student athlete's name.
 - Never name a private individual in connection with a crime, an allegation, an arrest, or a personnel or legal matter. Describe what the agency said happened, without the person.
 - On contested school-district items, report only what was decided and how members voted. No characterization of motives, tone, or sides.
