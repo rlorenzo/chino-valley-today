@@ -1,5 +1,5 @@
 // Tier B meeting recap: generate -> Gate 1 (deterministic validators) ->
-// Gate 2 (cross-family LLM judge) -> route to published/ or held/.
+// Gate 2 (LLM judge) -> route to published/ or held/.
 //
 //   node src/pipeline/recap.ts                    list available targets
 //   node src/pipeline/recap.ts <targetKey>        generate + gate + route one recap

@@ -72,8 +72,8 @@ blocked rather than editorially discouraged.
 - Tier A output is deterministic template rendering of structured data with zero
   LLM involvement — a template quoting verbatim with links cannot hallucinate.
 - Tier B output must clear Gate 1 (deterministic validators: citation coverage,
-  numeric consistency, proper-name whitelist) *and* Gate 2 (a judge from a
-  different model family, structured verdict). Any flag holds the post.
+  numeric consistency, proper-name whitelist) *and* Gate 2 (an LLM judge,
+  structured verdict). Any flag holds the post.
 - Held posts are reviewed by a human before publication; the archive keeps the
   raw bytes of every source document.
 
@@ -157,7 +157,7 @@ human or automated, and changes to them are dated editorial decisions):
   review; see sources linked above. Corrections: …".
 
 **Terminology** (use these words, they are load-bearing): Tier A / B / C; Gate 1
-(deterministic validators) and Gate 2 (cross-family judge); *recap* not
+(deterministic validators) and Gate 2 (LLM judge); *recap* not
 *minutes*; *preview*, *digest*, *tracker narrative*, *daily brief*; *headlines
 elsewhere* for the attributed secondary-press section; post states queued,
 held, published, rejected.

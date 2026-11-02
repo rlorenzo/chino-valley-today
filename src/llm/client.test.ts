@@ -67,7 +67,7 @@ describe("chat retry budget", () => {
 		requests = 0;
 		const startedAt = Date.now();
 		await assert.rejects(
-			chat("judge", [{ role: "user", content: "hi" }], {
+			chat("judge_backup", [{ role: "user", content: "hi" }], {
 				timeoutMs: 300,
 				budgetMs: 1_000,
 			}),
@@ -88,7 +88,7 @@ describe("chat retry budget", () => {
 		const startedAt = Date.now();
 		// The budget, not the 30s per-attempt timeout, has to end this attempt.
 		await assert.rejects(
-			chat("judge", [{ role: "user", content: "hi" }], {
+			chat("judge_backup", [{ role: "user", content: "hi" }], {
 				timeoutMs: 30_000,
 				budgetMs: 400,
 			}),
@@ -107,7 +107,7 @@ describe("chat retry budget", () => {
 		// opts.budgetMs skips budgetFromEnv, so the guard has to sit at the use
 		// site: unfloored, this rejects with ERR_OUT_OF_RANGE before sending.
 		await assert.rejects(
-			chat("judge", [{ role: "user", content: "hi" }], {
+			chat("judge_backup", [{ role: "user", content: "hi" }], {
 				timeoutMs: 300.7,
 				budgetMs: 1_000.5,
 			}),
@@ -121,9 +121,9 @@ describe("chat retry budget", () => {
 		requests = 0;
 		emptyReplies = 1;
 		try {
-			// No timeoutMs/budgetMs: the podcast generator's own call shape, where
+			// No timeoutMs/budgetMs: the default call shape (escalation stays on DO), where
 			// the defaults once left no room for any retry.
-			const res = await chat("generator", [{ role: "user", content: "hi" }]);
+			const res = await chat("escalation", [{ role: "user", content: "hi" }]);
 			assert.equal(res.content, "ok");
 			assert.equal(requests, 2);
 		} finally {

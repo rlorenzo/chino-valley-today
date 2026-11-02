@@ -1,5 +1,5 @@
 // Tier B weekly business-tracker narrative: generate -> Gate 1 (deterministic
-// validators) -> Gate 2 (cross-family LLM judge) -> route to published/ or
+// validators) -> Gate 2 (LLM judge) -> route to published/ or
 // held/. Synthesizes ABC license events + business-relevant planning items
 // for one ISO week. The Tier A listing version is src/tiera/business-tracker.ts;
 // this one adds LLM narrative synthesis behind the full gate path.

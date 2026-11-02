@@ -94,7 +94,7 @@ summarized below; their detail is in git history and the PRs they link.
 4. **Risk-tiered publishing gate.** Not everything needs human eyes; the
    riskiest things always get them. Tier A auto-publishes (deterministic
    templates, no generation = no hallucination); Tier B auto-publishes only
-   past deterministic validators plus a cross-family LLM judge; Tier C always
+   past deterministic validators plus an LLM judge; Tier C always
    gets a human. Full binding spec in EDITORIAL.md. Source links are provided
    everywhere but are not a safety mechanism: a wrong claim harms someone
    whether or not it cites its source.
@@ -119,9 +119,11 @@ summarized below; their detail is in git history and the PRs they link.
 - **LLM inference:** DigitalOcean Gradient serverless (OpenAI-compatible).
   Single `src/llm/client.ts` with per-task `{model, endpoint}` config, so any
   task can be repointed (including to Anthropic) without code changes.
-  Generator `deepseek-v4.1-flash-1017`; judge `glm-5.3` (backup `kimi-k3`);
-  escalation `kimi-k3`. Judge must be a different model **family** than the
-  generator — same vendor is fine, the point is uncorrelated failure modes.
+  Generator `anthropic/claude-sonnet-5-5`; judge `anthropic/claude-opus-5-5`
+  (backup `kimi-k3`); escalation `kimi-k3`. Until 2026-11-02 the generator was
+  `deepseek-v4.1-flash-1017` and the judge `glm-5.3`, under a rule that the
+  judge be a different model **family**; that rule was dropped when both moved
+  to Claude. The backup judge is still cross-family.
   Gradient rejects `max_tokens` combined with `response_format: json_object`;
   the client omits it in JSON mode.
 - **Static site:** Astro, zero client JS by default. Vanilla `<script>`
