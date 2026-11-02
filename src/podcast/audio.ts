@@ -276,7 +276,6 @@ export async function renderEpisode(
 			},
 			generation_config: {
 				speech_config: {
-					mode: "conversational",
 					speakers: [
 						{ speaker: "Maya", voice: voices.Maya },
 						{ speaker: "Dan", voice: voices.Dan },
