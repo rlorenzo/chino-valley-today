@@ -59,8 +59,11 @@ post was built from, rendered for a person.
   what fits here; a template that quotes verbatim with links cannot hallucinate.
 - **Tier B — auto-publish only on clean machine pass:** LLM-generated recaps
   and tracker narratives. Must pass Gate 1 (deterministic validators: citation
-  coverage, numeric consistency, proper-name whitelist) AND Gate 2 (LLM judge
-  from a different model family, structured verdict). Any flag → held.
+  coverage, numeric consistency, proper-name whitelist) AND Gate 2 (LLM judge,
+  structured verdict). Any flag → held. The judge was required to be from a
+  different model family than the generator until 2026-11-02, when both moved
+  to Claude (Sonnet generates, Opus judges); the backup judge stays
+  cross-family.
 - **Tier C — human always, judge cannot override:** crime items naming private
   individuals, anything involving minors, personnel or legal allegations,
   corrections, and anything the judge flags private_individual. Publish

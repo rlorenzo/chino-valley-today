@@ -1,6 +1,6 @@
 // The gate path shared by every Tier B generator: generate -> normalize
 // citations -> Gate 1 (deterministic validators) -> keep-best repair passes ->
-// createPost -> Gate 2 (cross-family judge) -> publish/hold routing.
+// createPost -> Gate 2 (LLM judge) -> publish/hold routing.
 //
 // recap.ts and business-tracker.ts ran byte-identical copies of this, 158
 // duplicated lines across 4 clone groups. They differ only in what is passed in:
@@ -391,8 +391,8 @@ export async function runGatedPipeline(o: GatedRunOptions): Promise<void> {
 		process.exit(0);
 	}
 
-	// Gate 2 — cross-family LLM judge.
-	console.log("Gate 2: judging (cross-family model)...");
+	// Gate 2 — LLM judge.
+	console.log("Gate 2: judging...");
 	const logVerdict = (v: JudgeVerdict) =>
 		console.log(
 			`Judge: ${v.overall}, faithfulness ${v.faithfulness_score}, flags: ${

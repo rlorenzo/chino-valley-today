@@ -29,26 +29,29 @@ const DO_ENDPOINT = (
 export const LLM_TASKS: Record<LlmTask, TaskConfig> = {
 	// Long-context generator: full transcript + agenda packet in one call.
 	generator: {
-		model: process.env.CVT_MODEL_GENERATOR ?? "deepseek-v4.1-flash-1017",
+		model: process.env.CVT_MODEL_GENERATOR ?? "anthropic/claude-sonnet-5-5",
 		endpoint: DO_ENDPOINT,
 		temperature: 0.1,
 	},
-	// Judge MUST be a different model family than the generator (uncorrelated
-	// failure modes) — DeepSeek generates, GLM judges. Backup: Qwen, a third
-	// family again, so a primary outage does not fall back into a correlated
-	// one.
+	// Claude generates and Claude judges (Sonnet writes, Opus judges). This
+	// deliberately drops the earlier rule that the judge be a different model
+	// family than the generator (decided 2026-11-02): the shared family means
+	// correlated blind spots, which Gate 1's deterministic checks and the
+	// cross-family backup judge below do not fully offset. Before 2026-11-02,
+	// DeepSeek generated and GLM judged; set CVT_MODEL_GENERATOR=deepseek-v4.1-flash-1017
+	// and CVT_MODEL_JUDGE=glm-5.3 to go back.
 	//
 	// Was qwen3.5-397b-a17b until 2026-09-14. A 397B judge over a podcast
 	// transcript ran past the 15-minute client timeout and took the weekly
 	// episode down with it; the verdict JSON is long (one claims[] entry per
 	// cited turn) and nothing capped it. See the retry budget in client.ts.
 	judge: {
-		model: process.env.CVT_MODEL_JUDGE ?? "glm-5.3",
+		model: process.env.CVT_MODEL_JUDGE ?? "anthropic/claude-opus-5-5",
 		endpoint: DO_ENDPOINT,
 		temperature: 0,
 	},
-	// Backup judge when the primary is overloaded — a third family again, so
-	// neither judge correlates with the generator or with each other.
+	// Backup judge when the primary is overloaded — a different family from
+	// both Claude models, so a fallback verdict is uncorrelated with the draft.
 	//
 	// Measured on the same held podcast draft, 2026-09-14: kimi-k3 10.2s and a
 	// clean verdict; qwen3.5-397b-a17b never returned (three runs, each dead at
