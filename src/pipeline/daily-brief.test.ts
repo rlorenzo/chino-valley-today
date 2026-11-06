@@ -1004,6 +1004,7 @@ describe("assembleBrief", () => {
 						meta: JSON.stringify({ report: "Summary Report #5" }),
 					} as ItemRow,
 				],
+				electionPageExists: (date) => date === "2026-08-01",
 			},
 			NOW,
 		);

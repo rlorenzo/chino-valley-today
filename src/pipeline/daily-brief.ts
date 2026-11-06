@@ -25,7 +25,7 @@
 // - "Headlines elsewhere" does not exist until Task 4.2 lands; no stub.
 //
 // Usage: node src/pipeline/daily-brief.ts
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
@@ -58,6 +58,7 @@ import {
 	mdLink,
 	withinLastDays,
 } from "../tiera/util.ts";
+import { currentReportItems } from "./election-page.ts";
 import {
 	type BriefEventAhead,
 	createPost,
@@ -1264,15 +1265,11 @@ function headlineUrlProblem(item: ItemRow): string | null {
 // would no longer be true.
 const ELECTION_RESULTS_WINDOW_DAYS = 30;
 
-function electionPagePath(occurredAt: string): string {
-	return `/elections/${occurredAt.slice(0, 10)}/`;
-}
-
 export function selectElectionResults(
 	items: ItemRow[] | undefined,
 	now: Date,
 ): ItemRow[] {
-	return (items ?? [])
+	return currentReportItems(items ?? [])
 		.filter((item) => {
 			if (!item.occurred_at) return false;
 			const ageDays = hoursSince(now.getTime(), item.occurred_at) / 24;
@@ -1455,6 +1452,7 @@ export interface BriefInputs {
 	cvusdEvents: ItemRow[];
 	licenseEvents: ItemRow[];
 	electionResults?: ItemRow[];
+	electionPageExists?: (electionDate: string) => boolean;
 	headlines?: ItemRow[];
 	headlinesFreshness?: Record<string, SourceFreshness>;
 	// Secondary-press URLs earlier published briefs already carried, so a
@@ -1697,13 +1695,18 @@ export function assembleBrief(
 	if (electionResults.length > 0) {
 		const first = electionResults[0];
 		const report = parseMeta(first.meta).report;
+		const date = first.occurred_at?.slice(0, 10);
+		const pageLink =
+			date && inputs.electionPageExists?.(date)
+				? ` [All local results](/elections/${date}/).`
+				: "";
 		electionLines.push(
 			"## Election results",
 			"",
 			`*Unofficial until the county certifies them. Source: ${mdLink(
 				`San Bernardino County Registrar of Voters${typeof report === "string" ? `, ${report}` : ""}`,
 				cite(first.source_url),
-			)}. [All local results](${electionPagePath(first.occurred_at ?? "")}).*`,
+			)}.${pageLink}*`,
 			"",
 			...electionResults.map(
 				(r) => `- **${mdEscape(r.title ?? "")}:** ${mdEscape(r.body ?? "")}`,
@@ -1994,6 +1997,8 @@ export function buildDailyBrief(
 			sourceKeys: ["rov-results"],
 			itemTypes: ["election_result"],
 		}),
+		electionPageExists: (date) =>
+			existsSync(join(ROOT, "content", "elections", `${date}.json`)),
 		headlines: queryItems(db, {
 			sourceKeys: [...HEADLINES_SOURCES],
 			itemTypes: ["news_article"],

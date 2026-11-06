@@ -81,3 +81,19 @@ test("writeElectionPages leaves the file alone when nothing moved", () => {
 		rmSync(dir, { recursive: true, force: true });
 	}
 });
+
+test("drops a contest the latest report no longer lists", () => {
+	const page = nextElectionPage(
+		[
+			item("City of Chino MEASURE X", 9, "Summary Report #5"),
+			item("City of Chino MEASURE F", 1, "Summary Report #6"),
+		],
+		null,
+		day1,
+	);
+	assert.equal(page?.report, "Summary Report #6");
+	assert.deepEqual(
+		page?.contests.map((c) => c.name),
+		["MEASURE F"],
+	);
+});

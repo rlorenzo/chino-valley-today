@@ -42,6 +42,10 @@ test("parseRovResults refuses a contest with no vote rows", () => {
 	assert.equal(parseRovResults(noRows), null);
 });
 
+test("parseRovResults refuses an unreadable vote count", () => {
+	assert.equal(parseRovResults(html.replace("8,365", "n/a")), null);
+});
+
 test("run stores what the brief and results page read", async () => {
 	const url = "https://results.rov.sbcounty.gov/";
 	const { ctx, items } = fakeScraperContext({ [url]: html });

@@ -635,6 +635,20 @@ function requireSourceKey(args: string[]): string {
 	return key;
 }
 
+/**
+ * A hold we chose in tos-config.ts is the intended state, and a unit that fails
+ * for it every week would hide the drift hold this check exists for. A terms
+ * page we could not fetch still fails, because then nothing is watching it.
+ */
+export function failsWeeklyCheck(
+	sourceKey: string,
+	result: { ok: boolean; hash: string },
+): boolean {
+	if (result.ok) return false;
+	const fetched = result.hash !== "";
+	return !(fetched && SOURCE_TOS_REGISTRY[sourceKey]?.status === "held");
+}
+
 async function main() {
 	const args = process.argv.slice(2);
 	const db = openDb();
@@ -698,9 +712,7 @@ async function main() {
 	for (const sourceKey of Object.keys(SOURCE_TOS_REGISTRY)) {
 		console.log(`Checking ToS for ${sourceKey}...`);
 		const result = await checkSingleSourceTos(sourceKey, { db });
-		// A hold we chose in tos-config.ts is the intended state, and a unit that
-		// fails for it every week would hide the drift hold this check exists for.
-		if (!result.ok && SOURCE_TOS_REGISTRY[sourceKey].status === "held") {
+		if (!result.ok && !failsWeeklyCheck(sourceKey, result)) {
 			console.log(`  HELD by design: ${sourceKey} (${result.reason})`);
 		} else if (!result.ok) {
 			allOk = false;

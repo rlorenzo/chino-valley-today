@@ -3,7 +3,7 @@
 // the last revision is about a week old, so the public page moves weekly while
 // the brief keeps showing each new count. One file revised in place with a
 // dated history, because a post may not be silently edited once published.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openDb } from "../db/index.ts";
 import { ROOT } from "../store.ts";
@@ -72,18 +72,37 @@ function sortContests(contests: Contest[]): Contest[] {
 	);
 }
 
+/**
+ * Drops contests the registrar's latest report no longer lists. Every scrape
+ * rewrites each listed contest's report, so a stale one has a lower number.
+ */
+export function currentReportItems(items: ItemRow[]): ItemRow[] {
+	const reportNumber = (item: ItemRow) =>
+		Number(String(parseMeta(item.meta).report).match(/#(\d+)/)?.[1] ?? 0);
+	const latest = new Map<string, number>();
+	for (const item of items) {
+		const date = item.occurred_at?.slice(0, 10) ?? "";
+		latest.set(date, Math.max(latest.get(date) ?? 0, reportNumber(item)));
+	}
+	return items.filter(
+		(item) =>
+			reportNumber(item) === latest.get(item.occurred_at?.slice(0, 10) ?? ""),
+	);
+}
+
 /** The next revision of an election's page, or null when it should not move. */
 export function nextElectionPage(
 	items: ItemRow[],
 	previous: ElectionPage | null,
 	now: Date,
 ): ElectionPage | null {
-	const first = items[0];
+	const current = currentReportItems(items);
+	const first = current[0];
 	if (!first?.occurred_at) return null;
 	const meta = parseMeta(first.meta);
 	const report = String(meta.report);
 	const status = typeof meta.status === "string" ? meta.status : null;
-	const contests = sortContests(items.map(toContest));
+	const contests = sortContests(current.map(toContest));
 	const updatedAt = now.toISOString();
 
 	if (previous) {
@@ -132,7 +151,11 @@ export function writeElectionPages(
 		const path = join(dir, `${date}.json`);
 		const next = nextElectionPage(group, readPage(path), now);
 		if (next) {
-			writeFileSync(path, `${JSON.stringify(next, null, "\t")}\n`);
+			// Renamed into place, so a failed write cannot leave truncated JSON that
+			// breaks the site build or loses the update history.
+			const temp = `${path}.tmp`;
+			writeFileSync(temp, `${JSON.stringify(next, null, "\t")}\n`);
+			renameSync(temp, path);
 			written.push(date);
 		}
 	}

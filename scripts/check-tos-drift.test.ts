@@ -14,6 +14,7 @@ import {
 	checkSingleSourceTos,
 	classifyKnownDrift,
 	diffTerms,
+	failsWeeklyCheck,
 	rebaselineSource,
 	resetSingleSourceTos,
 	termsLines,
@@ -805,4 +806,15 @@ test("ignore_volatile_drift skips the hold for noise but not for edited terms", 
 	});
 	assert.equal(edited.ok, false);
 	assert.equal(db.getSourceTosStatus(source).status, "held");
+});
+
+test("the weekly check fails on drift and fetch errors, not on chosen holds", () => {
+	const fetched = { ok: false, hash: "a".repeat(64) };
+	assert.equal(failsWeeklyCheck("nbc4-news", fetched), false);
+	assert.equal(failsWeeklyCheck("nbc4-news", { ok: false, hash: "" }), true);
+	assert.equal(failsWeeklyCheck("dailybulletin-news", fetched), true);
+	assert.equal(
+		failsWeeklyCheck("dailybulletin-news", { ok: true, hash: "a" }),
+		false,
+	);
 });

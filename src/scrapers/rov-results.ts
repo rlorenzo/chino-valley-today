@@ -63,9 +63,14 @@ export function parseRovResults(html: string): RovResults | null {
 				const cells = $(row).find("td");
 				// The "Total Votes" row spans its first two columns.
 				if (cells.length !== 4) return;
+				const votes = Number(cells.eq(2).text().replace(/,/g, ""));
+				if (!Number.isSafeInteger(votes)) {
+					unreadable = true;
+					return;
+				}
 				choices.push({
 					name: cells.eq(0).text().trim(),
-					votes: Number(cells.eq(2).text().replace(/,/g, "")),
+					votes,
 					percent: cells.eq(3).text().trim(),
 				});
 			});
