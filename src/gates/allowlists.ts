@@ -21,6 +21,20 @@ export const PUBLIC_FIGURE_ALLOWLIST: readonly string[] = [
 	"Norm Enfield",
 	"Curt Hagman",
 	"Shannon Dicus",
+	// Candidates on the November 3, 2026 ballot for local office (registrar
+	// Summary Report #5). Running for office is public by definition. Winners
+	// stay; remove the rest once the race is certified and off the news.
+	"Curtis Burton",
+	"Jimmy Alexandris",
+	"M S Alam",
+	"Shanita Ayala",
+	"Josue Estrada",
+	"Chris Shaw",
+	"Frank Gerdine",
+	"Meagan Lichthart",
+	"Shaun Smith",
+	"Tom Haughey",
+	"Loring Williams",
 ];
 
 export const CIVIC_ENTITIES_ALLOWLIST: readonly string[] = [

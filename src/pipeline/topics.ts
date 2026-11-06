@@ -48,8 +48,10 @@ const PRESS_SOURCE_KEYS = new Set([
 	"bulldogtimes-news",
 	"champion-news",
 	"dailybulletin-news",
+	"ievoice-news",
 	"nbc4-news",
 	"quest-news",
+	"sbcsentinel-news",
 ]);
 
 /** Post types that identify a topic outright. */

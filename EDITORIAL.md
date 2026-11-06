@@ -186,6 +186,16 @@ filters apply per item.
     and the form it took, and re-register the scraper. Until then the source is
     out of `src/scrapers/registry.ts` and out of the press group, so nothing
     can invoke it.
+- **NBC4 is held on the same rule (2026-11-06).** The 2026-08-19 review above
+  read NBCUniversal's corporate terms. The station's own terms of service prohibit
+  robots and any tool used to "access, acquire, copy, monitor, scrape or aggregate
+  Content". Held pending an operator decision; no NBC4 item was ever stored.
+- **SBC Sentinel and IE Voice join secondary press (operator decision,
+  2026-11-06)** under the same headlines-elsewhere rules. Neither publishes terms
+  of use that we could find, so robots.txt is the tracked access document.
+- **Candidates on a local ballot count as public figures (2026-11-06)**, so a
+  headline naming one is not dropped by the private-person guard. Registrar
+  results are primary record, shown verbatim and labeled unofficial until certified.
 - **The Daily Bulletin was stopped on the same rule (2026-09-26, #77) and
   resumed 2026-10-09 on written permission.** MediaNews Group's Terms of Use
   §3.1(iii) prohibit automated collection "without written permission", and
@@ -202,6 +212,10 @@ filters apply per item.
     Bulletin items are currently eligible for brief and podcast generation like
     any other press item. If that is not acceptable, a follow-up to Ms.
     Sciacqua should ask directly; until answered, treat this as unresolved.
+  - **Terms check (2026-11-06).** The terms page's bytes change weekly because
+    a stats script is named for the week, so this source compares the terms
+    text and links against the version last read in full. A difference there
+    still holds it. Every other source still holds on any byte change.
 
 ## Agency alert channels (decided 2026-08-17, amended 2026-08-18)
 

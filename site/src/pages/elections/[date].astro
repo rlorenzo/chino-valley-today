@@ -1,0 +1,91 @@
+---
+import { getCollection } from "astro:content";
+import Base from "../../layouts/Base.astro";
+import { formatLocalDateLong } from "../../lib/record.ts";
+
+export async function getStaticPaths() {
+	const elections = await getCollection("elections");
+	return elections.map((election) => ({
+		params: { date: election.data.election_date },
+		props: { election: election.data },
+	}));
+}
+
+const { election } = Astro.props;
+const heldOn = formatLocalDateLong(election.election_date);
+const groups = [...new Set(election.contests.map((c) => c.group))];
+const when = (date: Date) =>
+	date.toLocaleDateString("en-US", {
+		year: "numeric",
+		month: "long",
+		day: "numeric",
+		timeZone: "America/Los_Angeles",
+	});
+const unofficial = election.status === null || /unofficial/i.test(election.status);
+---
+
+<Base
+	title={`Election results, ${heldOn} — Chino Valley Today`}
+	description="Results for Chino and Chino Hills offices and measures, from the San Bernardino County Registrar of Voters."
+>
+	<section class="shell results" aria-labelledby="results-heading">
+		<h1 id="results-heading" class="results__title">
+			Election results for Chino and Chino Hills
+		</h1>
+		<p class="results__note">
+			{heldOn}. Local offices and measures only.{" "}
+			{unofficial && <strong>Unofficial until the county certifies them.</strong>}
+		</p>
+		<p class="results__note">
+			Updated {when(election.updated_at)} from the San Bernardino County{" "}
+			<a class="stamp" href={election.source_url} rel="noopener noreferrer">
+				Registrar of Voters
+			</a>, {election.report}{election.status && <span>, labeled &ldquo;{election.status}&rdquo;</span>}. This
+			page is revised about weekly when the counts change.
+		</p>
+
+		{
+			groups.map((group) => (
+				<section>
+					<h2 class="results__group">{group}</h2>
+					{election.contests
+						.filter((c) => c.group === group)
+						.map((contest) => (
+							<div class="results__scroll">
+								<table class="results__table">
+									<caption>{contest.name}</caption>
+									<thead>
+										<tr>
+											<th scope="col">Choice</th>
+											<th scope="col" class="results__num">Votes</th>
+											<th scope="col" class="results__num">Share</th>
+										</tr>
+									</thead>
+									<tbody>
+										{contest.choices.map((choice) => (
+											<tr>
+												<th scope="row">{choice.name}</th>
+												<td class="results__num">
+													{choice.votes.toLocaleString("en-US")}
+												</td>
+												<td class="results__num">{choice.percent}</td>
+											</tr>
+										))}
+									</tbody>
+								</table>
+							</div>
+						))}
+				</section>
+			))
+		}
+
+		<h2 class="results__group">Update history</h2>
+		<ul class="results__history">
+			{
+				election.history.map((entry) => (
+					<li>{when(entry.updated_at)}: {entry.report}</li>
+				))
+			}
+		</ul>
+	</section>
+</Base>

@@ -34,7 +34,14 @@ export const SCRAPERS: Record<string, string> = {
 	"quest-news": "./scrapers/quest-news.ts",
 	"bulldogtimes-news": "./scrapers/bulldogtimes-news.ts",
 	"breeze-news": "./scrapers/breeze-news.ts",
-	"nbc4-news": "./scrapers/nbc4-news.ts",
+	// nbc4-news is intentionally unregistered (2026-11-06), the Champion treatment:
+	// its station terms prohibit robots and scraping. Re-registering is one line if
+	// the operator decides otherwise. Reasoning in src/gates/tos-config.ts.
+	// Regional press, keyword-filtered (2026-11-06)
+	"sbcsentinel-news": "./scrapers/sbcsentinel-news.ts",
+	"ievoice-news": "./scrapers/ievoice-news.ts",
+	// Official county election results (2026-11-06)
+	"rov-results": "./scrapers/rov-results.ts",
 	// Phase 4 Task 4.8 (high school sports, 2026-08-23). Three schools, one
 	// Home Campus core; Chino Hills has no Home Campus site and is separate.
 	"chinohigh-sports": "./scrapers/chinohigh-sports.ts",

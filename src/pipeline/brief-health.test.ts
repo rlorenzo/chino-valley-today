@@ -310,7 +310,7 @@ describe("checkDegradedSources", () => {
 			.run(sourceKey, startedAt, startedAt, status, errorMessage);
 	}
 
-	test("a ToS-held source is not degraded: the hold waits on a person", () => {
+	test("a source held by the registry is not degraded: that decision is made", () => {
 		const db = openDb(":memory:");
 		for (let i = 0; i < 3; i++)
 			insertRunAt(
@@ -323,6 +323,20 @@ describe("checkDegradedSources", () => {
 		const [res] = checkDegradedSources(db, ["nbc4-news"]);
 		assert.equal(res.degraded, false);
 		assert.match(res.reason, /held for ToS review/);
+	});
+
+	test("a drift hold on an enabled source is degraded: nobody has answered it yet", () => {
+		const db = openDb(":memory:");
+		for (let i = 0; i < 3; i++)
+			insertRunAt(
+				db,
+				"dailybulletin-news",
+				"failure",
+				`2026-09-2${i}T12:00:00.000Z`,
+				"Scraper held: ToS hold active (terms_hash_drift)",
+			);
+		const [res] = checkDegradedSources(db, ["dailybulletin-news"]);
+		assert.equal(res.degraded, true);
 	});
 
 	test("a manual-pull source failing on its timer is healthy until the pull is overdue", () => {
@@ -348,11 +362,11 @@ describe("checkDegradedSources", () => {
 
 	test("a quiet-is-healthy source with 3 failures is still degraded", () => {
 		const db = openDb(":memory:");
-		insertRun(db, "nbc4-news", "failure", 0);
-		insertRun(db, "nbc4-news", "failure", 0);
-		insertRun(db, "nbc4-news", "failure", 0);
+		insertRun(db, "breeze-news", "failure", 0);
+		insertRun(db, "breeze-news", "failure", 0);
+		insertRun(db, "breeze-news", "failure", 0);
 
-		const [res] = checkDegradedSources(db, ["nbc4-news"]);
+		const [res] = checkDegradedSources(db, ["breeze-news"]);
 		assert.equal(res.degraded, true);
 		assert.match(res.reason, /all failed/);
 	});

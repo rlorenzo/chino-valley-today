@@ -6,7 +6,9 @@
 // whether to hold. It answers a narrower question about a document that has
 // ALREADY failed the byte check — is the difference confined to a region we
 // have declared volatile? — so an operator is told which kind of drift they
-// are looking at instead of being handed a hash and a website.
+// are looking at instead of being handed a hash and a website. A source that
+// sets `ignore_volatile_drift` in tos-config.ts acts on that answer: the check
+// skips the hold, which is a deliberate per-source exception to the above.
 //
 // WHY THIS EXISTS
 //

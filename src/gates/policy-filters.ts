@@ -281,6 +281,7 @@ const PUBLIC_FIGURES_NORMALIZED = PUBLIC_FIGURE_ALLOWLIST.map((figure) => {
 	return {
 		full: parts.join(" "),
 		first: parts[0],
+		middle: parts.length === 3 ? parts[1] : null,
 		last: parts[parts.length - 1],
 		hasSurname: parts.length >= 2,
 	};
@@ -325,7 +326,11 @@ export function isPublicFigure(name: string): boolean {
 			nameParts.length >= 2 &&
 			nameParts.length <= 3 &&
 			nameLast === figure.last &&
-			(nameFirst === figure.first || nameFirst === figure.first[0])
+			(nameFirst === figure.first || nameFirst === figure.first[0]) &&
+			// "M. A. Alam" is someone else when the allowlist says "M S Alam".
+			(nameParts.length < 3 ||
+				!figure.middle ||
+				nameParts[1][0] === figure.middle[0])
 		) {
 			return true;
 		}

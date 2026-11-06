@@ -458,6 +458,13 @@ export function openDb(path: string = DB_PATH) {
 		// A matching hash records the observation but never clears an existing
 		// hold. Coming back online is an operator decision (resetSourceTosHold),
 		// because the hold may rest on something this check cannot see.
+		recordSourceTosObservation(sourceKey, opts);
+	}
+
+	function recordSourceTosObservation(
+		sourceKey: string,
+		opts: { observedHash: string; checkedAt: string },
+	): void {
 		db.prepare(
 			`UPDATE source_tos_status
 			 SET last_observed_hash = ?, last_checked_at = ?
@@ -700,6 +707,7 @@ export function openDb(path: string = DB_PATH) {
 		rebaselineSourceTos,
 		setSourceTosHold,
 		recordSourceTosCheck,
+		recordSourceTosObservation,
 		resetSourceTosHold,
 	};
 }

@@ -7,27 +7,9 @@
 // article text, so the teaser truncation in feed-press.ts is load-bearing
 // here: the raw description must never reach `body`.
 
-import { cleanPlainText } from "../utils/text-truncation.ts";
 import { laOffsetMinutes } from "./civicplus-rss.ts";
-import type { FeedPressItem } from "./feed-press.ts";
-import { runFeedPress } from "./feed-press.ts";
+import { chinoKeywordFilter, runFeedPress } from "./feed-press.ts";
 import type { ScraperDef } from "./types.ts";
-
-const CHINO_RE = /\bchino(\s+hills)?\b/i;
-
-function chinoKeywordFilter(
-	item: FeedPressItem,
-): Record<string, unknown> | null {
-	const titleMatch = (item.title ?? "").match(CHINO_RE);
-	if (titleMatch) return { chinoKeyword: titleMatch[0] };
-
-	const descriptionMatch = cleanPlainText(item.description ?? "").match(
-		CHINO_RE,
-	);
-	if (descriptionMatch) return { chinoKeyword: descriptionMatch[0] };
-
-	return null;
-}
 
 // This feed's pubDate omits a UTC offset ("Wed, Aug 19 2026 06:13:12 PM"),
 // unlike the three WordPress student-paper feeds' standard RFC 2822

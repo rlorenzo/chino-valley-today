@@ -19,6 +19,13 @@ export interface SourceTosConfig {
 	 * See terms-scope.ts.
 	 */
 	scope?: TermsScope;
+	/**
+	 * Skip the hold when `scope` shows the terms read the same as the version a
+	 * human last read in full. Only for a page whose churn is known to be
+	 * template noise; the comparison is always against that read version, so a
+	 * real edit still holds however many weeks of noise came before it.
+	 */
+	ignore_volatile_drift?: boolean;
 }
 
 /**
@@ -153,6 +160,19 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 		reviewer: "rexl",
 		notes:
 			"MediaNews Group Terms of Use for Daily Bulletin reviewed. Permits automated title and short teaser link-back under EDITORIAL.md.",
+		// The page names a WordPress stats script after the current week
+		// (stats.wp.com/e-202645.js), so its bytes change every week and the raw
+		// hash re-held this source every Sunday from 2026-09-06 to 2026-11-01.
+		// Checked against archived weeks 41 and 44 and the live page: the terms
+		// text and links were identical each time, and an edited clause was caught.
+		scope: {
+			select: "article .entry-content",
+			anchor: "Following are the terms and conditions",
+			// Measured at 50,273 characters. The floor catches a scope that has
+			// started stripping the terms, not an edited sentence.
+			minLength: 30_000,
+		},
+		ignore_volatile_drift: true,
 	},
 	"quest-news": {
 		source_key: "quest-news",
@@ -189,7 +209,13 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 	},
 	"nbc4-news": {
 		source_key: "nbc4-news",
-		status: "enabled",
+		// Held 2026-11-06 pending an operator decision. The tracked page below is
+		// NBCUniversal's corporate terms, but nbclosangeles.com/terms-of-service/
+		// says "You may also not use any software robots, spider, crawlers, or
+		// other data gathering or extraction tools ... to access, acquire, copy,
+		// monitor, scrape or aggregate Content", the clause class EDITORIAL.md
+		// rejected KTLA on. No item from this source has ever been stored.
+		status: "held",
 		terms_url: "https://www.nbcuniversal.com/terms",
 		reviewed_hash:
 			"888cc58e55e386cb540d228cfcbec8713565080bcecc2d5dbca9152063261ca3",
@@ -197,5 +223,27 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 		reviewer: "claude-code (operator-directed)",
 		notes:
 			"NBCUniversal general ToS reviewed 2026-08-19: no clause restricts automated access, scraping, RSS use, or headline/link reuse; the feed URL is explicitly robots-Allowed. Title + sentence-bounded teaser link-back per EDITORIAL.md.",
+	},
+	"sbcsentinel-news": {
+		source_key: "sbcsentinel-news",
+		status: "enabled",
+		terms_url: "https://sbcsentinel.com/robots.txt",
+		reviewed_hash:
+			"d3f66346c9e46378d8250517e132dde5cf26fc08d64d0f5a38839a2cffe7408e",
+		reviewed_at: "2026-11-06",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"Operator-approved 2026-11-06. No reader-facing terms located on the site (home page and footer checked). robots.txt tracked as the binding access document; only /wp-admin/ is disallowed. Title + sentence-bounded teaser link-back per EDITORIAL.md.",
+	},
+	"ievoice-news": {
+		source_key: "ievoice-news",
+		status: "enabled",
+		terms_url: "https://theievoice.com/robots.txt",
+		reviewed_hash:
+			"1fab33faffec21aeb4249ffc52b8335b5db72ba3c26aac7c71261c4a5e94a4f1",
+		reviewed_at: "2026-11-06",
+		reviewer: "claude-code (operator-directed)",
+		notes:
+			"Operator-approved 2026-11-06. No terms of use located; the footer links only a privacy policy, which has no automated-access clause. robots.txt tracked as the binding access document; disallows query-string URLs, asks Crawl-delay 3 (one feed fetch per run). Sister site Black Voice News blocks bots. Title + sentence-bounded teaser link-back per EDITORIAL.md.",
 	},
 };

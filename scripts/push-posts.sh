@@ -51,7 +51,8 @@ fi
 # directory during a restore would otherwise commit the gap.
 #
 # Gitignored daily briefs are skipped by `git add` for free.
-git add --ignore-removal content/published
+mkdir -p content/elections
+git add --ignore-removal content/published content/elections
 
 if git diff --cached --quiet; then
 	echo "push-posts: no new posts staged"
@@ -104,7 +105,7 @@ fi
 # lists no files at all by default, and a merge is exactly how a person drags
 # unrelated work in here.
 stray="$(git log --format= --name-only --diff-merges=first-parent \
-	origin/main..HEAD -- ':!content/published' | sort -u)"
+	origin/main..HEAD -- ':!content/published' ':!content/elections' | sort -u)"
 if [ -n "$stray" ]; then
 	echo "push-posts: refusing to push commits that touch more than published content" >&2
 	printf '%s\n' "$stray" | sed 's/^/    /' >&2

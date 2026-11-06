@@ -680,3 +680,66 @@ img {
 		transition-duration: 0.01ms !important;
 	}
 }
+
+/* ==========================================================================
+   ELECTION RESULTS
+   ========================================================================== */
+.results {
+	padding-block: 2rem 3rem;
+}
+
+.results__title {
+	margin: 0 0 0.75rem;
+}
+
+.results__note {
+	max-width: var(--measure);
+	margin: 0 0 0.75rem;
+	color: var(--muted);
+}
+
+.results__group {
+	margin: 2.25rem 0 0.75rem;
+}
+
+.results__scroll {
+	max-width: 40rem;
+	margin-bottom: 1.5rem;
+	overflow-x: auto;
+}
+
+.results__table {
+	width: 100%;
+	border-collapse: collapse;
+}
+
+.results__table caption {
+	padding-bottom: 0.4rem;
+	font-weight: 700;
+	text-align: left;
+}
+
+.results__table th,
+.results__table td {
+	padding: 0.4rem 0.75rem 0.4rem 0;
+	border-bottom: 1px solid var(--galv-edge);
+	font-weight: 400;
+	text-align: left;
+}
+
+.results__table thead th {
+	color: var(--muted);
+	font-size: 0.85rem;
+}
+
+.results__table .results__num {
+	font-variant-numeric: tabular-nums;
+	text-align: right;
+	white-space: nowrap;
+}
+
+.results__history {
+	margin: 0;
+	padding-left: 1.25rem;
+	color: var(--muted);
+}

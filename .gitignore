@@ -49,3 +49,4 @@ PLAN-*
 # lints the working tree rather than the index.
 graphify-out/
 agent-review-summary.md
+content/elections/*.tmp

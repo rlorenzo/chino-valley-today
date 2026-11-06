@@ -1,12 +1,15 @@
-// Shared plumbing for the four secondary-press sources that are exactly one
-// RSS feed fetched per run: three student papers (Quest News, Bulldog Times,
-// The Breeze) and NBC4 Los Angeles. All four publish standard WordPress-family
+// Shared plumbing for the secondary-press sources that are exactly one RSS feed
+// fetched per run: three student papers (Quest News, Bulldog Times, The Breeze)
+// and the regional outlets (NBC4 Los Angeles, SBC Sentinel, IE Voice). All publish standard WordPress-family
 // RSS 2.0 (title/link/guid/pubDate/description[/content:encoded]), so parsing
 // and ingest are identical; only the feed URL, outlet label, allowed hosts,
 // and per-item extras (a fixed city tag vs. NBC4's Chino keyword filter) vary
 // between sources. Same shared-core/thin-module split as tribe-events.ts.
 
-import { truncateToSentenceBoundary } from "../utils/text-truncation.ts";
+import {
+	cleanPlainText,
+	truncateToSentenceBoundary,
+} from "../utils/text-truncation.ts";
 import { rfc2822ToIso, toArray, xmlParser } from "./civicplus-rss.ts";
 import { resolveDocumentId } from "./document-linkage.ts";
 import { TEASER_MAX_CHARS, TEASER_MAX_WORDS } from "./press-article.ts";
@@ -70,6 +73,27 @@ export function extractTeaser(item: FeedPressItem): string | null {
 	const raw = item.description?.trim() ? item.description : item.contentEncoded;
 	if (!raw?.trim()) return null;
 	return truncateToSentenceBoundary(raw, TEASER_MAX_CHARS, TEASER_MAX_WORDS);
+}
+
+const CHINO_RE = /\bchino(\s+hills)?\b/i;
+
+/**
+ * Per-item gate for regional outlets: keep an item only when its title or
+ * description names Chino. A body-only mention is deliberately not enough, since
+ * the stored teaser could then read as a story about somewhere else.
+ */
+export function chinoKeywordFilter(
+	item: FeedPressItem,
+): Record<string, unknown> | null {
+	const titleMatch = (item.title ?? "").match(CHINO_RE);
+	if (titleMatch) return { chinoKeyword: titleMatch[0] };
+
+	const descriptionMatch = cleanPlainText(item.description ?? "").match(
+		CHINO_RE,
+	);
+	if (descriptionMatch) return { chinoKeyword: descriptionMatch[0] };
+
+	return null;
 }
 
 export interface FeedPressSourceConfig {
