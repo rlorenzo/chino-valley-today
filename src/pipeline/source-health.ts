@@ -1,6 +1,7 @@
 // Is every source still feeding the pipeline? Read by the 08:00 watchdog
 // (brief-health.ts) and at build time by the site's /health page, which is why
 // this module imports nothing but pure data: the site build loads it directly.
+import { SOURCE_TOS_REGISTRY } from "../gates/tos-config.ts";
 import { QUIET_IS_HEALTHY } from "../scrapers/quiet-policy.ts";
 
 // Structural, so the pipeline's Db and the site's bare node:sqlite handle both fit.
@@ -47,8 +48,8 @@ const HELD_PREFIX = "Scraper held:";
 // is never reported as degraded.
 //
 // The 3-failures rule applies to every source, with two exceptions: a source
-// held for ToS review (a decision waiting on a person, some held by design,
-// not a breakage), and a manual-pull source still inside its grace window.
+// the ToS registry holds by design (a decision already made, not a breakage),
+// and a manual-pull source still inside its grace window.
 // The 3-zero-items rule needs to know whether quiet is this source's normal
 // state, which QUIET_IS_HEALTHY declares per source and a test holds to the
 // registry.
@@ -75,7 +76,14 @@ export function checkDegradedSources(
 	return sourceKeys.map((sourceKey) => {
 		const runs = lastRuns.all(sourceKey) as ScrapeRunSummary[];
 
-		if (runs[0]?.error_message?.startsWith(HELD_PREFIX)) {
+		// A hold the registry declares is a standing decision. A hold the drift
+		// check raised is a question nobody has answered yet, so it falls through
+		// to the 3-failures rule: the Daily Bulletin sat in one for 26 days,
+		// through an election, with /health reading sources=ok.
+		if (
+			runs[0]?.error_message?.startsWith(HELD_PREFIX) &&
+			SOURCE_TOS_REGISTRY[sourceKey]?.status === "held"
+		) {
 			return {
 				sourceKey,
 				degraded: false,

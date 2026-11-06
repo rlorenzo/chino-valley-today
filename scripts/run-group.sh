@@ -47,7 +47,7 @@ case "$group" in
 	# nothing. Two requests per school per day: the schedule API, plus the nav
 	# page the per-sport citations are resolved from.
 	daily)
-		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses sbclib-events sbparks-events cbwcd-events yanksair-events planesoffame-events cvusd-calendar chinotheatre-events chinohigh-sports ayala-sports donlugo-sports chinohills-sports chinohills-minutes)
+		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses sbclib-events sbparks-events cbwcd-events yanksair-events planesoffame-events cvusd-calendar chinotheatre-events chinohigh-sports ayala-sports donlugo-sports chinohills-sports chinohills-minutes rov-results)
 		;;
 	# Video and captions. Expensive in time and bandwidth, and captions do not
 	# exist until well after a meeting ends, so this runs the morning after.
@@ -58,14 +58,17 @@ case "$group" in
 	# its terms prohibit the access this project performs, and a written
 	# permission request is with the Publisher. See src/gates/tos-config.ts.
 	#
-	# Secondary press reporting (Daily Bulletin, three student
-	# papers, NBC4 keyword-filtered). Politeness budget: runs 4 times daily
+	# nbc4-news is absent too (2026-11-06): its station terms prohibit robots and
+	# scraping, and it is held pending an operator decision. See tos-config.ts.
+	#
+	# Secondary press reporting (Daily Bulletin, three student papers, SBC
+	# Sentinel and IE Voice keyword-filtered). Politeness budget: runs 4 times daily
 	# (05:00, 11:00, 17:00, 23:00 PT), fail-closed robots.txt, ToS tracking,
-	# and redirect validation. The student papers and NBC4 go quiet or empty
+	# and redirect validation. The student papers and regional outlets go quiet or empty
 	# on most runs by design (dormant between issues / no Chino match) — see
 	# src/scrapers/quiet-policy.ts, which declares that per source.
 	press)
-		keys=(dailybulletin-news quest-news bulldogtimes-news breeze-news nbc4-news)
+		keys=(dailybulletin-news quest-news bulldogtimes-news breeze-news sbcsentinel-news ievoice-news)
 		;;
 	*)
 		echo "usage: $0 <frequent|daily|media|press>" >&2

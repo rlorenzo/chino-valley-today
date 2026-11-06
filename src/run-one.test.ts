@@ -22,8 +22,9 @@ let blockNetworkPreload: string;
 // (see src/scrapers/registry.ts) — an unregistered key exits on the usage
 // message before the gate is ever consulted, so the test would have passed for
 // the wrong reason if it asserted anything looser than the exact message.
-// dailybulletin-news replaced it and was unregistered the same way (#77).
-const HELD_KEY = "nbc4-news";
+// dailybulletin-news and nbc4-news each replaced it and were unregistered the
+// same way, so this now uses a source nobody expects to hold.
+const HELD_KEY = "quest-news";
 // nws-forecast is a civic/agency source: it carries no publisher-terms
 // contract and is not in SOURCE_TOS_REGISTRY, so run-one.ts's gate must never
 // consult source_tos_status for it at all (see the scoping comment at

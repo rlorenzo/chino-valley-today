@@ -208,6 +208,22 @@ const HEADLINE_SOURCE_POLICY: Record<string, HeadlineSourcePolicy> = {
 		sincePrevBrief: true,
 		dedupRank: 5,
 	},
+	"sbcsentinel-news": {
+		outlet: "SBC Sentinel",
+		hosts: ["sbcsentinel.com", "www.sbcsentinel.com"],
+		maxScrapeAgeHours: 8 * 24,
+		maxItemAgeHours: 7 * 24,
+		sincePrevBrief: false,
+		dedupRank: 6,
+	},
+	"ievoice-news": {
+		outlet: "IE Voice",
+		hosts: ["theievoice.com", "www.theievoice.com"],
+		maxScrapeAgeHours: 8 * 24,
+		maxItemAgeHours: 7 * 24,
+		sincePrevBrief: false,
+		dedupRank: 7,
+	},
 };
 
 export const HEADLINES_SOURCES = Object.keys(HEADLINE_SOURCE_POLICY);
@@ -1243,6 +1259,24 @@ function headlineUrlProblem(item: ItemRow): string | null {
 	return null;
 }
 
+// Counts stay on the brief until the registrar's certification deadline, which
+// California sets 30 days after the election. Past that the "unofficial" label
+// would no longer be true.
+const ELECTION_RESULTS_WINDOW_DAYS = 30;
+
+export function selectElectionResults(
+	items: ItemRow[] | undefined,
+	now: Date,
+): ItemRow[] {
+	return (items ?? [])
+		.filter((item) => {
+			if (!item.occurred_at) return false;
+			const ageDays = hoursSince(now.getTime(), item.occurred_at) / 24;
+			return ageDays >= 0 && ageDays <= ELECTION_RESULTS_WINDOW_DAYS;
+		})
+		.sort((a, b) => (a.title ?? "").localeCompare(b.title ?? ""));
+}
+
 export function selectHeadlinesElsewhere(
 	headlineItems: ItemRow[] | undefined,
 	freshness: Record<string, SourceFreshness> | undefined,
@@ -1416,6 +1450,7 @@ export interface BriefInputs {
 	agendaItems: ItemRow[];
 	cvusdEvents: ItemRow[];
 	licenseEvents: ItemRow[];
+	electionResults?: ItemRow[];
 	headlines?: ItemRow[];
 	headlinesFreshness?: Record<string, SourceFreshness>;
 	// Secondary-press URLs earlier published briefs already carried, so a
@@ -1651,6 +1686,26 @@ export function assembleBrief(
 		`new on the record: ${newPosts.length} post(s) since ${sinceIso}, ${licenses.length} license event(s)`,
 	);
 
+	// Election results: the registrar's own numbers, verbatim, so this is primary
+	// record rather than press and no name gate applies.
+	const electionResults = selectElectionResults(inputs.electionResults, now);
+	const electionLines: string[] = [];
+	if (electionResults.length > 0) {
+		const first = electionResults[0];
+		const report = parseMeta(first.meta).report;
+		electionLines.push(
+			"## Election results",
+			"",
+			`*Unofficial until the county certifies them. Source: ${mdLink(
+				`San Bernardino County Registrar of Voters${typeof report === "string" ? `, ${report}` : ""}`,
+				cite(first.source_url),
+			)}.*`,
+			"",
+			...electionResults.map((r) => `- **${r.title}:** ${r.body}`),
+			"",
+		);
+	}
+
 	// In the local press: secondary community press reporting (The Champion,
 	// Daily Bulletin). URLs join frontmatter attributions[], NEVER sources[].
 	const alreadyCarried = inputs.alreadyCarriedUrls ?? new Set<string>();
@@ -1718,6 +1773,7 @@ export function assembleBrief(
 	body.push(
 		...alertLines,
 		...fireLines,
+		...electionLines,
 		...pressLines,
 		...recordLines,
 		...weatherLines,
@@ -1731,6 +1787,7 @@ export function assembleBrief(
 		fire.length === 0 &&
 		newPosts.length === 0 &&
 		licenses.length === 0 &&
+		electionResults.length === 0 &&
 		// Both press sections: a morning carrying only already-run stories is
 		// still a morning with something to read, so it is not "quiet".
 		shownCount === 0 &&
@@ -1926,6 +1983,10 @@ export function buildDailyBrief(
 		licenseEvents: queryItems(db, {
 			sourceKeys: ["abc-licenses"],
 			itemTypes: ["license_event"],
+		}),
+		electionResults: queryItems(db, {
+			sourceKeys: ["rov-results"],
+			itemTypes: ["election_result"],
 		}),
 		headlines: queryItems(db, {
 			sourceKeys: [...HEADLINES_SOURCES],

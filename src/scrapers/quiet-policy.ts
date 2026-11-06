@@ -65,15 +65,20 @@ export const QUIET_IS_HEALTHY: Record<string, string | null> = {
 	"chinotheatre-events": null,
 
 	// --- Secondary press. The two dailies/weeklies must produce; the student
-	// papers and NBC4 are quiet by design. ---
+	// papers and regional outlets are quiet by design. ---
 	"dailybulletin-news": null,
 	"quest-news": "a student paper is dormant between issues and over the summer",
 	"bulldogtimes-news":
 		"a student paper is dormant between issues and over the summer",
 	"breeze-news":
 		"a student paper is dormant between issues and over the summer",
-	"nbc4-news":
+	"sbcsentinel-news":
+		"a county weekly's Chino keyword filter matches nothing in most issues",
+	"ievoice-news":
 		"a regional outlet's Chino keyword filter matches nothing on most days",
+
+	// --- Elections. ---
+	"rov-results": "the registrar's page has no Chino contest between elections",
 
 	// --- High school sports. Every one of these reads a 14-day-back /
 	// 21-day-ahead window, which is genuinely empty between seasons. ---

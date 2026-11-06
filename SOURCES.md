@@ -492,6 +492,39 @@ whenever a source changes behavior.
 - **Link-back depth:** item-level (article permalinks).
 - **Reliability guess:** high (major-market CMS, stable feed).
 
+**HELD 2026-11-06, pending an operator decision.** The entry above tracks
+NBCUniversal's corporate terms, but the station's own page,
+`nbclosangeles.com/terms-of-service/`, says "You may also not use any software
+robots, spider, crawlers, or other data gathering or extraction tools ... to
+access, acquire, copy, monitor, scrape or aggregate Content". That is the clause
+class KTLA was rejected on. Last successful run 2026-08-23, and no item from this
+source has ever been stored. Unregistered and out of the press group, the same
+treatment as the Champion, so nothing can invoke it.
+
+### sbcsentinel-news / ievoice-news — regional press (keyword-filtered)
+
+- **Added 2026-11-06 (operator decision).** Each reads one WordPress search feed
+  per run (`/search/chino/feed/rss2/`) and keeps items whose title or description
+  names Chino, through the shared `feed-press.ts` core.
+- **ToS:** no terms of use located on either site. robots.txt is tracked as the
+  binding access document. IE Voice disallows query-string URLs, so the path form
+  of the feed is required. Its sister site, Black Voice News, blocks bots.
+- **Quirks:** the Sentinel publishes a Friday batch and its search feed includes
+  legal notices, which the filter drops. A roundup naming Chino only in its body
+  is not ingested, so expect low volume from IE Voice.
+- **Link-back depth:** item-level (WordPress permalinks).
+
+### rov-results — San Bernardino County Registrar of Voters
+
+- **Added 2026-11-06.** One daily read of `results.rov.sbcounty.gov`, which holds
+  every contest in the current election. Contests for Chino, Chino Hills and
+  `Chino Valley ...` bodies are stored as `election_result` items and updated in
+  place as counts change. The brief shows them for 30 days after the election.
+- **Quirks:** the URL is reused for each election, so identity leads with the
+  election date. No robots.txt (404). The results page repeats the numbers in the
+  PDF and `.xlsx` linked from it.
+- **Link-back depth:** page-level.
+
 ### ktla — REJECTED on ToS (2026-08-19; do not revisit without a terms change)
 
 - `/feed/` is robots-permitted for our UA and live-fetchable (the 403

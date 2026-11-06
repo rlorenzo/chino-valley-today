@@ -13,6 +13,7 @@ import {
 } from "./feed-press.ts";
 import nbc4NewsScraper, { nbc4PubDateToIso } from "./nbc4-news.ts";
 import questNewsScraper from "./quest-news.ts";
+import sentinelScraper from "./sbcsentinel-news.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixturesDir = join(here, "__fixtures__");
@@ -282,5 +283,21 @@ test("nbc4-news run orchestration (Chino keyword filter)", async (t) => {
 			assert.equal(nbc4PubDateToIso(undefined), null);
 			assert.equal(nbc4PubDateToIso("not a date"), null);
 		},
+	);
+});
+
+test("regional search feeds keep Chino stories and drop legal notices", async () => {
+	const url = "https://sbcsentinel.com/search/chino/feed/rss2/";
+	const item = (title: string, description: string) =>
+		`<item><title>${title}</title><link>https://sbcsentinel.com/${encodeURIComponent(title)}/</link><description>${description}</description></item>`;
+	const { ctx, items } = fakeScraperContext({
+		[url]: `<rss><channel>${item("Chino Council Rejects Plan", "A vote.")}${item("October 30 Legal Notices", "Assorted filings.")}</channel></rss>`,
+	});
+
+	await sentinelScraper.run(ctx);
+
+	assert.deepEqual(
+		items.map((i) => i.title),
+		["Chino Council Rejects Plan"],
 	);
 });
