@@ -3,7 +3,7 @@
 // the last revision is about a week old, so the public page moves weekly while
 // the brief keeps showing each new count. One file revised in place with a
 // dated history, because a post may not be silently edited once published.
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { openDb } from "../db/index.ts";
 import { ROOT } from "../store.ts";
@@ -106,6 +106,15 @@ export function nextElectionPage(
 	};
 }
 
+function readPage(path: string): ElectionPage | null {
+	try {
+		return JSON.parse(readFileSync(path, "utf8")) as ElectionPage;
+	} catch (err) {
+		if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+		throw err;
+	}
+}
+
 export function writeElectionPages(
 	items: ItemRow[],
 	dir: string,
@@ -121,10 +130,7 @@ export function writeElectionPages(
 	mkdirSync(dir, { recursive: true });
 	for (const [date, group] of byElection) {
 		const path = join(dir, `${date}.json`);
-		const previous = existsSync(path)
-			? (JSON.parse(readFileSync(path, "utf8")) as ElectionPage)
-			: null;
-		const next = nextElectionPage(group, previous, now);
+		const next = nextElectionPage(group, readPage(path), now);
 		if (next) {
 			writeFileSync(path, `${JSON.stringify(next, null, "\t")}\n`);
 			written.push(date);
