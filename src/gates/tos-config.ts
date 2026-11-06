@@ -19,6 +19,13 @@ export interface SourceTosConfig {
 	 * See terms-scope.ts.
 	 */
 	scope?: TermsScope;
+	/**
+	 * Skip the hold when `scope` shows the terms read the same as the version a
+	 * human last read in full. Only for a page whose churn is known to be
+	 * template noise; the comparison is always against that read version, so a
+	 * real edit still holds however many weeks of noise came before it.
+	 */
+	ignore_volatile_drift?: boolean;
 }
 
 /**
@@ -153,6 +160,19 @@ export const SOURCE_TOS_REGISTRY: Record<string, SourceTosConfig> = {
 		reviewer: "rexl",
 		notes:
 			"MediaNews Group Terms of Use for Daily Bulletin reviewed. Permits automated title and short teaser link-back under EDITORIAL.md.",
+		// The page names a WordPress stats script after the current week
+		// (stats.wp.com/e-202645.js), so its bytes change every week and the raw
+		// hash re-held this source every Sunday from 2026-09-06 to 2026-11-01.
+		// Checked against archived weeks 41 and 44 and the live page: the terms
+		// text and links were identical each time, and an edited clause was caught.
+		scope: {
+			select: "article .entry-content",
+			anchor: "Following are the terms and conditions",
+			// Measured at 50,273 characters. The floor catches a scope that has
+			// started stripping the terms, not an edited sentence.
+			minLength: 30_000,
+		},
+		ignore_volatile_drift: true,
 	},
 	"quest-news": {
 		source_key: "quest-news",

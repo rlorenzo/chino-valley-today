@@ -40,8 +40,8 @@ test("check-tos-drift watchdog and reset suite", async (t) => {
 	const targetSource = "champion-news";
 	const config = SOURCE_TOS_REGISTRY[targetSource];
 
-	// champion-news is the only source carrying a `scope`, so the scoped paths
-	// below can use nothing else. It is also baseline-`held` now, by the terms
+	// champion-news carries a `scope` and holds on volatile drift, which is what
+	// the scoped paths below need. It is also baseline-`held` now, by the terms
 	// decision recorded in tos-config.ts, and resetSourceTosHold refuses a
 	// source the registry declares held. The reset subtests are about the reset
 	// MECHANISM, not about this outlet, so the baseline status is overridden for
@@ -669,7 +669,7 @@ test("--reset anchors the version, so the short path works afterwards", async (t
 	const config = SOURCE_TOS_REGISTRY[source];
 
 	// Needs a source that is both SCOPED and resettable, and champion-news is
-	// the only scoped one. Its baseline is `held` by the terms decision in
+	// the scoped one that still holds on volatile drift. Its baseline is `held` by the terms decision in
 	// tos-config.ts, which resetSourceTosHold refuses, so that is overridden for
 	// this test and restored after — as reviewed_hash already is below.
 	const originalStatus = config.status;
@@ -750,4 +750,59 @@ test("evidence names only what was actually removed", () => {
 	} finally {
 		config.scope = original;
 	}
+});
+
+test("ignore_volatile_drift skips the hold for noise but not for edited terms", async (t) => {
+	const db = openDb(join(tmpDir, "volatile-drift.db"));
+	const source = "dailybulletin-news";
+	const config = SOURCE_TOS_REGISTRY[source];
+	assert.equal(config.ignore_volatile_drift, true);
+
+	const page = (week: number, clause: string) =>
+		Buffer.from(
+			`<html><body><article><div class="entry-content">` +
+				`<p>Following are the terms and conditions. ${clause}</p>` +
+				`<p>${"Padding above the length floor. ".repeat(1200)}</p>` +
+				`</div></article><script src="https://stats.wp.com/e-${week}.js"></script></body></html>`,
+		);
+	const approved = page(202644, "You may link to headlines.");
+	const approvedHash = createHash("sha256").update(approved).digest("hex");
+	saveRaw(approved, "html");
+	const original = config.reviewed_hash;
+	(config as { reviewed_hash: string }).reviewed_hash = approvedHash;
+	t.after(() => {
+		(config as { reviewed_hash: string }).reviewed_hash = original;
+	});
+	db.raw
+		.prepare(
+			"UPDATE source_tos_status SET status = 'enabled', held_reason = NULL, reviewed_hash = ?, anchor_hash = ? WHERE source_key = ?",
+		)
+		.run(approvedHash, approvedHash, source);
+
+	const fetchPage = (body: Buffer) =>
+		(async () =>
+			({
+				status: 200,
+				ok: true,
+				body,
+				finalUrl: config.terms_url,
+				headers: {},
+			}) as unknown as RawResult) as never;
+
+	const noise = await checkSingleSourceTos(source, {
+		db,
+		fetcher: fetchPage(page(202645, "You may link to headlines.")),
+	});
+	assert.equal(noise.ok, true);
+	const afterNoise = db.getSourceTosStatus(source);
+	assert.equal(afterNoise.status, "enabled");
+	assert.equal(afterNoise.reviewedHash, approvedHash);
+	assert.equal(afterNoise.lastObservedHash, noise.hash);
+
+	const edited = await checkSingleSourceTos(source, {
+		db,
+		fetcher: fetchPage(page(202646, "Automated access is banned.")),
+	});
+	assert.equal(edited.ok, false);
+	assert.equal(db.getSourceTosStatus(source).status, "held");
 });

@@ -1264,6 +1264,10 @@ function headlineUrlProblem(item: ItemRow): string | null {
 // would no longer be true.
 const ELECTION_RESULTS_WINDOW_DAYS = 30;
 
+function electionPagePath(occurredAt: string): string {
+	return `/elections/${occurredAt.slice(0, 10)}/`;
+}
+
 export function selectElectionResults(
 	items: ItemRow[] | undefined,
 	now: Date,
@@ -1699,9 +1703,11 @@ export function assembleBrief(
 			`*Unofficial until the county certifies them. Source: ${mdLink(
 				`San Bernardino County Registrar of Voters${typeof report === "string" ? `, ${report}` : ""}`,
 				cite(first.source_url),
-			)}.*`,
+			)}. [All local results](${electionPagePath(first.occurred_at ?? "")}).*`,
 			"",
-			...electionResults.map((r) => `- **${r.title}:** ${r.body}`),
+			...electionResults.map(
+				(r) => `- **${mdEscape(r.title ?? "")}:** ${mdEscape(r.body ?? "")}`,
+			),
 			"",
 		);
 	}

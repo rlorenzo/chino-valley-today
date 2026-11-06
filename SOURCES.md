@@ -520,6 +520,8 @@ treatment as the Champion, so nothing can invoke it.
   every contest in the current election. Contests for Chino, Chino Hills and
   `Chino Valley ...` bodies are stored as `election_result` items and updated in
   place as counts change. The brief shows them for 30 days after the election.
+  `/elections/<date>/` shows them permanently and is revised about weekly when
+  the counts change (`src/pipeline/election-page.ts`).
 - **Quirks:** the URL is reused for each election, so identity leads with the
   election date. No robots.txt (404). The results page repeats the numbers in the
   PDF and `.xlsx` linked from it.

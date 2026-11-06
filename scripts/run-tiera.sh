@@ -30,6 +30,11 @@ cd "$ROOT"
 # duplicates a post for the same meeting, alert or week.
 node src/tiera/run.ts
 
+# Not a post: one page revised in place, so it stays outside the post lifecycle.
+# A failure here must not stop the posts above from reaching the site.
+node src/pipeline/election-page.ts ||
+	echo "note: election results page not refreshed" >&2
+
 scripts/deploy.sh local
 
 # Dead-man's-switch ping, on success only — same inverted monitoring as

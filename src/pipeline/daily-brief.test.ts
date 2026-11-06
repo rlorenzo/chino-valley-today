@@ -991,6 +991,29 @@ describe("assembleBrief", () => {
 		};
 	}
 
+	test("election results escape registrar text and link to the results page", () => {
+		const { post } = assembleBrief(
+			{
+				...quietInputs(),
+				electionResults: [
+					{
+						title: "City of Chino *MEASURE* F",
+						body: "YES_A 10 (100.00%)",
+						source_url: "https://results.rov.sbcounty.gov/",
+						occurred_at: "2026-08-01T00:00:00.000Z",
+						meta: JSON.stringify({ report: "Summary Report #5" }),
+					} as ItemRow,
+				],
+			},
+			NOW,
+		);
+		assert.match(
+			post.bodyMd,
+			/\*\*City of Chino \\\*MEASURE\\\* F:\*\* YES\\_A 10/,
+		);
+		assert.match(post.bodyMd, /\(\/elections\/2026-08-01\/\)/);
+	});
+
 	test("a quiet day is weather-only, labeled plainly, with non-empty sources", () => {
 		const { post: p } = assembleBrief(quietInputs(), NOW);
 		assert.equal(p.slug, "2026-08-17-daily-brief");

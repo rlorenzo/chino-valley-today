@@ -25,6 +25,9 @@ export interface RovContest {
 export interface RovResults {
 	electionDate: string;
 	report: string;
+	// The registrar's own label, such as "Final Unofficial Election Night
+	// Results". Null when the page omits it.
+	status: string | null;
 	contests: RovContest[];
 }
 
@@ -40,6 +43,7 @@ export function parseRovResults(html: string): RovResults | null {
 	if (!dateMatch || !report) return null;
 
 	const contests: RovContest[] = [];
+	let unreadable = false;
 	$('table[id^="electionResultsTable"]').each((_, table) => {
 		const name = $(table)
 			.find("h2")
@@ -65,13 +69,19 @@ export function parseRovResults(html: string): RovResults | null {
 					percent: cells.eq(3).text().trim(),
 				});
 			});
+		// A contest with no rows means the markup moved. Storing it would replace
+		// good counts with nothing.
+		if (choices.length === 0) unreadable = true;
 		choices.sort((a, b) => b.votes - a.votes);
 		contests.push({ name, choices });
 	});
 
+	if (unreadable) return null;
+
 	return {
 		electionDate: `${dateMatch[3]}-${dateMatch[1]}-${dateMatch[2]}`,
 		report,
+		status: $("#election-results-message").text().trim() || null,
 		contests,
 	};
 }
@@ -103,7 +113,11 @@ const scraper: ScraperDef = {
 					)
 					.join(", "),
 				occurred_at: `${results.electionDate}T00:00:00.000Z`,
-				meta: { report: results.report, choices: contest.choices },
+				meta: {
+					report: results.report,
+					status: results.status,
+					choices: contest.choices,
+				},
 			});
 		}
 		ctx.note(

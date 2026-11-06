@@ -341,6 +341,23 @@ export async function checkSingleSourceTos(
 			return { ok: false, status: "held", reason, hash: "" };
 		}
 
+		// Reviewed and anchor hashes stay put, so next week's bytes are compared
+		// against the version a human read, not against last week's noise.
+		const before = opts.db.getSourceTosStatus(sourceKey);
+		if (
+			config.ignore_volatile_drift &&
+			before.status === "enabled" &&
+			res.hash !== before.reviewedHash &&
+			classifyKnownDrift(opts.db, sourceKey, res.hash)?.verdict ===
+				"volatile-only"
+		) {
+			opts.db.recordSourceTosObservation(sourceKey, {
+				observedHash: res.hash,
+				checkedAt,
+			});
+			return { ok: true, status: "enabled", hash: res.hash };
+		}
+
 		opts.db.recordSourceTosCheck(sourceKey, {
 			observedHash: res.hash,
 			checkedAt,
@@ -681,7 +698,11 @@ async function main() {
 	for (const sourceKey of Object.keys(SOURCE_TOS_REGISTRY)) {
 		console.log(`Checking ToS for ${sourceKey}...`);
 		const result = await checkSingleSourceTos(sourceKey, { db });
-		if (!result.ok) {
+		// A hold we chose in tos-config.ts is the intended state, and a unit that
+		// fails for it every week would hide the drift hold this check exists for.
+		if (!result.ok && SOURCE_TOS_REGISTRY[sourceKey].status === "held") {
+			console.log(`  HELD by design: ${sourceKey} (${result.reason})`);
+		} else if (!result.ok) {
 			allOk = false;
 			console.error(
 				`  FAILED: ${sourceKey} status is now HELD (reason: ${result.reason}, observed hash: ${result.hash})`,

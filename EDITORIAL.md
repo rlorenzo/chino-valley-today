@@ -212,6 +212,10 @@ filters apply per item.
     Bulletin items are currently eligible for brief and podcast generation like
     any other press item. If that is not acceptable, a follow-up to Ms.
     Sciacqua should ask directly; until answered, treat this as unresolved.
+  - **Terms check (2026-11-06).** The terms page's bytes change weekly because
+    a stats script is named for the week, so this source compares the terms
+    text and links against the version last read in full. A difference there
+    still holds it. Every other source still holds on any byte change.
 
 ## Agency alert channels (decided 2026-08-17, amended 2026-08-18)
 

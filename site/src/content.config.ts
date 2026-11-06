@@ -130,4 +130,36 @@ const posts = defineCollection({
 		),
 });
 
-export const collections = { posts };
+// One file per election, revised in place by src/pipeline/election-page.ts.
+const elections = defineCollection({
+	loader: glob({ pattern: "*.json", base: "../content/elections" }),
+	schema: z.object({
+		election_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+		report: z.string(),
+		status: z.string().nullable(),
+		updated_at: z.coerce.date(),
+		source_url: z.string().url(),
+		contests: z
+			.array(
+				z.object({
+					group: z.string(),
+					name: z.string(),
+					choices: z
+						.array(
+							z.object({
+								name: z.string(),
+								votes: z.number().int(),
+								percent: z.string(),
+							}),
+						)
+						.nonempty(),
+				}),
+			)
+			.nonempty(),
+		history: z.array(
+			z.object({ report: z.string(), updated_at: z.coerce.date() }),
+		),
+	}),
+});
+
+export const collections = { posts, elections };
