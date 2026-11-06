@@ -125,7 +125,6 @@ test("policy-filters suite", async (t) => {
 			assert.equal(isPublicFigure("M. S. Alam"), true);
 			assert.equal(isPublicFigure("M. Alam"), true);
 			assert.equal(isPublicFigure("M. A. Alam"), false);
-			assert.equal(isPublicFigure("Sonja M. Shaw"), true);
 			assert.equal(isPublicFigure("SONJA SHAW"), true);
 			assert.equal(isPublicFigure("S. Shaw"), true);
 			assert.equal(isPublicFigure("Sonja M. Shaw"), true);
