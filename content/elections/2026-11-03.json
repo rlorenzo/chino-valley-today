@@ -1,0 +1,170 @@
+{
+	"election_date": "2026-11-03",
+	"report": "Summary Report #5",
+	"status": "Final Unofficial Election Night Results",
+	"updated_at": "2026-11-06T21:31:47.885Z",
+	"source_url": "https://results.rov.sbcounty.gov/",
+	"contests": [
+		{
+			"group": "City of Chino Hills",
+			"name": "Member, City Council District 1",
+			"choices": [
+				{
+					"name": "RAY MARQUEZ",
+					"votes": 2558,
+					"percent": "99.77%"
+				}
+			]
+		},
+		{
+			"group": "City of Chino Hills",
+			"name": "Member, City Council District 2",
+			"choices": [
+				{
+					"name": "PETER ROGERS",
+					"votes": 2224,
+					"percent": "69.13%"
+				},
+				{
+					"name": "SHANITA AYALA",
+					"votes": 993,
+					"percent": "30.87%"
+				}
+			]
+		},
+		{
+			"group": "City of Chino Hills",
+			"name": "Member, City Council District 4",
+			"choices": [
+				{
+					"name": "BRIAN JOHSZ",
+					"votes": 1508,
+					"percent": "57.91%"
+				},
+				{
+					"name": "JOSUE ESTRADA",
+					"votes": 1089,
+					"percent": "41.82%"
+				}
+			]
+		},
+		{
+			"group": "City of Chino Hills",
+			"name": "MEASURE J",
+			"choices": [
+				{
+					"name": "NO",
+					"votes": 8365,
+					"percent": "50.32%"
+				},
+				{
+					"name": "YES",
+					"votes": 8260,
+					"percent": "49.68%"
+				}
+			]
+		},
+		{
+			"group": "City of Chino",
+			"name": "Member, City Council District 2",
+			"choices": [
+				{
+					"name": "CURTIS BURTON",
+					"votes": 2434,
+					"percent": "52.82%"
+				},
+				{
+					"name": "JIMMY D. ALEXANDRIS",
+					"votes": 2167,
+					"percent": "47.03%"
+				}
+			]
+		},
+		{
+			"group": "City of Chino",
+			"name": "Member, City Council District 3",
+			"choices": [
+				{
+					"name": "MARC LUCIO",
+					"votes": 2194,
+					"percent": "67.74%"
+				},
+				{
+					"name": "M S ALAM",
+					"votes": 1040,
+					"percent": "32.11%"
+				}
+			]
+		},
+		{
+			"group": "City of Chino",
+			"name": "MEASURE F",
+			"choices": [
+				{
+					"name": "YES",
+					"votes": 10647,
+					"percent": "67.53%"
+				},
+				{
+					"name": "NO",
+					"votes": 5120,
+					"percent": "32.47%"
+				}
+			]
+		},
+		{
+			"group": "Chino Valley Unified School District",
+			"name": "Member, Governing Board Area 3",
+			"choices": [
+				{
+					"name": "FRANK E. GERDINE",
+					"votes": 3949,
+					"percent": "55.67%"
+				},
+				{
+					"name": "CHRIS SHAW",
+					"votes": 3143,
+					"percent": "44.31%"
+				}
+			]
+		},
+		{
+			"group": "Chino Valley Unified School District",
+			"name": "Member, Governing Board Area 4",
+			"choices": [
+				{
+					"name": "MEAGAN LICHTHART",
+					"votes": 4247,
+					"percent": "56.30%"
+				},
+				{
+					"name": "SHAUN SMITH",
+					"votes": 3289,
+					"percent": "43.60%"
+				}
+			]
+		},
+		{
+			"group": "Chino Valley Independent Fire District",
+			"name": "Member, Board of Directors Division 3",
+			"choices": [
+				{
+					"name": "TOM HAUGHEY",
+					"votes": 4192,
+					"percent": "73.02%"
+				},
+				{
+					"name": "LORING WILLIAMS",
+					"votes": 1544,
+					"percent": "26.89%"
+				}
+			]
+		}
+	],
+	"history": [
+		{
+			"report": "Summary Report #5",
+			"updated_at": "2026-11-06T21:31:47.885Z"
+		}
+	]
+}
