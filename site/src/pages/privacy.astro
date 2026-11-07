@@ -1,0 +1,146 @@
+---
+import Base from "../layouts/Base.astro";
+
+// Plain-language privacy policy. Every statement here describes how the site
+// actually runs; when the deployment changes (deploy/, the Caddyfile, a new
+// third-party service), this page changes with it. The effective date is the
+// date of the last substantive edit.
+const EFFECTIVE = "November 7, 2026";
+---
+
+<Base
+	title="Privacy — Chino Valley Today"
+	description="What Chino Valley Today collects about readers (almost nothing), what our hosting providers see, and how to reach us."
+>
+	<header class="legalhead">
+		<div class="shell legalhead__inner">
+			<h1 class="legalhead__title">Privacy</h1>
+			<p class="legalhead__date mark">Effective {EFFECTIVE}</p>
+		</div>
+	</header>
+
+	<div class="reading body prose">
+		<p>
+			Chino Valley Today is a local news site about Chino and Chino Hills. It
+			is built to be read, not to watch its readers. This page says what is
+			collected, by whom, and why.
+		</p>
+
+		<h2>The short version</h2>
+		<ul>
+			<li>No accounts, no sign-up, no newsletter list.</li>
+			<li>No analytics, advertising, or tracking scripts, and no cookies of our own.</li>
+			<li>
+				Our web server keeps a short-lived technical log of requests, as every
+				web server does.
+			</li>
+			<li>If you email us, we have your email.</li>
+			<li>We do not sell or share personal information.</li>
+		</ul>
+
+		<h2>When you read the site</h2>
+		<p>
+			Pages are plain HTML. Nearly every page ships no script at all, and the
+			fonts are served from our own server, so reading a page contacts no one
+			but us and our network provider.
+		</p>
+		<p>
+			<strong>Server logs.</strong> Our web server records each request: the
+			IP address it came from, the page, the time, and what your browser
+			reports about itself (its user agent). We use these logs only to keep
+			the site running and to investigate abuse, and they are kept for no more
+			than 30 days.
+		</p>
+		<p>
+			<strong>Cloudflare.</strong> Traffic reaches us through Cloudflare, which
+			provides the site's encryption and protects it from attacks. Cloudflare
+			processes the same request information to do that, and may set a
+			strictly necessary security cookie. Its handling is described in the
+			<a href="https://www.cloudflare.com/privacypolicy/" rel="noopener noreferrer"
+				>Cloudflare privacy policy</a
+			>.
+		</p>
+		<p>
+			<strong>Feeds and the podcast.</strong> The RSS feed and podcast episodes
+			are ordinary files on the same server, and requests for them are logged
+			the same way. Your feed reader or podcast app has its own privacy
+			practices.
+		</p>
+
+		<h2>When you email us</h2>
+		<p>
+			Mail to <a href="mailto:corrections@chinovalley.today"
+				>corrections@chinovalley.today</a
+			> is forwarded to the editor by Cloudflare Email Routing. We use your
+			message and address to answer you and to make any correction you report.
+			We do not add you to any list, and we do not publish your name or message
+			without asking.
+		</p>
+
+		<h2>Third-party content you choose to play</h2>
+		<p>
+			Some pages may feature a video hosted by a social platform, such as
+			TikTok. Nothing from that platform loads until you press play. When you
+			do, the video plays in the platform's own player, and the platform's
+			privacy policy applies to that player, including any cookies it sets.
+			Links that leave this site are governed by the site they lead to.
+		</p>
+
+		<h2>People named in the record</h2>
+		<p>
+			The site reports from public records: agendas, minutes, meeting video,
+			licence reports, and agency releases. Those records sometimes name
+			people. Our editorial rules limit when a private individual is named and
+			never name minors; see <a href="/about/">About</a>. To ask about an item
+			that names you, email the address above.
+		</p>
+
+		<h2>Children</h2>
+		<p>
+			The site is not directed at children and collects no information from
+			them.
+		</p>
+
+		<h2>Your choices and rights</h2>
+		<p>
+			You can read everything here without giving us anything. If you have
+			emailed us and want that correspondence deleted, or want to know what we
+			hold about you, email the address above and we will answer within 30
+			days. California residents have rights under the California Consumer
+			Privacy Act; we honor requests made under it, although we do not sell or
+			share personal information as that law defines those terms.
+		</p>
+
+		<h2>Changes</h2>
+		<p>
+			When this policy changes, the effective date at the top changes with it.
+			A change that collects more about readers will be explained on this page
+			before it takes effect.
+		</p>
+	</div>
+</Base>
+
+<style>
+	.legalhead {
+		background: var(--crate);
+		color: #fff;
+		border-bottom: 6px solid var(--placard);
+	}
+	.legalhead__inner {
+		padding-block: 1.9rem 2.2rem;
+		max-width: 44rem;
+	}
+	.legalhead__title {
+		margin: 0 0 0.6rem;
+		font-size: clamp(1.55rem, 1.2rem + 2vw, 2.5rem);
+		line-height: 1.16;
+		font-weight: 600;
+	}
+	.legalhead__date {
+		margin: 0;
+		font-size: 0.78rem;
+	}
+	.body {
+		padding-block: 2.4rem 1rem;
+	}
+</style>
