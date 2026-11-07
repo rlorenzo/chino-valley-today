@@ -26,7 +26,10 @@
 		"scripts/*.ts",
 		"src/scrapers/*.ts",
 		"src/**/*.test.ts",
-		"scripts/**/*.test.ts"
+		"scripts/**/*.test.ts",
+		// Browser scripts served from site/public/ and loaded by a <script src>,
+		// which no import graph sees (components/CreatorVideoScript.astro).
+		"site/public/js/*.js"
 	],
 
 	"duplicates": {

@@ -420,6 +420,15 @@ deploy_local() {
 	echo "==> building on host from the local checkout"
 	[ -d "$ROOT/site" ] || { echo "deploy: no site/ directory here" >&2; exit 66; }
 
+	# The /creators/ data is derived from the database, so regenerate it before
+	# every build. The dashboard writes it on each change, but a code update's
+	# `git reset --hard` can roll the files back to their last commit before
+	# push-posts.sh has committed them, and the database is the truth. Only
+	# where a database exists: a fresh checkout keeps its committed copy.
+	if [ -n "${CVT_DB:-}" ] || [ -f "$ROOT/data/cvtoday.db" ]; then
+		(cd "$ROOT" && node src/creators/export.ts)
+	fi
+
 	# No --silent. It hides npm's own failures: when node_modules was
 	# root-owned, `npm ci` could not delete it, and all that reached the CI log
 	# was "exit code 243" with not one line of explanation.
@@ -610,7 +619,7 @@ pull_data() {
 	# deleted three lines down — so a cp'd backup is missing exactly the data it
 	# exists to preserve.
 	local kept=0
-	if [ -f "$ROOT/data/cvtoday.db" ]; then
+	if [ -n "${CVT_DB:-}" ] || [ -f "$ROOT/data/cvtoday.db" ]; then
 		sqlite3 "$ROOT/data/cvtoday.db" ".backup '$ROOT/data/cvtoday.db.bak'"
 		kept=1
 	fi

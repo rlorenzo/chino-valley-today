@@ -307,6 +307,7 @@ const CSS = `
   button.pass { background: #14611e; color: #fff; border-color: #14611e; }
   button.fail { background: #9c1414; color: #fff; border-color: #9c1414; }
   label.ack { display: block; margin: .4rem 0; font-weight: 700; }
+  .card label { display: block; margin: .4rem 0; }
   textarea, input[type=text] { font: inherit; padding: .3rem; width: 100%; max-width: 26rem; }
   .error-box { background: #fbe6e6; border: 1px solid #9c1414; color: #9c1414; padding: 1rem; margin: 1rem 0; }
 `;
