@@ -360,6 +360,28 @@ describe("checkDegradedSources", () => {
 		assert.match(late.reason, /pull is overdue/);
 	});
 
+	test("a manual-pull source with no failures still goes overdue", () => {
+		// No timer runs these, so the only runs on record are past successful
+		// pulls. A missed pull has to raise the alarm without any failure.
+		const db = openDb(":memory:");
+		for (let i = 0; i < 3; i++)
+			insertRunAt(
+				db,
+				"chinohills-swagit",
+				"success",
+				`2026-09-1${i}T20:00:00.000Z`,
+			);
+
+		const within = new Date("2026-09-15T12:00:00.000Z");
+		const [ok] = checkDegradedSources(db, ["chinohills-swagit"], within);
+		assert.equal(ok.degraded, false);
+
+		const overdue = new Date("2026-09-27T12:00:00.000Z");
+		const [late] = checkDegradedSources(db, ["chinohills-swagit"], overdue);
+		assert.equal(late.degraded, true);
+		assert.match(late.reason, /pull is overdue/);
+	});
+
 	test("a quiet-is-healthy source with 3 failures is still degraded", () => {
 		const db = openDb(":memory:");
 		insertRun(db, "breeze-news", "failure", 0);

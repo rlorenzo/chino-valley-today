@@ -29,8 +29,8 @@ Ask whether any new Chino Hills minutes are waiting. If so, run the
 
 ## 2. Pull transcripts
 
-YouTube (bot check) and Swagit (HTTP 403) block the droplet's IP, so the
-daily `cvt-scrape-media` run fails and meetings get no transcript. Record
+YouTube (bot check) and Swagit (HTTP 403) block the droplet's IP, so no timer
+runs these scrapers and this pull is the only way meetings get a transcript. Record
 the three transcript scrapers on this Mac, then replay the recording on the
 droplet (`src/replay.ts`). A temp DB and raw root keep the local
 `data/` untouched and force a full fetch, because a local DB that already
@@ -53,8 +53,9 @@ rm -rf $T
 The replay counts should match the recording's `itemsSeen`, and on the
 droplet `itemsNew` is how many were actually new. A record-side failure
 means the source is down from here too: report it and carry on without
-that source. **Never put `CVT_REPLAY_DIR` in the droplet's `.env`.** The
-timer failing is the only sign that this pull is still needed.
+that source. **Never put `CVT_REPLAY_DIR` in the droplet's `.env`.** It
+would replay a stale recording as if it were a fresh scrape. `/health` reads
+`sources=degraded` if this pull is missed for 8 days.
 
 Coverage is what the scrapers pick, not a backfill: Swagit takes the newest
 Chino Hills meeting with a transcript, Chino YouTube the two newest

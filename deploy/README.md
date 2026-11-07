@@ -108,7 +108,7 @@ apt-get update && apt-get install -y rclone
 # 5. yt-dlp, for the YouTube caption scrapers. NOT from apt — Ubuntu ships a
 #    stale build and YouTube changes break old versions regularly. The official
 #    standalone binary self-updates with `yt-dlp -U`. Without it, both YouTube
-#    scrapers fail with ENOENT and the media group exits non-zero.
+#    scrapers fail with ENOENT.
 curl -fsSL -o /usr/local/bin/yt-dlp \\
   https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
 chmod 755 /usr/local/bin/yt-dlp
@@ -327,7 +327,6 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 | `cvt-scrape-frequent` | hourly at :17 | news RSS, NWS alerts + forecast, fire feeds, sheriff, Nixle mail |
 | `cvt-scrape-daily` | 05:40 | Legistar, Agenda Center, AgendaQuick, CVUSD, ABC, event calendars |
 | `cvt-tiera` | 05:50 | *not a scrape* — generates + publishes Tier A posts, rebuilds the site |
-| `cvt-scrape-media` | 07:30 | Swagit video, YouTube captions |
 | `cvt-brief` | 06:00 | daily brief assembly + site rebuild (no scraping) |
 | `cvt-podcast` | Mon 06:30, 09:30, 12:30 | weekly podcast episode (idempotent, see the timer) |
 | `cvt-podcast-watch` | Mon 14:00 | flips `/health` if that week's episode is missing |
@@ -349,7 +348,7 @@ run missed during a reboot fires once afterwards instead of being skipped.
 
 ```bash
 systemctl enable --now cvt-scrape-frequent.timer cvt-scrape-daily.timer \
-                       cvt-tiera.timer cvt-scrape-media.timer cvt-brief.timer \
+                       cvt-tiera.timer cvt-brief.timer \
                        cvt-drift-watch.timer \
                        cvt-brief-watch.timer cvt-backup.timer cvt-podcast.timer \
                        cvt-podcast-watch.timer
@@ -474,7 +473,6 @@ set them in `.env`:
 | --- | --- | --- |
 | `CVT_HEARTBEAT_URL_FREQUENT` | hourly at :17 | 90 min |
 | `CVT_HEARTBEAT_URL_DAILY` | 05:40 Pacific | 30 h |
-| `CVT_HEARTBEAT_URL_MEDIA` | 07:30 Pacific | 30 h |
 
 Unset means no ping and no alarm, which is the right default on a developer
 machine. A failed ping never fails the scrape run itself.

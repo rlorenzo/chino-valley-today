@@ -24,12 +24,11 @@ export interface SourceDegradedResult {
 	runs: ScrapeRunSummary[];
 }
 
-// Sources whose timer fails by design while the droplet's IP is blocked, and
-// which succeed only when a person replays a recording from their own machine
-// (src/replay.ts, the meeting-recaps skill's weekly pull). Their failing runs
-// are expected; going this long without ANY success is not, because it means
-// the pull was missed.
-const MANUAL_PULL_GRACE_DAYS: Record<string, number> = {
+// Sources the droplet's IP is blocked from, so no timer runs them: they succeed
+// only when a person replays a recording from their own machine (src/replay.ts,
+// the meeting-recaps skill's weekly pull). Going this long without a success
+// means the pull was missed.
+export const MANUAL_PULL_GRACE_DAYS: Record<string, number> = {
 	"chinohills-swagit": 8,
 	"chino-youtube-captions": 8,
 	"youtube-captions": 8,
@@ -49,7 +48,8 @@ const HELD_PREFIX = "Scraper held:";
 //
 // The 3-failures rule applies to every source, with two exceptions: a source
 // the ToS registry holds by design (a decision already made, not a breakage),
-// and a manual-pull source still inside its grace window.
+// and a manual-pull source, which is judged on the age of its last success
+// instead, because nothing runs it between pulls.
 // The 3-zero-items rule needs to know whether quiet is this source's normal
 // state, which QUIET_IS_HEALTHY declares per source and a test holds to the
 // registry.
@@ -101,29 +101,8 @@ export function checkDegradedSources(
 			};
 		}
 
-		if (runs.every((r) => r.status === "failure")) {
-			const graceDays = MANUAL_PULL_GRACE_DAYS[sourceKey];
-			if (graceDays !== undefined) {
-				const [row] = lastSuccess.all(sourceKey) as Array<{
-					at: string | null;
-				}>;
-				const ageDays = row?.at
-					? (now.getTime() - Date.parse(row.at)) / 86_400_000
-					: Number.POSITIVE_INFINITY;
-				return ageDays <= graceDays
-					? {
-							sourceKey,
-							degraded: false,
-							reason: `timer runs fail by design (blocked IP); last manual pull ${row?.at} is within ${graceDays} days`,
-							runs,
-						}
-					: {
-							sourceKey,
-							degraded: true,
-							reason: `no successful run in ${graceDays} days: the manual transcript pull is overdue (meeting-recaps skill)`,
-							runs,
-						};
-			}
+		const graceDays = MANUAL_PULL_GRACE_DAYS[sourceKey];
+		if (graceDays === undefined && runs.every((r) => r.status === "failure")) {
 			return {
 				sourceKey,
 				degraded: true,
@@ -145,6 +124,28 @@ export function checkDegradedSources(
 						sourceKey,
 						degraded: true,
 						reason: "last 3 runs all succeeded but extracted 0 items",
+						runs,
+					};
+		}
+
+		if (graceDays !== undefined) {
+			const [row] = lastSuccess.all(sourceKey) as Array<{
+				at: string | null;
+			}>;
+			const ageDays = row?.at
+				? (now.getTime() - Date.parse(row.at)) / 86_400_000
+				: Number.POSITIVE_INFINITY;
+			return ageDays <= graceDays
+				? {
+						sourceKey,
+						degraded: false,
+						reason: `last manual pull ${row?.at} is within ${graceDays} days`,
+						runs,
+					}
+				: {
+						sourceKey,
+						degraded: true,
+						reason: `no successful run in ${graceDays} days: the manual transcript pull is overdue (meeting-recaps skill)`,
 						runs,
 					};
 		}
