@@ -8,7 +8,7 @@
 #
 #   scripts/run-group.sh frequent
 #   scripts/run-group.sh daily
-#   scripts/run-group.sh media
+#   scripts/run-group.sh press
 #
 # Each scraper runs in its own `node` process, and a failure in one does NOT
 # stop the rest — the same independent-try/catch contract `npm run poc` gives.
@@ -49,11 +49,11 @@ case "$group" in
 	daily)
 		keys=(chino-legistar chino-agendacenter chinohills-agendas cvusd-board abc-licenses sbclib-events sbparks-events cbwcd-events yanksair-events planesoffame-events cvusd-calendar chinotheatre-events chinohigh-sports ayala-sports donlugo-sports chinohills-sports chinohills-minutes rov-results)
 		;;
-	# Video and captions. Expensive in time and bandwidth, and captions do not
-	# exist until well after a meeting ends, so this runs the morning after.
-	media)
-		keys=(chinohills-swagit youtube-captions chino-youtube-captions)
-		;;
+	# The transcript scrapers (chinohills-swagit, youtube-captions,
+	# chino-youtube-captions) are deliberately in no group. YouTube and Swagit
+	# block the droplet's IP, so they run from a person's machine and are replayed
+	# here: see MANUAL_PULL_GRACE_DAYS in src/pipeline/source-health.ts and the
+	# meeting-recaps skill.
 	# champion-news is deliberately absent, and unregistered besides (2026-08-26):
 	# its terms prohibit the access this project performs, and a written
 	# permission request is with the Publisher. See src/gates/tos-config.ts.
@@ -71,7 +71,7 @@ case "$group" in
 		keys=(dailybulletin-news quest-news bulldogtimes-news breeze-news sbcsentinel-news ievoice-news)
 		;;
 	*)
-		echo "usage: $0 <frequent|daily|media|press>" >&2
+		echo "usage: $0 <frequent|daily|press>" >&2
 		exit 64
 		;;
 esac

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { MANUAL_PULL_GRACE_DAYS } from "../pipeline/source-health.ts";
 import { SCRAPERS } from "./registry.ts";
 
 // A scraper that is registered but belongs to no scrape group is merged and
@@ -46,7 +47,11 @@ describe("scrape groups", () => {
 		// Also the backstop on the parse above: if the regex stops matching the
 		// shell, the keys it drops show up here as orphans rather than as an
 		// empty map that every other assertion passes against.
-		const orphans = Object.keys(SCRAPERS).filter((k) => !scheduled.has(k));
+		// Manual-pull sources are run by a person, and the source-health grace
+		// window is what notices when that stops happening.
+		const orphans = Object.keys(SCRAPERS).filter(
+			(k) => !scheduled.has(k) && !Object.hasOwn(MANUAL_PULL_GRACE_DAYS, k),
+		);
 		assert.deepEqual(
 			orphans,
 			[],
