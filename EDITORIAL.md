@@ -265,6 +265,8 @@ release and both still live hazards:
   ingested via email subscription (its intended delivery), never page
   scraping. Cited URL = the nixle.us permalink in the message.
 - User-generated platforms (Facebook, Nextdoor) remain excluded as sources.
+  Local creators' TikTok posts are not a source either; they are featured as
+  attribution under "Local creators" below.
 - **Commercial venues are sourced from the event's organizer, not the venue's
   own site, where the venue's terms prohibit automated access (amended
   2026-09-19).** The Shops at Chino Hills was probed on 2026-09-19 and
@@ -279,6 +281,45 @@ release and both still live hazards:
   organizer who publishes the event themselves. Prefer the organizer anyway,
   terms aside — the organizer is the party who can correct the record.
   Reasoning and the full probe in `reports/notes/shoppes-events.md`.
+
+## Local creators (operator decision, 2026-11-07)
+
+**Operator decision.** Residents who post videos about the Chino Valley are
+worth pointing readers to, so the site features hand-picked TikTok posts on
+`/creators/` and in the daily brief. This is a pointer service, like headlines
+elsewhere, and it does not reopen user-generated platforms as sources.
+
+- **Attribution, never provenance.** A creator post supports no claim on the
+  site. Its URL never joins `sources[]`, it never wears the violet stamp, and
+  nothing a creator says is restated as ours.
+- **Nothing is scraped.** The operator pastes a link into the dashboard. The
+  only contact with TikTok on that path is following a share short link's
+  redirect header. TikTok's terms prohibit automated collection, and the same
+  rule that rejected KTLA applies here.
+- **A person reviews every post before it publishes.** Adding a post requires
+  the dashboard acknowledgment, enforced server-side: the operator watched the
+  video, no child is its focus or identifiable in it, and no private person is
+  featured in a way they would object to. The minors rule under "Private
+  persons" governs; when in doubt, skip the post. A vision model may later be
+  used to flag a post for a closer look, but never to clear one.
+- **The words are ours.** Each post carries a one-line description written by
+  the operator (200 characters at most), never the creator's caption, and no
+  thumbnail or video is copied or hosted.
+- **Consent.** Linking a public post does not need the creator's permission,
+  but a profile on `/creators/` does: only creators who agreed are listed, with
+  the date and how. A creator who asks to be removed, or to have a post
+  removed, is taken down at the next rebuild. Removing a creator removes all
+  of their posts.
+- **Embedding.** The card is our own markup, with a plain link back to
+  TikTok. TikTok's player loads only when a reader presses play, and the card
+  says so, because the player sets TikTok's cookies. The site's CSP admits
+  `https://www.tiktok.com` in `frame-src` and nothing else.
+- **The automated path is not built yet.** When creators connect their own
+  accounts (TikTok Display API, creator OAuth), their Chino-related posts will
+  arrive queued (`origin = 'api'`) and need the same approval and
+  acknowledgment. Building it needs TikTok's app review, and its Developer
+  Terms limit display to a "personal" basis, so we need TikTok's written
+  agreement to news-site use first, as with the Daily Bulletin.
 
 ## Corrections
 

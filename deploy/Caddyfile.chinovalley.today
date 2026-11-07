@@ -82,7 +82,12 @@ chinovalley.today, www.chinovalley.today {
 		# The site ships zero client JS by default, so the CSP can be strict
 		# enough to be worth having. 'unsafe-inline' for style-src only:
 		# Astro emits scoped <style> blocks.
-		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+		#
+		# frame-src admits exactly one origin, TikTok's, for the local-creator
+		# cards (EDITORIAL.md "Local creators"). The iframe is created only when
+		# a reader presses play (site/public/js/creator-video.js), so a page
+		# nobody plays a video on makes no request to TikTok at all.
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; frame-src https://www.tiktok.com; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"

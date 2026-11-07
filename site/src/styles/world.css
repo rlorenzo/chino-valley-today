@@ -743,3 +743,88 @@ img {
 	padding-left: 1.25rem;
 	color: var(--muted);
 }
+
+/* Local creators: hand-picked TikTok posts (components/CreatorVideos.astro).
+   Attribution, not provenance, so these wear crate like the press links and
+   never the violet stamp. Square corners like everything else. The player is
+   TikTok's own iframe, swapped in on press; before that the card is ours. */
+.creator-videos {
+	margin-block: 1.6rem;
+}
+.creator-videos__list {
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	display: grid;
+	gap: 1rem;
+}
+.creator-video {
+	border-left: 4px solid var(--crate);
+	background: var(--galv-sunk);
+	padding: 0.8rem 1rem;
+}
+.creator-video p {
+	margin: 0 0 0.45rem;
+}
+.creator-video__by {
+	font-size: 0.85rem;
+}
+/* Scoped under .prose like .headlines-elsewhere: every card renders inside
+   one (the brief body, the index's brief, /creators/). */
+.prose .creator-video a {
+	display: inline;
+	white-space: normal;
+	font-family: inherit;
+	color: var(--crate);
+	text-decoration: underline;
+}
+.prose .creator-video a::before {
+	content: none;
+}
+.prose .creator-video a:hover,
+.prose .creator-video a:focus-visible {
+	background: var(--crate);
+	color: #fff;
+	text-decoration: none;
+}
+.creator-video__handle {
+	color: var(--muted);
+	font-weight: 400;
+	text-transform: none;
+	letter-spacing: 0;
+}
+.creator-video__play {
+	border: 2px solid var(--crate);
+	background: var(--crate);
+	color: #fff;
+	padding: 0.5rem 0.9rem;
+	font-size: 0.85rem;
+	cursor: pointer;
+	border-radius: var(--radius);
+	margin-block: 0.2rem 0.5rem;
+}
+.creator-video__play:hover,
+.creator-video__play:focus-visible {
+	background: var(--crate-deep);
+	outline: 3px solid var(--placard);
+	outline-offset: 2px;
+}
+.creator-video__frame {
+	display: block;
+	width: min(100%, 325px);
+	aspect-ratio: 325 / 578;
+	border: 0;
+	margin-block: 0.2rem 0.6rem;
+	background: var(--stencil);
+}
+.creator-video__foot {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 0.3rem 0.8rem;
+	align-items: baseline;
+	font-size: 0.85rem;
+}
+.creator-video__note {
+	color: var(--muted);
+	font-size: 0.92em;
+}

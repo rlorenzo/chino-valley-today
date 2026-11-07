@@ -1,5 +1,5 @@
 import { defineCollection, z } from "astro:content";
-import { glob } from "astro/loaders";
+import { file, glob } from "astro/loaders";
 
 // This schema is the last-line validator, after Gate 1 and Gate 2.
 //
@@ -12,6 +12,23 @@ import { glob } from "astro/loaders";
 // Posts are read from the repo's own content/published/ directory — the site does
 // not own or copy the corpus, it renders it. Only `published` is built; queue,
 // held and rejected are working state and must never reach the public site.
+// A local creator's featured TikTok post (EDITORIAL.md "Local creators"),
+// written by src/creators/export.ts and by the daily brief.
+const tiktokVideoUrl = z
+	.string()
+	.regex(/^https:\/\/www\.tiktok\.com\/@[a-z0-9._]{2,24}\/video\/\d{15,20}$/);
+const tiktokProfileUrl = z
+	.string()
+	.regex(/^https:\/\/www\.tiktok\.com\/@[a-z0-9._]{2,24}$/);
+const creatorVideo = z.object({
+	video_id: z.string().regex(/^\d{15,20}$/),
+	url: tiktokVideoUrl,
+	handle: z.string(),
+	display_name: z.string(),
+	profile_url: tiktokProfileUrl,
+	description: z.string().min(1).max(200),
+});
+
 const posts = defineCollection({
 	loader: glob({
 		pattern: "**/*.md",
@@ -82,6 +99,13 @@ const posts = defineCollection({
 
 			// Secondary press links cited for attribution rather than primary civic provenance.
 			attributions: z.array(z.string().url()).optional(),
+
+			// daily-brief only: the local creators' TikTok posts its body carries
+			// as click-to-play cards. Its presence is what makes a page ship
+			// /js/creator-video.js; the cards themselves are in the body. Only
+			// TikTok video URLs are accepted, so a bad row fails the build rather
+			// than putting an arbitrary link behind a "Watch on TikTok" label.
+			creator_videos: z.array(creatorVideo).optional(),
 
 			// Topics are classified by the pipeline (src/pipeline/topics.ts), which
 			// owns the source keys and item types that identify a subject. The site
@@ -162,4 +186,26 @@ const elections = defineCollection({
 	}),
 });
 
-export const collections = { posts, elections };
+// The /creators/ page. One file each, rewritten whole by src/creators/export.ts
+// (a removal has to reach git, and push-posts.sh never stages deletions).
+// Profiles exist only for creators who agreed to be featured.
+const creators = defineCollection({
+	loader: file("../content/creators/creators.json"),
+	schema: z.object({
+		platform: z.literal("tiktok"),
+		handle: z.string(),
+		display_name: z.string(),
+		covers: z.string().nullable(),
+		profile_url: tiktokProfileUrl,
+	}),
+});
+
+const creatorVideos = defineCollection({
+	loader: file("../content/creators/videos.json"),
+	schema: creatorVideo.extend({
+		platform: z.literal("tiktok"),
+		published_at: z.coerce.date(),
+	}),
+});
+
+export const collections = { posts, elections, creators, creatorVideos };

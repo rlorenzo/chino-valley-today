@@ -1,0 +1,75 @@
+---
+/**
+ * Local creators' TikTok posts as click-to-play cards (EDITORIAL.md "Local
+ * creators"). The only page script this ships is /js/creator-video.js, and a
+ * page without creator videos never renders this component, so it costs those
+ * pages nothing: the same rule PodcastPlayer follows.
+ *
+ * These are attribution, never provenance. The description is the operator's
+ * own line; the creator's name and the link back are what make it attribution.
+ * Nothing here is a thumbnail or a caption copied from TikTok.
+ */
+import CreatorVideoScript from "./CreatorVideoScript.astro";
+
+// Same markup as renderCreatorVideoCards in src/pipeline/daily-brief.ts, which
+// writes these cards into a brief's body; keep the two in step.
+interface Video {
+	video_id: string;
+	url: string;
+	handle: string;
+	display_name: string;
+	profile_url: string;
+	description: string;
+}
+
+interface Props {
+	videos: Video[];
+	/** Heading level and text; the brief and /creators/ phrase it differently. */
+	heading?: string;
+	headingLevel?: 2 | 3;
+}
+
+const { videos, heading = "From local creators", headingLevel = 2 } = Astro.props;
+const H = `h${headingLevel}`;
+---
+
+{
+	videos.length > 0 && (
+		<section class="creator-videos" aria-label={heading}>
+			{heading && <H class="creator-videos__heading">{heading}</H>}
+			<ul class="creator-videos__list">
+				{videos.map((v) => (
+					<li class="creator-video">
+						<p class="creator-video__by mark">
+							<a class="headline-link" href={v.profile_url} rel="noopener noreferrer">
+								{v.display_name}
+							</a>{" "}
+							<span class="creator-video__handle">@{v.handle} on TikTok</span>
+						</p>
+						<p class="creator-video__desc">{v.description}</p>
+						<div class="creator-video__stage">
+							<button
+								type="button"
+								class="creator-video__play mark"
+								data-tiktok-play={v.video_id}
+								data-title={`${v.display_name} on TikTok: ${v.description}`}
+								hidden
+							>
+								▶ Play here
+							</button>
+						</div>
+						<p class="creator-video__foot">
+							<a class="headline-link" href={v.url} rel="noopener noreferrer">
+								Watch on TikTok
+							</a>
+							<span class="creator-video__note">
+								Playing here loads the video from TikTok, which may set cookies.
+							</span>
+						</p>
+					</li>
+				))}
+			</ul>
+			<CreatorVideoScript />
+		</section>
+	)
+}

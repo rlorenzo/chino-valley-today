@@ -12,6 +12,7 @@ import {
 	typeLabel,
 } from "../lib/record.ts";
 import { archiveDocumentFor } from "../lib/archive.ts";
+import CreatorVideoScript from "./CreatorVideoScript.astro";
 import PodcastPlayer from "./PodcastPlayer.astro";
 
 interface Props {
@@ -99,6 +100,7 @@ const chapters = post.data.chapters ?? [];
 		<div class="prose">
 			<Content />
 		</div>
+		{(post.data.creator_videos?.length ?? 0) > 0 && <CreatorVideoScript />}
 
 		{/*
 		  THE INSPECTION RECORD.

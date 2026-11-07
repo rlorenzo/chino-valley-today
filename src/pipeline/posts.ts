@@ -49,6 +49,13 @@ export interface NewPost {
 	// daily-brief only: structured week-ahead calendar events, rendered by the
 	// site (the index's "coming up" rail) rather than by the markdown body.
 	eventsAhead?: BriefEventAhead[];
+	// daily-brief only: local creators' TikTok posts featured since the last
+	// brief, hand-picked in the dashboard. Rendered by the site as click-to-play
+	// cards, not by the markdown body, because the card needs its script and the
+	// script must ship only on pages that carry one (EDITORIAL.md "Local
+	// creators"). Attribution, never provenance: these join neither sources[]
+	// nor any claim.
+	creatorVideos?: BriefCreatorVideo[];
 	// podcast only: the rendered episode. The audio is the post — the markdown
 	// body is its transcript — so the file carries enough for the site to build
 	// a player and a feed entry without re-reading the audio.
@@ -85,6 +92,15 @@ export interface BriefEventAhead {
 	// keeps its own listing; `url` is the first of them, so anything reading
 	// only the flat shape still lands on a real calendar page.
 	closed?: { label: string; url: string }[];
+}
+
+export interface BriefCreatorVideo {
+	video_id: string;
+	url: string; // canonical https://www.tiktok.com/@handle/video/<id>
+	handle: string;
+	display_name: string;
+	profile_url: string;
+	description: string; // the operator's line, never the creator's caption
 }
 
 const DIR_BY_STATUS: Record<PostStatus, string> = {
@@ -242,6 +258,19 @@ export function renderPostFile(p: NewPost, createdAt: string): string {
 									]),
 								]
 							: []),
+					]),
+				]
+			: []),
+		...(p.creatorVideos?.length
+			? [
+					"creator_videos:",
+					...p.creatorVideos.flatMap((v) => [
+						`  - video_id: ${y(v.video_id)}`,
+						`    url: ${y(v.url)}`,
+						`    handle: ${y(v.handle)}`,
+						`    display_name: ${y(v.display_name)}`,
+						`    profile_url: ${y(v.profile_url)}`,
+						`    description: ${y(v.description)}`,
 					]),
 				]
 			: []),
