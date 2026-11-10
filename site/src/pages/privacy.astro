@@ -5,6 +5,7 @@ import Base from "../layouts/Base.astro";
 // actually runs; when the deployment changes (deploy/, the Caddyfile, a new
 // third-party service), this page changes with it. The effective date is the
 // date of the last substantive edit.
+const MAIL = "corrections@chinovalley.today";
 const EFFECTIVE = "November 10, 2026";
 ---
 
@@ -23,7 +24,7 @@ const EFFECTIVE = "November 10, 2026";
 		<p>
 			Chino Valley Today is a local news site about Chino and Chino Hills. It
 			collects very little about its readers. This page explains what is
-			collected when you use the site and who collects it.
+			collected and who collects it.
 		</p>
 
 		<h2>The short version</h2>
@@ -31,12 +32,8 @@ const EFFECTIVE = "November 10, 2026";
 			<li>No accounts, no sign-up, no newsletter list.</li>
 			<li>No advertising, no tracking across sites, and no cookies of our own.</li>
 			<li>
-				Page views are counted by Cloudflare Web Analytics, which uses no
-				cookies.
-			</li>
-			<li>
-				Our web server and our network provider, Cloudflare, handle technical
-				request data such as IP addresses.
+				Cloudflare, our network provider, counts page views without cookies
+				and handles technical request data such as IP addresses.
 			</li>
 			<li>If you email us, we keep your message and address so we can reply.</li>
 			<li>We do not sell personal information or share it for advertising.</li>
@@ -44,71 +41,71 @@ const EFFECTIVE = "November 10, 2026";
 
 		<h2>When you read the site</h2>
 		<p>
-			Pages are plain HTML, and the fonts are served from our own server.
-			Reading a page contacts only us and Cloudflare, our network provider.
-			Each page loads one small Cloudflare script that counts the visit. A few
-			pages run one more, such as the podcast player or the script Cloudflare
-			uses to hide our email address from spam harvesters.
+			Pages are plain HTML, and the fonts come from our own server. Reading a
+			page contacts only us and Cloudflare, our network provider.
 		</p>
 		<p>
-			We use Cloudflare Web Analytics to see which pages people read. Its
-			script reports each page view to Cloudflare: the page address, the page
-			that referred you, how long the page took to load, and general details
-			such as your browser type and country. It sets no cookies, stores
-			nothing in your browser, and does not follow you from site to site. We
-			see totals, never a record of an individual reader. If your browser
-			blocks the script, the site works the same without it.
+			Each page loads a small Cloudflare Web Analytics script so we can see
+			which pages people read. It reports the page address, the page that
+			referred you, how long the page took to load, and general details such
+			as your browser type and country. It sets no cookies, stores nothing in
+			your browser, and does not follow you from site to site. The site
+			responds the same whether or not your browser sends a Do Not Track
+			signal. In these statistics we see totals, never one reader's history.
+			If your browser blocks the script, the site works the same.
+		</p>
+		<p>
+			Some pages load one or two more small scripts: the podcast player, and
+			one Cloudflare uses to keep our email address from spam harvesters.
 		</p>
 		<p>
 			Our web server keeps no log of ordinary page requests. When a request
-			fails, for example a request for a page that does not exist, the server
-			records it in its system log: the address requested, the time, what your
-			browser reports about itself (its user agent), and the network address
-			the request came from. Requests reach us through Cloudflare, so that
-			address is usually Cloudflare's, though the entry may also include your
-			IP address as Cloudflare passes it along. We use these entries only to
-			keep the site running and to investigate abuse. The system log deletes
-			its oldest entries as it fills, which can take several months.
+			fails, for example for a page that does not exist, the server records
+			it in its system log: the page requested, the time, the headers your
+			browser sent (such as its user agent and the referring page), and the
+			IP address the request came from. That is usually Cloudflare's address,
+			though the entry can also include yours as Cloudflare passes it along.
+			We use these entries to keep the site running and investigate abuse, or
+			when the law requires. The system log deletes its oldest entries as it
+			fills, which can take several months.
 		</p>
 		<p>
 			Traffic reaches us through Cloudflare, which provides the site's
-			encryption and protects it from attacks. To do that, Cloudflare processes
-			the same request information, including your IP address, and shows us
-			traffic statistics, such as which pages are requested most and which
-			addresses send the most requests. It may also set a strictly necessary
+			encryption and protects it from attacks. To do that it processes the
+			same request information, including your IP address, and shows us
+			traffic statistics, such as the most requested pages and the IP
+			addresses sending the most requests. It may set a strictly necessary
 			security cookie when it needs to check that a request is not an attack.
-			Its handling is
-			described in the
-			<a href="https://www.cloudflare.com/privacypolicy/" rel="noopener noreferrer"
-				>Cloudflare privacy policy</a
+			See the
+			<a
+				class="headline-link"
+				href="https://www.cloudflare.com/privacypolicy/"
+				rel="noopener noreferrer">Cloudflare privacy policy</a
 			>.
 		</p>
 		<p>
-			The RSS feed and podcast episodes are ordinary files on the same server,
-			and requests for them are handled the same way. Your feed reader or
-			podcast app has its own privacy practices. Other sites we link to have
-			their own privacy policies.
+			Requests for the RSS feed and podcast episodes are handled the same way.
+			Feed readers, podcast apps, and sites we link to have their own privacy
+			practices.
 		</p>
 
 		<h2>When you email us</h2>
 		<p>
-			Mail to <a href="mailto:corrections@chinovalley.today"
-				>corrections@chinovalley.today</a
-			> is forwarded by Cloudflare Email Routing to the editor's inbox, which
-			is hosted by a third-party email provider. We use your message and
-			address to answer you and to make any correction you report. We do not
-			add you to any list, and we will not publish your name or message
-			without your permission.
+			Mail to <a href={`mailto:${MAIL}`}>{MAIL}</a> is forwarded by Cloudflare
+			Email Routing to the editor's inbox, which a third-party email provider
+			hosts. We use your message and address to answer you and to make any
+			correction you report. We do not add you to any list, and we will not
+			publish your name or message without your permission.
 		</p>
 
 		<h2>People named in the record</h2>
 		<p>
 			The site reports from public records: agendas, minutes, meeting video,
-			licence reports, and agency releases. Those records sometimes name
-			people. Our editorial rules restrict naming private individuals and do
-			not allow naming minors. The <a href="/about/">About</a> page describes
-			how those items are reviewed. To ask about an item that names you, email
-			the address above.
+			license reports, and agency releases. Those records sometimes name
+			people. Our editorial rules limit when a private individual is named and
+			do not allow naming minors. Agency alerts appear as the agency's own
+			headline with a link to its page. To ask about an item that names you,
+			email <a href={`mailto:${MAIL}`}>{MAIL}</a>.
 		</p>
 
 		<h2>Children</h2>
@@ -120,20 +117,19 @@ const EFFECTIVE = "November 10, 2026";
 		<h2>Your choices and rights</h2>
 		<p>
 			You can read the whole site without an account and without giving us
-			your name or email address. If you have emailed us and want that
-			correspondence deleted, or want to know what we hold about you, email the
-			address above. We aim to answer within 30 days. The California Consumer
-			Privacy Act applies to businesses larger than this site, but we will
-			still act on a request to see or delete your information, wherever you
-			live. We do not sell or share personal information as that law defines
-			those terms.
+			your name or email address. To have your emails to us deleted, or to ask
+			what we hold about you, email
+			<a href={`mailto:${MAIL}`}>{MAIL}</a>. We aim to answer within 30 days.
+			We cannot look up or remove individual entries in technical logs. The
+			California Consumer Privacy Act applies to businesses larger than this
+			site, and we do not sell or share personal information as that law
+			defines those terms.
 		</p>
 
 		<h2>Changes</h2>
 		<p>
-			When this policy changes, the effective date at the top changes with it.
-			A change that collects more about readers will be explained on this page
-			before it takes effect.
+			When this policy changes, we update this page and the effective date at
+			the top.
 		</p>
 	</div>
 </Base>

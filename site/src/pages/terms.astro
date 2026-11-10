@@ -5,6 +5,7 @@ import Base from "../layouts/Base.astro";
 // the record links to its sources, other outlets are attributed,
 // and corrections are visible. The effective date is the date of the last
 // substantive edit.
+const MAIL = "corrections@chinovalley.today";
 const EFFECTIVE = "November 10, 2026";
 ---
 
@@ -22,17 +23,17 @@ const EFFECTIVE = "November 10, 2026";
 	<div class="reading body prose">
 		<p>
 			These terms apply to chinovalley.today and its feeds. By using the site
-			you agree to them. If anything in them is unclear, email
-			<a href="mailto:corrections@chinovalley.today"
-				>corrections@chinovalley.today</a
-			>.
+			you agree to them. The <a href="/privacy/">privacy policy</a> explains
+			what the site collects. If anything here is unclear, email
+			<a href={`mailto:${MAIL}`}>{MAIL}</a>.
 		</p>
 
 		<h2>What the site is</h2>
 		<p>
-			Chino Valley Today is an independent local news site. It reports what
-			public bodies in Chino and Chino Hills did, assembled from their public
-			records with automated checks and human review, as described on the
+			Chino Valley Today is an independent local news site covering Chino and
+			Chino Hills. Most of it is assembled from public records by automated
+			tools, including AI language models, with automated checks and human
+			review of sensitive items, as described on the
 			<a href="/about/">About</a> page. It is not affiliated with the City of
 			Chino, the City of Chino Hills, the Chino Valley Unified School District,
 			or any agency it covers.
@@ -40,27 +41,27 @@ const EFFECTIVE = "November 10, 2026";
 
 		<h2>The record is the authority</h2>
 		<p>
-			Civic claims on the site link to the record they came from. We work to
-			get each one right and we correct mistakes visibly, but the site is
-			provided as is, without warranties of any kind, express or implied.
-			Where this site and the primary record disagree, the primary record
-			controls. Nothing here is legal or other professional advice. Do not
-			rely on the site alone for legal, financial, safety, or
-			deadline-sensitive decisions; follow the link and confirm with the
-			agency. During an emergency, follow official alerts and instructions.
+			Reports here about what a public body did link to the record they came
+			from. We work to get each one right and we correct mistakes visibly, but
+			the site is provided as is, without warranties of any kind, express or
+			implied, including that it is accurate or complete. If this site and the
+			official record disagree, go by the record. Nothing here is legal or
+			other professional advice. Do not rely on the site alone for legal,
+			financial, safety, or deadline-sensitive decisions; follow the link and
+			confirm with the agency. During an emergency, follow official alerts and
+			instructions.
 		</p>
 
 		<h2>Other people's content</h2>
 		<p>
 			Headlines and short summaries from other news outlets are attributed to
-			them and link to their articles; those articles belong to their
-			publishers. We feature a story to point readers to it. Featuring it
-			does not endorse it, and what another outlet says is its statement, not
-			ours.
+			them and link to their articles, which belong to their publishers. We
+			feature a story to point readers to it. Featuring it does not endorse
+			it, and what another outlet says is its statement, not ours.
 		</p>
 		<p>
-			A publisher who wants their work removed from this site can
-			email the address above, and we will remove it promptly.
+			A publisher with a concern about how its work appears here can email
+			<a href={`mailto:${MAIL}`}>{MAIL}</a>.
 		</p>
 
 		<h2>Using what is here</h2>
@@ -73,29 +74,26 @@ const EFFECTIVE = "November 10, 2026";
 		</p>
 		<p>
 			Automated access is welcome within reason: use the
-			<a href="/rss.xml">RSS feed</a> where you can, identify your client
+			<a href="/rss.xml">RSS feed</a> where you can, identify your tool
 			honestly, and keep request rates modest. Do not attempt to disrupt the
 			site or get around its security.
 		</p>
 
 		<h2>Corrections</h2>
 		<p>
-			If something here is wrong, tell us. Corrections are made openly: the
-			original text stays, struck through, with a dated note. See
+			If something here is wrong, tell us. Corrections are normally made
+			openly: the original text stays, struck through, with a dated note. We
+			may remove text entirely where leaving it visible would cause harm, such
+			as a name that should not have been published. See
 			<a href="/about/">About</a> for how corrections are handled.
-		</p>
-
-		<h2>Privacy</h2>
-		<p>
-			The <a href="/privacy/">privacy policy</a> explains what the site
-			collects.
 		</p>
 
 		<h2>Liability</h2>
 		<p>
 			To the extent the law allows, Chino Valley Today and the people who run
-			it are not liable for any loss or damage arising from your use of the
-			site, your reliance on it, or the sites and services it links to.
+			it are not liable for any loss or damage, direct or indirect, arising
+			from errors or omissions on the site, your use of it or reliance on it,
+			or the sites and services it links to.
 		</p>
 
 		<h2>Changes and governing law</h2>
