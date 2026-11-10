@@ -45,13 +45,15 @@ const EFFECTIVE = "November 10, 2026";
 			and our network provider.
 		</p>
 		<p>
-			Our web server can log each request: the page, the time, what your
+			Our web server keeps no log of ordinary page requests. When a request
+			fails, for example a request for a page that does not exist, the server
+			records it in its system log: the address requested, the time, what your
 			browser reports about itself (its user agent), and the network address
 			the request came from. Requests reach us through Cloudflare, so that
-			address is usually Cloudflare's, though the log may also include your IP
-			address as Cloudflare passes it along. We use these logs only to keep the
-			site running and to investigate abuse. They sit in the server's system
-			log, which deletes old entries automatically.
+			address is usually Cloudflare's, though the entry may also include your
+			IP address as Cloudflare passes it along. We use these entries only to
+			keep the site running and to investigate abuse. The system log deletes
+			its oldest entries as it fills, which can take several months.
 		</p>
 		<p>
 			Traffic reaches us through Cloudflare, which provides the site's
