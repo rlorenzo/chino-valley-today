@@ -91,9 +91,14 @@ chinovalley.today, www.chinovalley.today {
 		-Server
 	}
 
-	# NO custom log file, deliberately. Access logs go to journald with
-	# everything else on this host (`journalctl -u caddy`), which is where the
-	# four co-tenant sites already log and where anyone debugging would look.
+	# NO access log, deliberately. With no `log` directive Caddy records no
+	# ordinary requests at all (checked on the host 2026-11-10: zero
+	# http.log.access entries in the journal). What does reach journald
+	# (`journalctl -u caddy`) is Caddy's error log: failed requests, with the
+	# request's address fields and headers. journald has no time-based retention
+	# set, so those entries age out only as the journal fills, which takes
+	# months. site/src/pages/privacy.astro describes exactly this; change the
+	# two together.
 	#
 	# A `log { output file ... }` block was tried and removed: the caddy service
 	# runs with ProtectSystem=full and could not open a file under /var/log/caddy
