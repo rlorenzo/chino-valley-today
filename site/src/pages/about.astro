@@ -19,7 +19,7 @@ const sourceCount = new Set(
 
 <Base
 	title="About — Chino Valley Today"
-	description="How Chino Valley Today is made: primary sources, automated checks, human review, and visible corrections."
+	description="How Chino Valley Today is made: primary sources, automated writing and checks, human review of sensitive items, and visible corrections."
 >
 	<header class="abouthead">
 		<div class="shell abouthead__inner">
@@ -59,40 +59,52 @@ const sourceCount = new Set(
 
 		<h2>What is checked before anything publishes</h2>
 		<p>
-			Entries are assembled from public documents and then routed by how much
-			judgment they need.
+			Most of this site is produced by software, and most entries publish
+			without a person reading them first. Entries are assembled from public
+			documents and then routed by how much judgment they need.
 		</p>
 		<ul>
 			<li>
 				<strong>Tier A</strong> is rendered directly from structured data with
-				no language model involved. A template that quotes verbatim and links
-				out cannot invent anything.
+				no language model involved, and publishes automatically. A template
+				that quotes verbatim and links out cannot invent anything.
 			</li>
 			<li>
-				<strong>Tier B</strong> is written from the source documents and must
-				pass two independent checks before it can publish: an automated pass
+				<strong>Tier B</strong> is written by an AI language model from the
+				source documents. It publishes automatically, with no person reading
+				it first, but only after two checks: an automated pass
 				that verifies every paragraph carries a citation, that every number and
 				date appears in the source material, and that every proper name is one
-				the sources actually used &mdash; and then a second review by a
-				different model, which can only hold a post, never clear one another
-				check has flagged.
+				the sources actually used &mdash; and then a review by a second AI
+				model, which can only hold a post, never clear one another check has
+				flagged. Each week a person reviews a sample of what published this
+				way.
 			</li>
 			<li>
-				<strong>Tier C</strong> is never automated. Anything naming a private
-				individual, anything involving a minor, and anything touching
-				allegations is held for a person to read and clear by hand.
+				<strong>Tier C</strong> is held for a person to read and clear by
+				hand: crime items naming a private individual, anything involving a
+				minor, and anything touching allegations. There is one exception.
+				Alerts from the Sheriff's notification channels publish automatically
+				as the agency's own headline and a link to its page, never the text of
+				the release. A headline can name a person. An alert that indicates a
+				minor is involved is still held.
 			</li>
 		</ul>
 		<p>
 			Anything that fails any check is held rather than published. A missed
 			week costs little; a wrong entry naming a resident costs trust that does
-			not come back.
+			not come back. AI models still make mistakes these checks can miss,
+			which is why every claim links to its source and corrections are
+			visible.
 		</p>
 
 		<h2>Corrections</h2>
 		<p>
 			Corrections are visible. A corrected entry keeps the original text struck
-			through with a dated note attached &mdash; never a silent edit.
+			through with a dated note attached &mdash; never a silent edit. Where
+			leaving the original visible would cause harm, such as a name that
+			should not have been published, the text is removed and the note says
+			so.
 		</p>
 		<p>
 			To report an error, email <a href="mailto:corrections@chinovalley.today"
