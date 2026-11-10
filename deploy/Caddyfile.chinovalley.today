@@ -82,7 +82,14 @@ chinovalley.today, www.chinovalley.today {
 		# The site ships zero client JS by default, so the CSP can be strict
 		# enough to be worth having. 'unsafe-inline' for style-src only:
 		# Astro emits scoped <style> blocks.
-		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+		#
+		# The two cloudflareinsights.com origins are Cloudflare Web Analytics,
+		# which Cloudflare injects at the edge (dashboard: Web analytics,
+		# automatic setup): the beacon script, and the endpoint it reports to.
+		# Without them the browser blocks the injected script and the dashboard
+		# stays empty. site/src/pages/privacy.astro describes the beacon; change
+		# the two together.
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
