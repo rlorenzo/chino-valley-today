@@ -24,7 +24,7 @@ export async function GET(context: APIContext) {
 	return rss({
 		title: "Chino Valley Today, the Week in Review",
 		description:
-			"An automated weekly recap of Chino and Chino Hills government, read by two synthetic voices. Every story is linked to its primary source.",
+			"An automated weekly recap of Chino and Chino Hills, written by an AI model and read by two synthetic voices. Each story links to its entry on chinovalley.today.",
 		site,
 		xmlns: {
 			itunes: "http://www.itunes.com/dtds/podcast-1.0.dtd",

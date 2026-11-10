@@ -46,7 +46,7 @@ const sourceCount = new Set(
 			item, a staff report page, a video timestamp, a state licence report, an
 			agency alert. The
 			<span class="stamp-inline">violet stamps</span> throughout this site mark those
-			sourced claims, and every one is a link you can follow. Violet means a
+			sourced claims, and inside an entry every one is a link you can follow. Violet means a
 			primary record and nothing else: reporting from other outlets is linked
 			in outline blue and labelled as attribution, so the two are never
 			mistaken for each other.
@@ -76,9 +76,10 @@ const sourceCount = new Set(
 				that verifies every paragraph carries a citation, that every number and
 				date appears in the source material, and that every proper name is one
 				the sources actually used &mdash; and then a review by a second AI
-				model, which can only hold a post, never clear one another check has
-				flagged. Each week a person reviews a sample of what published this
-				way.
+				model from the same family, which can send a post back for an
+				automated rewrite or hold it, never clear one another check has
+				flagged. About one in eight of the entries published this way is
+				flagged for a person to check afterwards.
 			</li>
 			<li>
 				<strong>Tier C</strong> is held for a person to read and clear by
@@ -90,6 +91,11 @@ const sourceCount = new Set(
 				minor is involved is still held.
 			</li>
 		</ul>
+		<p>
+			The weekly podcast is written by an AI model from published entries and
+			read by synthetic voices. When an episode is held for review, a person
+			clears the script, not the finished audio.
+		</p>
 		<p>
 			Anything that fails any check is held rather than published. A missed
 			week costs little; a wrong entry naming a resident costs trust that does
@@ -112,8 +118,9 @@ const sourceCount = new Set(
 			>. Quote the entry and, where you can, point to the record that shows what
 			the correct version is &mdash; the same standard this site holds itself
 			to. A correction to a Tier B entry also counts against the checks that let
-			it through, and two in a rolling month stop that kind of entry publishing
-			automatically until they are tightened.
+			it through. Two in a rolling month flag that kind of entry, and the
+			editor then decides whether to stop it publishing automatically until
+			the checks are tightened.
 		</p>
 
 		<h2>Where the material comes from</h2>
@@ -121,8 +128,8 @@ const sourceCount = new Set(
 			Sources are the agencies' own: council and board agenda systems, meeting
 			video and its captions, state licence reports, and agency-operated
 			notification channels ingested the way those channels intend to be read.
-			Other publications are linked with short summaries for attribution, never
-			substantially excerpted. Social platforms are not used as sources.
+			Other publications are linked by headline with a short excerpt of their
+			own description, cut to length by software, never the article itself. Social platforms are not used as sources.
 		</p>
 		<p class="stat mark">
 			{posts.length} entries published &middot; {sourceCount} source
