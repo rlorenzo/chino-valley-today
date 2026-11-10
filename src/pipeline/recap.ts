@@ -8,6 +8,7 @@ import { openDb } from "../db/index.ts";
 import {
 	assembleBundle,
 	listRecapTargets,
+	recapSlug,
 	renderBundleForPrompt,
 } from "./bundle.ts";
 import { runGatedPipeline } from "./gate-run.ts";
@@ -45,11 +46,7 @@ console.log(
 	`Bundle ${bundle.targetKey}: ${bundle.agendaItems.length} agenda items, ${bundle.votes.length} votes, ${bundle.minutesItems.length} minutes items, ${bundle.transcriptSegments.length} transcript segments, ${bundle.allowedUrls.length} citable URLs`,
 );
 
-const slugBody = bundle.bodyName
-	.toLowerCase()
-	.replace(/[^a-z0-9]+/g, "-")
-	.replace(/^-|-$/g, "");
-const slug = `${bundle.meetingDate}-${slugBody}-recap`;
+const slug = recapSlug(bundle.bodyName, bundle.meetingDate);
 const title = `Recap: ${bundle.bodyName} meeting of ${bundle.meetingDate}`;
 
 await runGatedPipeline({
