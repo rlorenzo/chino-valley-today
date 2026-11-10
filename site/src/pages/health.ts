@@ -1,6 +1,7 @@
 import { getCollection } from "astro:content";
 import { existsSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { recapStatus } from "../../../src/pipeline/recap-status.ts";
 import { checkDegradedSources } from "../../../src/pipeline/source-health.ts";
 import { DB_PATH } from "../lib/archive.ts";
 import {
@@ -49,6 +50,14 @@ import {
 // month). A build with no database (a dev checkout) reports `unknown` and
 // does not stale.
 //
+// The `recaps_*` lines are information, not alarms: they say what the weekly
+// meeting-recap pass will find (src/pipeline/recap-status.ts has the rule), so
+// a Friday reminder that can read this page and nothing else on the droplet can
+// say how many meetings are ready, how many drafts wait on review, and how many
+// are still agenda-only. They never touch ok or pipeline=, and a build with no
+// database reports `unknown`. `latest_recap` is the publication date of the
+// newest recap on the site. Plain counts only; no meeting titles reach the page.
+//
 // The residual blind spot, recorded honestly: systemd's timers dying
 // wholesale (the watchdog included) while the web server keeps serving. That
 // failure needs the heartbeat monitors (deploy/README.md); the plain `ok`
@@ -69,7 +78,10 @@ export async function GET() {
 	const podcastFresh =
 		latestPodcast !== null && latestPodcast >= expectedPodcastSlug();
 
-	const degraded = degradedSources();
+	const latestRecap =
+		posts.find((p) => p.data.post_type === "meeting_recap")?.data.date ?? null;
+
+	const { degraded, recaps } = readDb() ?? { degraded: null, recaps: null };
 	const sourcesOk = degraded === null || degraded.length === 0;
 
 	const body = [
@@ -88,6 +100,10 @@ export async function GET() {
 		`latest_podcast=${latestPodcast ?? "none"}`,
 		`podcast=${podcastFresh ? "fresh" : "stale"}`,
 		`sources=${degraded === null ? "unknown" : sourcesOk ? "ok" : `degraded:${degraded.join(",")}`}`,
+		`recaps_ready=${recaps?.ready ?? "unknown"}`,
+		`recaps_held=${recaps?.held ?? "unknown"}`,
+		`recaps_waiting=${recaps?.waiting ?? "unknown"}`,
+		`latest_recap=${latestRecap ? latestRecap.toISOString().slice(0, 10) : "none"}`,
 	].join("\n");
 
 	return new Response(`${body}\n`, {
@@ -100,14 +116,21 @@ export async function GET() {
 	});
 }
 
-// Keys of the degraded sources, or null when there is no database to ask.
-function degradedSources(): string[] | null {
+// What the pipeline's database says: the keys of the degraded sources and the
+// recap pass's counts. Null when there is no database to ask (a dev checkout).
+function readDb(): {
+	degraded: string[];
+	recaps: ReturnType<typeof recapStatus>;
+} | null {
 	if (!DB_PATH || !existsSync(DB_PATH)) return null;
 	const raw = new DatabaseSync(DB_PATH, { readOnly: true });
 	try {
-		return checkDegradedSources({ raw })
-			.filter((s) => s.degraded)
-			.map((s) => s.sourceKey);
+		return {
+			degraded: checkDegradedSources({ raw })
+				.filter((s) => s.degraded)
+				.map((s) => s.sourceKey),
+			recaps: recapStatus({ raw }),
+		};
 	} finally {
 		raw.close();
 	}

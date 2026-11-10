@@ -6,6 +6,11 @@ import type { Db } from "../db/index.ts";
 import { isoWeekOf } from "../tiera/util.ts";
 import { archiveUrl, licenseRowAnchor } from "./site-url.ts";
 
+// What the meeting functions below actually touch. Narrower than Db so the
+// site build, which holds a bare read-only node:sqlite handle and must never
+// open the pipeline's writable one, can list targets for /health.
+type ReadDb = Pick<Db, "raw">;
+
 export interface BundleItem {
 	title: string | null;
 	body: string | null;
@@ -78,7 +83,7 @@ function redactCaseCaptions(text: string): string {
 }
 
 function itemsFor(
-	db: Db,
+	db: ReadDb,
 	sourceKey: string,
 	itemType: string,
 	isoDate: string,
@@ -135,7 +140,10 @@ const TARGET_SHAPES: Array<{
 	},
 ];
 
-export function listRecapTargets(db: Db): Array<{
+export function listRecapTargets(
+	db: ReadDb,
+	opts: { since?: string } = {},
+): Array<{
 	targetKey: string;
 	bodyName: string;
 	meetingDate: string;
@@ -153,13 +161,14 @@ export function listRecapTargets(db: Db): Array<{
 				`SELECT DISTINCT substr(COALESCE(i.occurred_at, d.meeting_date, ''), 1, 10) AS day
          FROM items i JOIN documents d ON i.document_id = d.id JOIN sources s ON d.source_id = s.id
          WHERE s.key IN (?, ?, ?, ?) AND i.item_type IN ('agenda_item','transcript_segment')
-           AND day != '' ORDER BY day DESC`,
+           AND day != '' AND day >= ? ORDER BY day DESC`,
 			)
 			.all(
 				shape.agenda?.key ?? shape.sourceKey,
 				shape.transcript?.key ?? shape.sourceKey,
 				shape.minutes?.key ?? shape.sourceKey,
 				shape.sourceKey,
+				opts.since ?? "",
 			) as unknown as Array<{ day: string }>;
 		for (const { day } of dateRows) {
 			const bundle = assembleBundle(db, shape.sourceKey, day);
@@ -180,8 +189,19 @@ export function listRecapTargets(db: Db): Array<{
 	return out;
 }
 
+// The slug a target's recap is filed under. recap.ts writes it and
+// recap-status.ts looks for it, so the rule lives in one place: a drift between
+// them would count an already-recapped meeting as ready forever.
+export function recapSlug(bodyName: string, meetingDate: string): string {
+	const body = bodyName
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-|-$/g, "");
+	return `${meetingDate}-${body}-recap`;
+}
+
 export function assembleBundle(
-	db: Db,
+	db: ReadDb,
 	sourceKey: string,
 	isoDate: string,
 ): MeetingBundle | null {

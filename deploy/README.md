@@ -485,6 +485,34 @@ heartbeat monitor type, so a `CVT_HEARTBEAT_URL_BRIEF` nobody could receive
 was dead code that read as a safety net to anyone auditing `run-brief.sh` —
 worse than no net at all. See the closing comment there.
 
+### Recap status — the Friday pass at a glance
+
+`/health` also carries what the weekly meeting-recap pass will find, so a
+reminder that can read the page (and nothing else on the droplet) can say
+what is waiting. These lines are information, not alarms: they never touch
+`ok` or `pipeline=`.
+
+```text
+recaps_ready=2
+recaps_held=1
+recaps_waiting=3
+latest_recap=2026-11-06
+```
+
+| Line | Meaning |
+| --- | --- |
+| `recaps_ready` | meetings in the last 45 days with transcript, votes or minutes and no recap in any status |
+| `recaps_held` | recap drafts held for review, any age |
+| `recaps_waiting` | meetings in the window that are still agenda-only |
+| `latest_recap` | publication date of the newest recap on the site, or `none` |
+
+The rule is the meeting-recaps skill's step 3, in `src/pipeline/recap-status.ts`.
+The counts are stamped at build time (the morning brief rebuild, and the
+skill's own rebuild after a pass), and read `unknown` on a build with no
+database. Transcripts reach the droplet only through the skill's manual pull,
+so before Friday's pull a meeting whose only record is a transcript counts as
+waiting, not ready.
+
 ### Immediate failure detail
 
 Heartbeats tell you something stopped; they do not say what. For that, hang an

@@ -81,6 +81,11 @@ A target's recap slug is `<date>-<bodyName lowercased, non-alphanumerics -> '-'>
   skip them and say so.
 - `meeting_date` is within the last 45 days, unless Rex asks to backfill.
 
+`https://chinovalley.today/health` carries the same rule as plain counts
+(`recaps_ready`, `recaps_held`, `recaps_waiting`, as of the last build), which
+is what the Friday reminder reads. This step is still the authority: it sees
+transcripts pulled in step 2, which the last build did not.
+
 Show Rex a table: target, body, date, counts. Also list the skipped
 agenda-only targets from the window. That list shows whether transcripts or
 minutes are lagging, which is worth knowing even when nothing gets recapped.
