@@ -98,17 +98,17 @@ export function addCreator(
 		throw new CreatorInputError("The consent date must be YYYY-MM-DD.");
 	}
 	const existing = getCreatorByHandle(db, handle);
-	if (existing && !existing.removed_at) {
-		throw new CreatorInputError(`@${handle} is already on the list.`);
-	}
 	const addedAt = now.toISOString();
 	if (existing) {
-		// Re-adding a creator who was taken off: same row, so their history and
-		// any earlier removal reasons stay attached to one identity.
+		// Updating a listed creator (e.g. recording consent for one added from a
+		// post link), or re-adding one who was taken off: same row, so their
+		// posts, history and any earlier removal reasons stay attached to one
+		// identity. A listed creator keeps their original added_at.
 		db.raw
 			.prepare(
 				`UPDATE creators SET display_name = ?, covers = ?, consent_at = ?,
-				 consent_note = ?, added_at = ?, removed_at = NULL WHERE id = ?`,
+				 consent_note = ?, added_at = CASE WHEN removed_at IS NULL THEN added_at ELSE ? END,
+				 removed_at = NULL WHERE id = ?`,
 			)
 			.run(
 				displayName,
@@ -215,7 +215,12 @@ function validateDescription(raw: string): string {
  */
 export function addManualPost(
 	db: Db,
-	input: { ref: TikTokVideoRef; description: string; ack: boolean },
+	input: {
+		ref: TikTokVideoRef;
+		description: string;
+		ack: boolean;
+		displayName?: string;
+	},
 	now: Date = new Date(),
 ): CreatorPostRow {
 	if (!input.ack) {
@@ -224,10 +229,12 @@ export function addManualPost(
 		);
 	}
 	const description = validateDescription(input.description);
-	const creator = getCreatorByHandle(db, input.ref.handle);
-	if (!creator || creator.removed_at) {
+	let creator = getCreatorByHandle(db, input.ref.handle);
+	if (creator?.removed_at) {
+		// Taken off the list, possibly at their own request: re-adding them is a
+		// deliberate act in the Creators form, never a side effect of a link.
 		throw new CreatorInputError(
-			`@${input.ref.handle} is not on the creators list. Add them first, so every featured post belongs to someone you chose.`,
+			`@${input.ref.handle} was removed from the creators list. Add them again there first if they are back.`,
 		);
 	}
 	const existing = getPost(db, input.ref.videoId);
@@ -239,6 +246,17 @@ export function addManualPost(
 			"That video is already waiting for review below.",
 		);
 	}
+	// A new creator is added from the link without consent: their post can be
+	// featured (linking a public post needs no permission), but they get no
+	// profile on /creators/ until consent is recorded.
+	creator ??= addCreator(
+		db,
+		{
+			handle: input.ref.handle,
+			displayName: input.displayName?.trim() || input.ref.handle,
+		},
+		now,
+	);
 	const at = now.toISOString();
 	if (existing) {
 		// Removed or rejected earlier and deliberately added again: the same row

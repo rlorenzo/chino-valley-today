@@ -45,17 +45,17 @@ function seeded() {
 }
 
 describe("creators", () => {
-	test("handles are stored normalized and duplicates refused", () => {
+	test("handles are stored normalized; a repeat updates the same row", () => {
 		const db = seeded();
 		// Ordered by display name: "Not Asked" before "Ty".
 		assert.deepEqual(
 			listCreators(db).map((c) => c.handle),
 			["unasked", "itsreallyty1"],
 		);
-		assert.throws(
-			() => addCreator(db, { handle: "itsreallyty1", displayName: "x" }),
-			CreatorInputError,
-		);
+		addCreator(db, { handle: "@ItsReallyTy1", displayName: "Ty B" });
+		const rows = listCreators(db).filter((c) => c.handle === "itsreallyty1");
+		assert.equal(rows.length, 1);
+		assert.equal(rows[0].display_name, "Ty B");
 	});
 
 	test("a bad consent date is refused", () => {
@@ -95,17 +95,41 @@ describe("featured posts", () => {
 		assert.equal(row.description, "A tour of the new taco spot");
 	});
 
-	test("only listed creators' posts can be featured", () => {
+	test("a post by an unlisted creator adds them, without consent", () => {
 		const db = seeded();
-		assert.throws(
-			() =>
-				addManualPost(db, {
-					ref: ref("stranger"),
-					description: "x",
-					ack: true,
-				}),
-			/not on the creators list/,
-		);
+		addManualPost(db, {
+			ref: ref("stranger"),
+			description: "x",
+			ack: true,
+			displayName: "Stranger",
+		});
+		const c = listCreators(db).find((r) => r.handle === "stranger");
+		assert.equal(c?.display_name, "Stranger");
+		assert.equal(c?.consent_at, null);
+		addManualPost(db, {
+			ref: ref("nameless", "7301234567890123499"),
+			description: "x",
+			ack: true,
+		});
+		const n = listCreators(db).find((r) => r.handle === "nameless");
+		assert.equal(n?.display_name, "nameless");
+	});
+
+	test("consent can be recorded later for a creator added from a post", () => {
+		const db = seeded();
+		addManualPost(db, { ref: ref("stranger"), description: "x", ack: true });
+		const before = listCreators(db).find((r) => r.handle === "stranger");
+		addCreator(db, {
+			handle: "@stranger",
+			displayName: "Stranger",
+			consentAt: "2026-11-10",
+			consentNote: "Replied yes to a DM",
+		});
+		const after = listCreators(db).find((r) => r.handle === "stranger");
+		assert.equal(after?.id, before?.id);
+		assert.equal(after?.added_at, before?.added_at);
+		assert.equal(after?.consent_at, "2026-11-10");
+		assert.equal(listCreatorPosts(db, "published").length, 1);
 	});
 
 	test("the description is required and bounded", () => {
@@ -161,7 +185,7 @@ describe("featured posts", () => {
 					description: "x",
 					ack: true,
 				}),
-			/not on the creators list/,
+			/was removed from the creators list/,
 		);
 	});
 

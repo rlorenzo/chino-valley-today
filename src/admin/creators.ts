@@ -51,12 +51,11 @@ export function renderCreatorsSection(db: Db): string {
 	const queued = listCreatorPosts(db, "queued");
 	const published = listCreatorPosts(db, "published");
 
-	const addPost =
-		creators.length === 0
-			? '<p class="muted">Add a creator below before featuring a post.</p>'
-			: `<form method="post" action="/creators/posts" class="card">
+	const addPost = `<form method="post" action="/creators/posts" class="card">
         <h3>Feature a TikTok post</h3>
         <label>Video link <input type="text" name="url" required placeholder="https://www.tiktok.com/@handle/video/… or a vm.tiktok.com share link"></label>
+        <label>Creator's name (only needed the first time; leave empty to use their username)
+          <input type="text" name="display_name" maxlength="${DISPLAY_NAME_MAX}" placeholder="Ty"></label>
         <label>One line, in your own words (${DESCRIPTION_MAX} characters max; this is what readers see)
           <input type="text" name="description" required maxlength="${DESCRIPTION_MAX}" placeholder="A tour of the new taco spot on Riverside Drive"></label>
         ${ACK_CHECKBOX}
@@ -123,13 +122,14 @@ export function renderCreatorsSection(db: Db): string {
 					.join("")}</table>`;
 
 	const addCreatorForm = `<form method="post" action="/creators" class="card">
-    <h3>Add a creator</h3>
+    <h3>Add or update a creator</h3>
+    <p class="muted">Optional: featuring a post adds its creator automatically. Enter an existing username here to change their details or record consent, which lists them on /creators/.</p>
     <label>TikTok username <input type="text" name="handle" required placeholder="@itsreallyty1"></label>
     <label>Display name <input type="text" name="display_name" required maxlength="${DISPLAY_NAME_MAX}"></label>
     <label>What they cover (${COVERS_MAX} characters max) <input type="text" name="covers" maxlength="${COVERS_MAX}" placeholder="Food and new businesses in Chino"></label>
     <label>Date they agreed to be featured (leave empty if you have not asked) <input type="date" name="consent_at"></label>
     <label>How they agreed <input type="text" name="consent_note" placeholder="Replied yes to a DM"></label>
-    <button type="submit">Add creator</button>
+    <button type="submit">Save creator</button>
   </form>`;
 
 	return `<p class="muted">Hand-picked TikTok posts about the Chino Valley. Readers see your one-line description and a click-to-play card; nothing loads from TikTok until they press play. Changes reach the site at the next rebuild (after the morning brief).</p>
@@ -213,6 +213,7 @@ export function registerCreatorRoutes(
 				ref: parsed.ref,
 				description: str(form.description),
 				ack: str(form.ack) === "1",
+				displayName: str(form.display_name),
 			});
 		});
 	});
