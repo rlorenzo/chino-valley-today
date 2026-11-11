@@ -1,0 +1,110 @@
+---
+import { getCollection } from "astro:content";
+import CreatorVideos from "../components/CreatorVideos.astro";
+import Base from "../layouts/Base.astro";
+
+// EDITORIAL.md "Local creators". Profiles are listed only for creators who
+// agreed to be featured; videos are hand-picked public posts, newest first.
+const creators = (await getCollection("creators"))
+	.map((c) => c.data)
+	.sort((a, b) => a.display_name.localeCompare(b.display_name));
+const videos = (await getCollection("creatorVideos"))
+	.map((v) => v.data)
+	.sort((a, b) => b.published_at.getTime() - a.published_at.getTime());
+---
+
+<Base
+	title="Local creators — Chino Valley Today"
+	description="Hand-picked posts from people who make videos about Chino and Chino Hills, linked back to their own accounts."
+>
+	<header class="creatorshead">
+		<div class="shell creatorshead__inner">
+			<h1 class="creatorshead__title">Local creators</h1>
+			<p class="creatorshead__dek">
+				People who make videos about Chino and Chino Hills. We pick posts by
+				hand, describe each in a line of our own, and link back to the creator.
+				Their videos stay on their accounts; nothing is copied here.
+			</p>
+		</div>
+	</header>
+
+	<div class="reading body prose">
+		{
+			creators.length > 0 && (
+				<section aria-labelledby="creators-heading">
+					<h2 id="creators-heading">Who we feature</h2>
+					<ul class="creators">
+						{creators.map((c) => (
+							<li>
+								<a class="headline-link" href={c.profile_url} rel="noopener noreferrer">
+									{c.display_name}
+								</a>{" "}
+								<span class="creators__handle">@{c.handle} on TikTok</span>
+								{c.covers && <span> &mdash; {c.covers}</span>}
+							</li>
+						))}
+					</ul>
+				</section>
+			)
+		}
+
+		{
+			videos.length > 0 ? (
+				<CreatorVideos videos={videos} heading="Recent posts" />
+			) : (
+				<p>No posts featured yet.</p>
+			)
+		}
+
+		<h2>Featured and want to be removed?</h2>
+		<p>
+			Email <a href="mailto:corrections@chinovalley.today"
+				>corrections@chinovalley.today</a
+			> with the link, and we will take it down within a day. Creators can also
+			ask to be taken off this page entirely.
+		</p>
+		<p class="creators__fine">
+			These are attribution, not sources: nothing a creator says becomes a
+			claim on this site. A video plays only when you press play, and then it
+			loads from TikTok, which may set cookies.
+		</p>
+	</div>
+</Base>
+
+<style>
+	.creatorshead {
+		background: var(--crate);
+		color: #fff;
+		border-bottom: 6px solid var(--placard);
+	}
+	.creatorshead__inner {
+		padding-block: 1.9rem 2.2rem;
+		max-width: 44rem;
+	}
+	.creatorshead__title {
+		margin: 0 0 0.6rem;
+		font-size: clamp(1.55rem, 1.2rem + 2vw, 2.5rem);
+		line-height: 1.16;
+		font-weight: 600;
+	}
+	.creatorshead__dek {
+		margin: 0;
+	}
+	.body {
+		padding-block: 2.4rem 1rem;
+	}
+	.creators {
+		padding-left: 1.1rem;
+	}
+	.creators a {
+		color: var(--crate);
+		font-weight: 600;
+	}
+	.creators__handle,
+	.creators__fine {
+		color: var(--muted);
+	}
+	.creators__fine {
+		font-size: 0.9rem;
+	}
+</style>

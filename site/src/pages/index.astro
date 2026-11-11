@@ -1,6 +1,7 @@
 ---
 import { getCollection, render } from "astro:content";
 import Base from "../layouts/Base.astro";
+import CreatorVideoScript from "../components/CreatorVideoScript.astro";
 import Entry from "../components/Entry.astro";
 import {
 	TOPICS,
@@ -96,6 +97,9 @@ const marks = TOPICS.map((t) => {
 				<div class="shell today__cols">
 					<div class="prose today__prose">
 						<BriefContent />
+						{(currentBrief.data.creator_videos?.length ?? 0) > 0 && (
+							<CreatorVideoScript />
+						)}
 					</div>
 					<aside class="today__rail" aria-labelledby="comingup-heading">
 						<h3 id="comingup-heading" class="mark today__rail-label">

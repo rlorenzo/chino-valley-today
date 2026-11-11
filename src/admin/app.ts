@@ -1,5 +1,5 @@
-// The admin dashboard: single page, four sections (published feed, held
-// queue, audit queue, pipeline health), form-posted actions. See
+// The admin dashboard: single page, five sections (published feed, held
+// queue, audit queue, local creators, pipeline health), form-posted actions. See
 // reports/notes/phase1-admin.md for the full spec-to-implementation mapping.
 //
 // Loopback binding is not a CSRF defence: the operator reaches this through a
@@ -27,6 +27,11 @@ import {
 	isSampledForAudit,
 	rollingFailCounts,
 } from "./audit.ts";
+import {
+	type CreatorRouteOptions,
+	registerCreatorRoutes,
+	renderCreatorsSection,
+} from "./creators.ts";
 import {
 	esc,
 	layout,
@@ -299,9 +304,10 @@ function renderPipelineHealth(db: Db): string {
 
 // --- App -----------------------------------------------------------------------
 
-export function createApp(db: Db) {
+export function createApp(db: Db, opts: CreatorRouteOptions = {}) {
 	const app = new Hono();
 	app.use(csrf());
+	registerCreatorRoutes(app, db, opts);
 
 	app.get("/", (c) => {
 		const body = `
@@ -310,6 +316,7 @@ export function createApp(db: Db) {
         <a href="#published">Published</a>
         <a href="#held">Held</a>
         <a href="#audit">Audit</a>
+        <a href="#creators">Local creators</a>
         <a href="#health">Pipeline health</a>
       </nav>
       <h2 id="published">Published feed</h2>
@@ -318,6 +325,8 @@ export function createApp(db: Db) {
       ${renderHeld(db)}
       <h2 id="audit">Audit queue</h2>
       ${renderAudit(db)}
+      <h2 id="creators">Local creators</h2>
+      ${renderCreatorsSection(db)}
       <h2 id="health">Pipeline health</h2>
       ${renderPipelineHealth(db)}
     `;

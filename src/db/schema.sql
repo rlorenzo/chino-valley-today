@@ -123,3 +123,44 @@ CREATE TABLE IF NOT EXISTS tos_attestations (
 CREATE INDEX IF NOT EXISTS idx_tos_attestations_source
   ON tos_attestations(source_key, id DESC);
 
+
+-- Local creators (EDITORIAL.md, "Local creators", operator decision
+-- 2026-11-07). Creators are added by hand in the admin dashboard; nothing here
+-- is scraped. consent_at is set only when the creator agreed to be featured,
+-- and only consenting creators get a profile on /creators/.
+CREATE TABLE IF NOT EXISTS creators (
+  id INTEGER PRIMARY KEY,
+  platform TEXT NOT NULL CHECK (platform IN ('tiktok')),
+  handle TEXT NOT NULL,              -- stored lowercase, without the '@'
+  display_name TEXT NOT NULL,
+  covers TEXT,                       -- what they post about, in our words
+  consent_at TEXT,                   -- ISO date the creator agreed; NULL = not asked / not yet
+  consent_note TEXT,                 -- how consent was given ("DM reply", ...)
+  added_at TEXT NOT NULL,
+  removed_at TEXT,                   -- set when the creator asks to be taken off
+  UNIQUE(platform, handle)
+);
+
+-- One featured post. origin 'manual' is a link the operator pasted, and adding
+-- it IS the human review, so it is stored published. origin 'api' is reserved
+-- for the creator-authorized TikTok Display API path: those rows arrive
+-- 'queued' and wait for the same approval in the dashboard.
+CREATE TABLE IF NOT EXISTS creator_posts (
+  id INTEGER PRIMARY KEY,
+  creator_id INTEGER NOT NULL REFERENCES creators(id),
+  platform TEXT NOT NULL CHECK (platform IN ('tiktok')),
+  video_id TEXT NOT NULL,
+  url TEXT NOT NULL,                 -- canonical https://www.tiktok.com/@handle/video/<id>
+  description TEXT NOT NULL,         -- the operator's one line, never the creator's caption
+  origin TEXT NOT NULL CHECK (origin IN ('manual', 'api')),
+  status TEXT NOT NULL CHECK (status IN ('queued', 'published', 'rejected', 'removed')),
+  review_ack TEXT,                   -- the acknowledgment recorded at approval
+  added_at TEXT NOT NULL,
+  published_at TEXT,
+  removed_at TEXT,
+  removed_reason TEXT,
+  UNIQUE(platform, video_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_creator_posts_status
+  ON creator_posts(status, published_at DESC);

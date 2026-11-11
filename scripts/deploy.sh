@@ -420,6 +420,19 @@ deploy_local() {
 	echo "==> building on host from the local checkout"
 	[ -d "$ROOT/site" ] || { echo "deploy: no site/ directory here" >&2; exit 66; }
 
+	# The /creators/ data is derived from the database, so regenerate it before
+	# every build. The dashboard writes it on each change, but a code update's
+	# `git reset --hard` can roll the files back to their last commit before
+	# push-posts.sh has committed them, and the database is the truth. Only
+	# where the database file exists (openDb would create a missing one): a
+	# fresh checkout keeps its committed copy. The export itself leaves the
+	# files alone when the database has no creators. A failed export must not
+	# stop a code deploy: the build then uses the files already on disk.
+	if [ -f "${CVT_DB:-$ROOT/data/cvtoday.db}" ]; then
+		(cd "$ROOT" && node src/creators/export.ts) ||
+			echo "deploy: creators export failed; building with the existing content/creators files" >&2
+	fi
+
 	# No --silent. It hides npm's own failures: when node_modules was
 	# root-owned, `npm ci` could not delete it, and all that reached the CI log
 	# was "exit code 243" with not one line of explanation.

@@ -527,6 +527,35 @@ treatment as the Champion, so nothing can invoke it.
   PDF and `.xlsx` linked from it.
 - **Link-back depth:** page-level.
 
+### local creators (TikTok) — hand-picked, NOT a source
+
+- **Added 2026-11-07 (operator decision; EDITORIAL.md "Local creators").** Not
+  a scraper and not in the registry: the operator pastes TikTok video links
+  into the dashboard (`src/admin/creators.ts`). State lives in the `creators`
+  and `creator_posts` tables. `src/creators/export.ts` writes
+  `content/creators/{creators,videos}.json` for `/creators/`, and the daily
+  brief renders posts featured since the previous brief.
+- **Contact with TikTok:** none on the page level. A full
+  `/@handle/video/<id>` URL carries everything we need. A share short link
+  (`vm.tiktok.com`, `tiktok.com/t/`) is resolved by reading the redirect's
+  Location header only (HEAD, `redirect: manual`, TikTok hosts only).
+- **oEmbed probed 2026-11-07 and not used:** `tiktok.com/oembed` answers 200
+  with a player iframe for any numeric id, including ids that do not exist, and
+  no longer returns `author_name` or `title`. It cannot confirm that a video
+  exists or whose it is, so the creator's identity comes from the URL path and
+  must match a creator already on the list.
+- **Player:** `https://www.tiktok.com/player/v1/<id>`, inserted on click by
+  `site/public/js/creator-video.js`. Verified 2026-11-07 under the production
+  CSP: no request leaves the site before a click. After one, the frame loads
+  from `www.tiktok.com`, plus TikTok CDN and telemetry hosts inside its own
+  frame. A deleted or private video shows TikTok's "unavailable" state inside
+  the player. Nothing on our side detects that, so take such posts down by
+  hand.
+- **Planned (not built):** TikTok Display API (`video.list`, creator OAuth) to
+  queue consenting creators' Chino-related posts for review. This is blocked
+  on TikTok app review and on written agreement to news-site use (the
+  Developer Terms say "personal" basis).
+
 ### ktla — REJECTED on ToS (2026-08-19; do not revisit without a terms change)
 
 - `/feed/` is robots-permitted for our UA and live-fetchable (the 403

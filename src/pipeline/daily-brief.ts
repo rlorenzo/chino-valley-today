@@ -23,11 +23,21 @@
 //   is folded, so a Memorial Day ceremony stays an event; every notice folded
 //   in is still cited.
 // - "Headlines elsewhere" does not exist until Task 4.2 lands; no stub.
+// - Local creators' videos are hand-picked in the dashboard. Each renders as a
+//   click-to-play card (raw HTML, like the press lists, for attributes markdown
+//   cannot carry) and is also listed in the creator_videos frontmatter, which
+//   is what tells the site to ship the card's script on that page and no
+//   other. They are attribution, never provenance: no URL joins sources[].
 //
 // Usage: node src/pipeline/daily-brief.ts
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+	type CreatorPostWithCreator,
+	listCreatorPosts,
+} from "../creators/store.ts";
+import { profileUrl } from "../creators/tiktok.ts";
 import { type Db, openDb } from "../db/index.ts";
 import {
 	filterHeadlineEligibility,
@@ -60,6 +70,7 @@ import {
 } from "../tiera/util.ts";
 import { currentReportItems } from "./election-page.ts";
 import {
+	type BriefCreatorVideo,
 	type BriefEventAhead,
 	createPost,
 	type NewPost,
@@ -1441,6 +1452,68 @@ function renderHeadlineListItems(
 	return { listItems, attributions };
 }
 
+// --- Local creators -----------------------------------------------------------
+
+// A morning shows a few, not a feed: /creators/ is where the full list lives.
+export const MAX_CREATOR_VIDEOS = 3;
+
+/**
+ * Creator posts featured since the previous brief, newest first. Featured is
+ * the operator's act (published_at), not the video's upload date: an older
+ * video picked yesterday is new to this brief's readers.
+ */
+export function selectCreatorVideos(
+	rows: CreatorPostWithCreator[] | undefined,
+	sinceIso: string,
+): BriefCreatorVideo[] {
+	// ISO strings compared directly, as selectNewRecordPosts does. >= rather
+	// than its >: a post featured in the same instant the previous brief was
+	// stamped was not in that brief.
+	return (rows ?? [])
+		.filter((r) => r.status === "published" && r.published_at)
+		.filter((r) => (r.published_at as string) >= sinceIso)
+		.sort((a, b) =>
+			(b.published_at as string).localeCompare(a.published_at as string),
+		)
+		.slice(0, MAX_CREATOR_VIDEOS)
+		.map((r) => ({
+			video_id: r.video_id,
+			url: r.url,
+			handle: r.handle,
+			display_name: r.display_name,
+			profile_url: profileUrl(r.handle),
+			description: r.description,
+		}));
+}
+
+/**
+ * The brief's creator cards. Must stay in step with
+ * site/src/components/CreatorVideos.astro, which renders the same markup on
+ * /creators/; the play button starts hidden and /js/creator-video.js reveals
+ * it, so with the script off a reader still has the plain link.
+ */
+export function renderCreatorVideoCards(videos: BriefCreatorVideo[]): string[] {
+	if (videos.length === 0) return [];
+	const cards = videos.map((v) =>
+		[
+			'  <li class="creator-video">',
+			`    <p class="creator-video__by mark"><a class="headline-link" href="${esc(v.profile_url)}" rel="noopener noreferrer">${esc(v.display_name)}</a> <span class="creator-video__handle">@${esc(v.handle)} on TikTok</span></p>`,
+			`    <p class="creator-video__desc">${esc(v.description)}</p>`,
+			`    <div class="creator-video__stage"><button type="button" class="creator-video__play mark" data-tiktok-play="${esc(v.video_id)}" data-title="${esc(`${v.display_name} on TikTok: ${v.description}`)}" hidden>▶ Play here</button></div>`,
+			`    <p class="creator-video__foot"><a class="headline-link" href="${esc(v.url)}" rel="noopener noreferrer">Watch on TikTok</a> <span class="creator-video__note">Playing here loads the video from TikTok, which may set cookies.</span></p>`,
+			"  </li>",
+		].join("\n"),
+	);
+	return [
+		"## From local creators",
+		"",
+		'<ul class="creator-videos__list">',
+		...cards,
+		"</ul>",
+		"",
+	];
+}
+
 // --- Assembly ----------------------------------------------------------------
 
 export interface BriefInputs {
@@ -1455,6 +1528,8 @@ export interface BriefInputs {
 	electionPageExists?: (electionDate: string) => boolean;
 	headlines?: ItemRow[];
 	headlinesFreshness?: Record<string, SourceFreshness>;
+	// Published local-creator posts (src/creators/store.ts listCreatorPosts).
+	creatorPosts?: CreatorPostWithCreator[];
 	// Secondary-press URLs earlier published briefs already carried, so a
 	// re-shown story can be demoted rather than presented as new.
 	alreadyCarriedUrls?: ReadonlySet<string>;
@@ -1768,6 +1843,11 @@ export function assembleBrief(
 	notes.push(
 		`headlines elsewhere: ${shownCount} headline(s) selected (${freshRender.listItems.length} new, ${stillRender.listItems.length} still running)`,
 	);
+	const creatorVideos = selectCreatorVideos(inputs.creatorPosts, sinceIso);
+	const creatorLines = renderCreatorVideoCards(creatorVideos);
+	notes.push(
+		`local creators: ${creatorVideos.length} video(s) featured since ${sinceIso}`,
+	);
 	if (degradedKeys.length > 0) {
 		notes.push(
 			`degraded: ${degradedKeys.length} optional source(s) stale — ${degradedKeys.join(", ")}`,
@@ -1784,6 +1864,7 @@ export function assembleBrief(
 		...fireLines,
 		...electionLines,
 		...pressLines,
+		...creatorLines,
 		...recordLines,
 		...weatherLines,
 		...todayLines,
@@ -1800,6 +1881,7 @@ export function assembleBrief(
 		// Both press sections: a morning carrying only already-run stories is
 		// still a morning with something to read, so it is not "quiet".
 		shownCount === 0 &&
+		creatorVideos.length === 0 &&
 		// A morning with an unreachable source is not a quiet morning; it is
 		// an unknown one. The section notes already say which.
 		degradedKeys.length === 0
@@ -1821,6 +1903,7 @@ export function assembleBrief(
 		bodyMd: body.join("\n").trim(),
 		briefDate: laToday,
 		eventsAhead,
+		creatorVideos: creatorVideos.length > 0 ? creatorVideos : undefined,
 		sources: [...new Set(sources)],
 		attributions:
 			attributions.length > 0 ? [...new Set(attributions)] : undefined,
@@ -2004,6 +2087,7 @@ export function buildDailyBrief(
 			itemTypes: ["news_article"],
 		}),
 		headlinesFreshness,
+		creatorPosts: listCreatorPosts(db, "published"),
 		alreadyCarriedUrls,
 		publishedPosts: db.raw
 			.prepare("SELECT * FROM posts WHERE status = 'published'")

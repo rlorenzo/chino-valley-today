@@ -153,6 +153,11 @@ human or automated, and changes to them are dated editorial decisions):
 - Agency-operated notification channels are primary sources, ingested by their
   intended delivery mechanism (Nixle by email subscription, never page scraping).
   User-generated platforms (Facebook, Nextdoor) are excluded as sources.
+- Local creators (operator decision 2026-11-07): hand-picked TikTok posts on
+  `/creators/` and in the brief, as attribution only. Each is human-reviewed
+  for minors and private persons and described in our own words, and the
+  player loads only on the reader's click. Profiles are listed only with the
+  creator's consent. See EDITORIAL.md "Local creators".
 - Every post carries the footer: "Generated from public records with automated
   review; see sources linked above. Corrections: …".
 
