@@ -542,8 +542,9 @@ treatment as the Champion, so nothing can invoke it.
 - **oEmbed probed 2026-11-07 and not used:** `tiktok.com/oembed` answers 200
   with a player iframe for any numeric id, including ids that do not exist, and
   no longer returns `author_name` or `title`. It cannot confirm that a video
-  exists or whose it is, so the creator's identity comes from the URL path and
-  must match a creator already on the list.
+  exists or whose it is, so the creator's identity comes from the URL path. A
+  creator not yet on the list is added from it, without consent; a removed
+  creator is refused until re-added by hand.
 - **Player:** `https://www.tiktok.com/player/v1/<id>`, inserted on click by
   `site/public/js/creator-video.js`. Verified 2026-11-07 under the production
   CSP: no request leaves the site before a click. After one, the frame loads
