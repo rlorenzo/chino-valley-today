@@ -424,9 +424,13 @@ deploy_local() {
 	# every build. The dashboard writes it on each change, but a code update's
 	# `git reset --hard` can roll the files back to their last commit before
 	# push-posts.sh has committed them, and the database is the truth. Only
-	# where a database exists: a fresh checkout keeps its committed copy.
-	if [ -n "${CVT_DB:-}" ] || [ -f "$ROOT/data/cvtoday.db" ]; then
-		(cd "$ROOT" && node src/creators/export.ts)
+	# where the database file exists (openDb would create a missing one): a
+	# fresh checkout keeps its committed copy. The export itself leaves the
+	# files alone when the database has no creators. A failed export must not
+	# stop a code deploy: the build then uses the files already on disk.
+	if [ -f "${CVT_DB:-$ROOT/data/cvtoday.db}" ]; then
+		(cd "$ROOT" && node src/creators/export.ts) ||
+			echo "deploy: creators export failed; building with the existing content/creators files" >&2
 	fi
 
 	# No --silent. It hides npm's own failures: when node_modules was
@@ -619,7 +623,7 @@ pull_data() {
 	# deleted three lines down — so a cp'd backup is missing exactly the data it
 	# exists to preserve.
 	local kept=0
-	if [ -n "${CVT_DB:-}" ] || [ -f "$ROOT/data/cvtoday.db" ]; then
+	if [ -f "$ROOT/data/cvtoday.db" ]; then
 		sqlite3 "$ROOT/data/cvtoday.db" ".backup '$ROOT/data/cvtoday.db.bak'"
 		kept=1
 	fi

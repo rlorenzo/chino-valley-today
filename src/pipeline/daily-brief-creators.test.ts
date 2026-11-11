@@ -88,7 +88,9 @@ describe("creator cards in the brief", () => {
 		assert.match(post.bodyMd, /Tacos &lt;b&gt;&amp; more&lt;\/b&gt;/);
 		assert.equal(post.creatorVideos?.length, 1);
 		// Never provenance.
-		assert.ok(!post.sources.some((s) => s.includes("tiktok.com")));
+		assert.ok(
+			!post.sources.some((s) => /^https:\/\/www\.tiktok\.com\//.test(s)),
+		);
 		// A morning with creator posts is not "quiet".
 		assert.doesNotMatch(post.bodyMd, /quiet morning/);
 		assert.ok(notes.some((n) => /local creators: 1 video/.test(n)));

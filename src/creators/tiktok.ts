@@ -108,7 +108,12 @@ export function parseTikTokUrl(input: string): ParsedTikTokUrl {
 
 export type FetchLike = (
 	input: string,
-	init: { method: string; redirect: "manual"; headers: Record<string, string> },
+	init: {
+		method: string;
+		redirect: "manual";
+		headers: Record<string, string>;
+		signal?: AbortSignal;
+	},
 ) => Promise<{ status: number; headers: { get(name: string): string | null } }>;
 
 const MAX_HOPS = 4;
@@ -132,6 +137,8 @@ export async function resolveShortLink(
 				method: "HEAD",
 				redirect: "manual",
 				headers: { "user-agent": "ChinoValleyToday-admin/1.0" },
+				// A stalled hop otherwise holds the dashboard form for minutes.
+				signal: AbortSignal.timeout(5000),
 			});
 		} catch {
 			return {

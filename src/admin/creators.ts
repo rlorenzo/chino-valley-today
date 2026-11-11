@@ -13,6 +13,7 @@ import {
 	CREATOR_POST_ACK,
 	CreatorInputError,
 	DESCRIPTION_MAX,
+	DISPLAY_NAME_MAX,
 	listCreatorPosts,
 	listCreators,
 	rejectQueuedPost,
@@ -124,7 +125,7 @@ export function renderCreatorsSection(db: Db): string {
 	const addCreatorForm = `<form method="post" action="/creators" class="card">
     <h3>Add a creator</h3>
     <label>TikTok username <input type="text" name="handle" required placeholder="@itsreallyty1"></label>
-    <label>Display name <input type="text" name="display_name" required></label>
+    <label>Display name <input type="text" name="display_name" required maxlength="${DISPLAY_NAME_MAX}"></label>
     <label>What they cover (${COVERS_MAX} characters max) <input type="text" name="covers" maxlength="${COVERS_MAX}" placeholder="Food and new businesses in Chino"></label>
     <label>Date they agreed to be featured (leave empty if you have not asked) <input type="date" name="consent_at"></label>
     <label>How they agreed <input type="text" name="consent_note" placeholder="Replied yes to a DM"></label>

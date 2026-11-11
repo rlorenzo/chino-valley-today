@@ -6,6 +6,10 @@ import { normalizeHandle, type TikTokVideoRef } from "./tiktok.ts";
 
 export const DESCRIPTION_MAX = 200;
 export const COVERS_MAX = 120;
+export const DISPLAY_NAME_MAX = 60;
+// Consent notes and removal reasons: dashboard-only, capped so a stray paste
+// cannot store a page of text.
+export const NOTE_MAX = 300;
 
 // Recorded on every approval, the way TIER_C_ACK is on post approvals. The
 // dashboard shows it beside a required checkbox and the server refuses an
@@ -76,6 +80,13 @@ export function addCreator(
 	}
 	const displayName = cleanLine(input.displayName);
 	if (!displayName) throw new CreatorInputError("A display name is required.");
+	if (displayName.length > DISPLAY_NAME_MAX) {
+		throw new CreatorInputError(
+			`The display name is limited to ${DISPLAY_NAME_MAX} characters.`,
+		);
+	}
+	const consentNote =
+		cleanLine(input.consentNote ?? "").slice(0, NOTE_MAX) || null;
 	const covers = cleanLine(input.covers ?? "");
 	if (covers.length > COVERS_MAX) {
 		throw new CreatorInputError(
@@ -103,7 +114,7 @@ export function addCreator(
 				displayName,
 				covers || null,
 				consentAt,
-				cleanLine(input.consentNote ?? "") || null,
+				consentNote,
 				addedAt,
 				existing.id,
 			);
@@ -118,7 +129,7 @@ export function addCreator(
 				displayName,
 				covers || null,
 				consentAt,
-				cleanLine(input.consentNote ?? "") || null,
+				consentNote,
 				addedAt,
 			);
 	}
@@ -154,15 +165,33 @@ export function removeCreator(
 	now: Date = new Date(),
 ): void {
 	const at = now.toISOString();
-	db.raw
-		.prepare(`UPDATE creators SET removed_at = ? WHERE id = ?`)
-		.run(at, creatorId);
-	db.raw
-		.prepare(
-			`UPDATE creator_posts SET status = 'removed', removed_at = ?, removed_reason = ?
-			 WHERE creator_id = ? AND status IN ('queued', 'published')`,
-		)
-		.run(at, cleanLine(reason) || "creator removed", creatorId);
+	// One transaction: a creator marked removed whose posts stayed published
+	// would vanish from the dashboard while the export kept publishing them.
+	db.raw.exec("BEGIN IMMEDIATE");
+	try {
+		const res = db.raw
+			.prepare(
+				`UPDATE creators SET removed_at = ? WHERE id = ? AND removed_at IS NULL`,
+			)
+			.run(at, creatorId);
+		if (Number(res.changes) === 0) {
+			throw new CreatorInputError("That creator is not on the list.");
+		}
+		db.raw
+			.prepare(
+				`UPDATE creator_posts SET status = 'removed', removed_at = ?, removed_reason = ?
+				 WHERE creator_id = ? AND status IN ('queued', 'published')`,
+			)
+			.run(at, reasonLine(reason, "creator removed"), creatorId);
+		db.raw.exec("COMMIT");
+	} catch (err) {
+		db.raw.exec("ROLLBACK");
+		throw err;
+	}
+}
+
+function reasonLine(raw: string, fallback: string): string {
+	return cleanLine(raw).slice(0, NOTE_MAX) || fallback;
 }
 
 function validateDescription(raw: string): string {
@@ -298,7 +327,7 @@ export function removePost(
 			`UPDATE creator_posts SET status = 'removed', removed_at = ?, removed_reason = ?
 			 WHERE id = ? AND status = 'published'`,
 		)
-		.run(now.toISOString(), cleanLine(reason) || "removed", postId);
+		.run(now.toISOString(), reasonLine(reason, "removed"), postId);
 	if (Number(res.changes) === 0) {
 		throw new CreatorInputError("That post is not published.");
 	}

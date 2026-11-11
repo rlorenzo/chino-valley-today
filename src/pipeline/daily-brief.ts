@@ -1466,10 +1466,12 @@ export function selectCreatorVideos(
 	rows: CreatorPostWithCreator[] | undefined,
 	sinceIso: string,
 ): BriefCreatorVideo[] {
-	const since = new Date(sinceIso).getTime();
+	// ISO strings compared directly, as selectNewRecordPosts does. >= rather
+	// than its >: a post featured in the same instant the previous brief was
+	// stamped was not in that brief.
 	return (rows ?? [])
 		.filter((r) => r.status === "published" && r.published_at)
-		.filter((r) => new Date(r.published_at as string).getTime() >= since)
+		.filter((r) => (r.published_at as string) >= sinceIso)
 		.sort((a, b) =>
 			(b.published_at as string).localeCompare(a.published_at as string),
 		)

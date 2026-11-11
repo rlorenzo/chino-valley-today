@@ -308,8 +308,9 @@ elsewhere, and it does not reopen user-generated platforms as sources.
 - **Consent.** Linking a public post does not need the creator's permission,
   but a profile on `/creators/` does: only creators who agreed are listed, with
   the date and how. A creator who asks to be removed, or to have a post
-  removed, is taken down at the next rebuild. Removing a creator removes all
-  of their posts.
+  removed, is taken down at the next rebuild, including from any daily brief
+  that already carried the post. Removing a creator removes all of their
+  posts.
 - **Embedding.** The card is our own markup, with a plain link back to
   TikTok. TikTok's player loads only when a reader presses play, and the card
   says so, because the player sets TikTok's cookies. The site's CSP admits

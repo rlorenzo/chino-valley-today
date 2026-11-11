@@ -1,10 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, test } from "node:test";
 import { openDb } from "../db/index.ts";
-import { creatorsExport, writeCreatorsFiles } from "./export.ts";
+import { renderCreatorVideoCards } from "../pipeline/daily-brief.ts";
+import {
+	creatorsExport,
+	scrubBriefs,
+	scrubBriefText,
+	writeCreatorsFiles,
+} from "./export.ts";
 import {
 	addCreator,
 	addManualPost,
@@ -221,5 +227,86 @@ describe("site export", () => {
 		} finally {
 			rmSync(dir, { recursive: true, force: true });
 		}
+	});
+});
+
+describe("removal reaches published briefs", () => {
+	const OTHER = "7301234567890123999";
+	const video = (video_id: string) => ({
+		video_id,
+		url: canonicalVideoUrl("itsreallyty1", video_id),
+		handle: "itsreallyty1",
+		display_name: "Ty",
+		profile_url: "https://www.tiktok.com/@itsreallyty1",
+		description: "Tacos",
+	});
+	// The same shapes renderCreatorVideoCards and renderPostFile write.
+	const brief = (ids: string[]) =>
+		[
+			"---",
+			'title: "Brief"',
+			"creator_videos:",
+			...ids.flatMap((id) => [
+				`  - video_id: "${id}"`,
+				`    url: "${video(id).url}"`,
+				'    handle: "itsreallyty1"',
+			]),
+			"sources:",
+			'  - "https://example.org/"',
+			"---",
+			"",
+			"## Weather",
+			"",
+			"Sunny.",
+			"",
+			...renderCreatorVideoCards(ids.map(video)),
+			"---",
+			"",
+			"footer",
+			"",
+		].join("\n");
+
+	test("one of two cards goes, the section stays", () => {
+		const out = scrubBriefText(brief([ID, OTHER]), new Set([ID]));
+		assert.ok(!out.includes(ID));
+		assert.match(out, /## From local creators/);
+		assert.match(out, new RegExp(`data-tiktok-play="${OTHER}"`));
+		assert.match(
+			out,
+			new RegExp(`creator_videos:\n {2}- video_id: "${OTHER}"`),
+		);
+	});
+
+	test("the last card takes the section and the frontmatter key with it", () => {
+		const out = scrubBriefText(brief([ID]), new Set([ID]));
+		assert.ok(!out.includes(ID));
+		assert.ok(!out.includes("From local creators"));
+		assert.ok(!out.includes("creator_videos"));
+		assert.match(out, /Sunny\.\n\n---\n\nfooter/);
+		assert.match(out, /sources:\n {2}- "https:\/\/example\.org\/"/);
+	});
+
+	test("removing a post rewrites the brief file; other files are untouched", () => {
+		const db = seeded();
+		const post = addManualPost(db, {
+			ref: ref("itsreallyty1"),
+			description: "Tacos",
+			ack: true,
+		});
+		const dir = mkdtempSync(join(tmpdir(), "cvt-scrub-"));
+		try {
+			const path = join(dir, "2026-11-08-daily-brief.md");
+			writeFileSync(path, brief([ID]));
+			assert.equal(scrubBriefs(db, dir), 0); // still published
+			removePost(db, post.id, "asked");
+			assert.equal(scrubBriefs(db, dir), 1);
+			assert.ok(!readFileSync(path, "utf8").includes(ID));
+		} finally {
+			rmSync(dir, { recursive: true, force: true });
+		}
+	});
+
+	test("removing an unknown creator is an error, not a silent success", () => {
+		assert.throws(() => removeCreator(seeded(), 9999, "x"), CreatorInputError);
 	});
 });

@@ -50,11 +50,11 @@ export interface NewPost {
 	// site (the index's "coming up" rail) rather than by the markdown body.
 	eventsAhead?: BriefEventAhead[];
 	// daily-brief only: local creators' TikTok posts featured since the last
-	// brief, hand-picked in the dashboard. Rendered by the site as click-to-play
-	// cards, not by the markdown body, because the card needs its script and the
-	// script must ship only on pages that carry one (EDITORIAL.md "Local
-	// creators"). Attribution, never provenance: these join neither sources[]
-	// nor any claim.
+	// brief, hand-picked in the dashboard. The cards themselves are raw HTML in
+	// the markdown body; this frontmatter copy only tells the site which pages
+	// carry a card, so the play script ships on those and no others
+	// (EDITORIAL.md "Local creators"). Attribution, never provenance: these
+	// join neither sources[] nor any claim.
 	creatorVideos?: BriefCreatorVideo[];
 	// podcast only: the rendered episode. The audio is the post — the markdown
 	// body is its transcript — so the file carries enough for the site to build

@@ -6,7 +6,14 @@
 // Both are whole-file rewrites, not one file per entry: push-posts.sh stages
 // with --ignore-removal, so a deleted per-video file would never leave git, and
 // a removal is exactly the change that has to reach the record.
-import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import {
+	existsSync,
+	mkdirSync,
+	readdirSync,
+	readFileSync,
+	renameSync,
+	writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
@@ -81,17 +88,90 @@ function writeJsonAtomic(path: string, value: unknown): void {
 	renameSync(temp, path);
 }
 
+/**
+ * Takes the given videos out of one brief's text: their cards in the body
+ * (the markup renderCreatorVideoCards in src/pipeline/daily-brief.ts wrote),
+ * the section heading once no card is left, and their creator_videos
+ * frontmatter entries (renderPostFile in src/pipeline/posts.ts).
+ */
+export function scrubBriefText(text: string, removed: Set<string>): string {
+	return text
+		.replace(
+			/ {2}<li class="creator-video">\n[\s\S]*?\n {2}<\/li>\n/g,
+			(card) => {
+				const id = /data-tiktok-play="(\d+)"/.exec(card)?.[1];
+				return id && removed.has(id) ? "" : card;
+			},
+		)
+		.replace(
+			/## From local creators\n\n<ul class="creator-videos__list">\n<\/ul>\n*/,
+			"",
+		)
+		.replace(/ {2}- video_id: "(\d+)"\n(?: {4}.*\n)*/g, (entry, id) =>
+			removed.has(id) ? "" : entry,
+		)
+		.replace(/^creator_videos:\n(?! {2}- )/m, "");
+}
+
+/**
+ * A brief bakes its creator cards into its own file, so taking a post down has
+ * to reach the briefs that already carried it, not only /creators/. Scrubs
+ * every video the database marks removed; returns how many briefs changed.
+ */
+export function scrubBriefs(db: Db, publishedDir: string): number {
+	if (!existsSync(publishedDir)) return 0;
+	const removed = new Set(
+		(
+			db.raw
+				.prepare(`SELECT video_id FROM creator_posts WHERE status = 'removed'`)
+				.all() as unknown as { video_id: string }[]
+		).map((r) => r.video_id),
+	);
+	if (removed.size === 0) return 0;
+	let changed = 0;
+	for (const name of readdirSync(publishedDir)) {
+		if (!name.endsWith("-daily-brief.md")) continue;
+		const path = join(publishedDir, name);
+		const before = readFileSync(path, "utf8");
+		const after = scrubBriefText(before, removed);
+		if (after === before) continue;
+		writeFileSync(`${path}.tmp`, after);
+		renameSync(`${path}.tmp`, path);
+		changed++;
+	}
+	return changed;
+}
+
+/**
+ * Writes the /creators/ data and scrubs removed videos from published briefs.
+ * The briefs are the sibling `published` directory, so a test's temp dir has
+ * none to touch.
+ */
 export function writeCreatorsFiles(db: Db, dir: string = CREATORS_DIR): void {
 	const { creators, videos } = creatorsExport(db);
 	mkdirSync(dir, { recursive: true });
 	writeJsonAtomic(join(dir, "creators.json"), creators);
 	writeJsonAtomic(join(dir, "videos.json"), videos);
+	scrubBriefs(db, join(dir, "..", "published"));
 }
 
 if (
 	process.argv[1] &&
 	import.meta.url === pathToFileURL(process.argv[1]).href
 ) {
-	writeCreatorsFiles(openDb());
-	console.log(`creators: wrote ${CREATORS_DIR}`);
+	const db = openDb();
+	// An empty creators table means a database rebuilt or restored from before
+	// this feature, not "everyone was removed" (removal keeps the row). Writing
+	// [] over the committed files would take every post off the site.
+	const { n } = db.raw
+		.prepare(`SELECT COUNT(*) AS n FROM creators`)
+		.get() as unknown as { n: number };
+	if (n === 0) {
+		console.log(
+			"creators: no creators in the database, files left as they are",
+		);
+	} else {
+		writeCreatorsFiles(db);
+		console.log(`creators: wrote ${CREATORS_DIR}`);
+	}
 }
