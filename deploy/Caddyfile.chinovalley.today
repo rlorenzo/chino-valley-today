@@ -82,7 +82,14 @@ chinovalley.today, www.chinovalley.today {
 		# The site ships zero client JS by default, so the CSP can be strict
 		# enough to be worth having. 'unsafe-inline' for style-src only:
 		# Astro emits scoped <style> blocks.
-		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
+		#
+		# The two cloudflareinsights.com origins are Cloudflare Web Analytics,
+		# which Cloudflare injects at the edge (dashboard: Web analytics,
+		# automatic setup): the beacon script, and the endpoint it reports to.
+		# Without them the browser blocks the injected script and the dashboard
+		# stays empty. site/src/pages/privacy.astro describes the beacon; change
+		# the two together.
+		Content-Security-Policy "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; frame-ancestors 'none'; base-uri 'self'; form-action 'none'"
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
@@ -91,9 +98,14 @@ chinovalley.today, www.chinovalley.today {
 		-Server
 	}
 
-	# NO custom log file, deliberately. Access logs go to journald with
-	# everything else on this host (`journalctl -u caddy`), which is where the
-	# four co-tenant sites already log and where anyone debugging would look.
+	# NO access log, deliberately. With no `log` directive Caddy records no
+	# ordinary requests at all (checked on the host 2026-11-10: zero
+	# http.log.access entries in the journal). What does reach journald
+	# (`journalctl -u caddy`) is Caddy's error log: failed requests, with the
+	# request's address fields and headers. journald has no time-based retention
+	# set, so those entries age out only as the journal fills, which takes
+	# months. site/src/pages/privacy.astro describes exactly this; change the
+	# two together.
 	#
 	# A `log { output file ... }` block was tried and removed: the caddy service
 	# runs with ProtectSystem=full and could not open a file under /var/log/caddy
