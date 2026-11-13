@@ -141,8 +141,10 @@ CREATE TABLE IF NOT EXISTS creators (
   UNIQUE(platform, handle)
 );
 
--- One featured post. origin 'manual' is a link the operator pasted, and adding
--- it IS the human review, so it is stored published. origin 'api' is reserved
+-- One featured post. origin 'manual' is a link the operator picked: pasted in
+-- the dashboard, where adding it IS the human review, so it is stored
+-- published; or sent from the phone share shortcut (src/creators/queue-link.ts),
+-- which only queues it for that review. origin 'api' is reserved
 -- for the creator-authorized TikTok Display API path: those rows arrive
 -- 'queued' and wait for the same approval in the dashboard.
 CREATE TABLE IF NOT EXISTS creator_posts (
