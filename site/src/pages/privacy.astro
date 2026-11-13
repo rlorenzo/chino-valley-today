@@ -30,7 +30,11 @@ const EFFECTIVE = "November 10, 2026";
 		<h2>The short version</h2>
 		<ul>
 			<li>No accounts, no sign-up, no newsletter list.</li>
-			<li>No advertising, no tracking across sites, and no cookies of our own.</li>
+			<li>
+				No advertising, no tracking across sites, and no cookies of our own,
+				except a ten-minute security cookie for creators connecting a TikTok
+				account.
+			</li>
 			<li>
 				Cloudflare, our network provider, counts page views without cookies
 				and handles technical request data such as IP addresses.
@@ -110,6 +114,23 @@ const EFFECTIVE = "November 10, 2026";
 			Nothing loads from TikTok until you press play. When you do, the video
 			plays in TikTok's own player, and TikTok's privacy policy applies to
 			that player, including any cookies it sets.
+		</p>
+
+		<h2>Creators who connect a TikTok account</h2>
+		<p>
+			A local creator can connect their TikTok account at
+			<a href="/connect/tiktok">/connect/tiktok</a> so we can find their
+			videos about the Chino Valley. With their permission we receive their
+			TikTok username, display name, and a list of their public videos, and we
+			keep an access token, encrypted, to check that list once a day. We read
+			each video's caption only to look for our local hashtags, and we do not
+			store captions, videos or thumbnails. A person reviews every video before
+			it appears. Starting a connection sets one security cookie that checks the
+			request coming back from TikTok is the one you started; it lasts ten
+			minutes and is deleted when you return. Disconnecting the app in TikTok ends our access, and we then
+			delete the token. Featured videos and the creator's profile stay up until
+			the creator asks us to remove them by email at
+			<a href={`mailto:${MAIL}`}>{MAIL}</a>.
 		</p>
 
 		<h2>People named in the record</h2>

@@ -1,0 +1,33 @@
+[Unit]
+Description=Chino Valley Today — queue connected creators' Chino-tagged TikToks for review
+Documentation=https://github.com/rlorenzo/chino-valley-today
+
+[Service]
+Type=oneshot
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+EnvironmentFile=/srv/chino-valley-today/.env
+# Exits 0 without calling TikTok until TIKTOK_CLIENT_KEY is set, so the timer
+# can ship (deploy.sh enables every cvt-*.timer) before app review is done.
+ExecStart=/usr/bin/env node src/creators/connections.ts
+
+MemoryHigh=150M
+MemoryMax=200M
+Nice=10
+IOSchedulingClass=idle
+CPUWeight=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/srv/chino-valley-today/data
+
+TimeoutStartSec=5min
+
+[Install]
+WantedBy=multi-user.target

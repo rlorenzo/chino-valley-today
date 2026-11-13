@@ -164,3 +164,21 @@ CREATE TABLE IF NOT EXISTS creator_posts (
 
 CREATE INDEX IF NOT EXISTS idx_creator_posts_status
   ON creator_posts(status, published_at DESC);
+
+-- A creator who connected their own TikTok account through Login Kit
+-- (src/connect/, src/creators/connections.ts). Connecting is their consent to
+-- be featured. Tokens are AES-256-GCM sealed with CVT_TIKTOK_TOKEN_KEY, so a
+-- copy of the database (the B2 backups) does not carry usable tokens. The row
+-- is deleted when the connection ends: revoked in TikTok, refresh expired, or
+-- the creator removed in the dashboard.
+CREATE TABLE IF NOT EXISTS tiktok_connections (
+  open_id TEXT PRIMARY KEY,
+  creator_id INTEGER NOT NULL REFERENCES creators(id),
+  access_token TEXT NOT NULL,        -- sealed
+  access_expires_at TEXT NOT NULL,
+  refresh_token TEXT NOT NULL,       -- sealed
+  refresh_expires_at TEXT NOT NULL,
+  scope TEXT NOT NULL,
+  connected_at TEXT NOT NULL,
+  last_polled_at TEXT
+);
