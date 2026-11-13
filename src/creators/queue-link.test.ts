@@ -3,13 +3,23 @@ import { test } from "node:test";
 import { openDb } from "../db/index.ts";
 import { refFromShared } from "./queue-link.ts";
 import {
-	approveQueuedPost,
-	CreatorInputError,
+	addCreator,
 	listCreatorPosts,
-	queueSharedPost,
+	publishSharedPost,
 	rejectQueuedPost,
 } from "./store.ts";
-import type { FetchLike } from "./tiktok.ts";
+import type { FetchLike, TikTokVideoRef } from "./tiktok.ts";
+
+// What the TikTok API poll leaves behind (src/creators/connections.ts).
+function queue(db: ReturnType<typeof openDb>, ref: TikTokVideoRef): void {
+	const c = addCreator(db, { handle: `q${ref.videoId}`, displayName: "q" });
+	db.raw
+		.prepare(
+			`INSERT INTO creator_posts (creator_id, platform, video_id, url, description, origin, status, added_at)
+			 VALUES (?, 'tiktok', ?, ?, '', 'api', 'queued', ?)`,
+		)
+		.run(c.id, ref.videoId, ref.url, new Date().toISOString());
+}
 
 const LINK = "https://www.tiktok.com/@ItsReallyTy1/video/7301234567890123456";
 
@@ -40,31 +50,26 @@ test("share text: the first link is used, short links resolve, junk is refused",
 	);
 });
 
-test("a shared link only queues, and never revives a rejected video", async () => {
+test("a shared link publishes, approves a queued copy, and never revives", async () => {
 	const db = openDb(":memory:");
 	const ref = await refFromShared(LINK);
 	assert.ok(typeof ref === "object");
-	assert.equal(queueSharedPost(db, ref), "Queued @itsreallyty1 for review.");
-	const [post] = listCreatorPosts(db, "queued");
-	assert.equal(post.status, "queued");
-	assert.equal(listCreatorPosts(db, "published").length, 0);
-	assert.throws(() => queueSharedPost(db, ref), /already waiting/);
-
-	rejectQueuedPost(db, post.id);
-	assert.throws(() => queueSharedPost(db, ref), CreatorInputError);
-	assert.equal(listCreatorPosts(db, "queued").length, 0);
-
-	// The dashboard approval path still works on a shared post.
-	const other = {
-		...ref,
-		videoId: "7301234567890123499",
-		url: LINK.replace("3456", "3499"),
-	};
-	queueSharedPost(db, other);
-	const queued = listCreatorPosts(db, "queued")[0];
-	approveQueuedPost(db, queued.id, {
-		description: "Boba on Central",
-		ack: true,
-	});
+	assert.match(publishSharedPost(db, ref, "A video from @x."), /Published/);
 	assert.equal(listCreatorPosts(db, "published").length, 1);
+	assert.throws(() => publishSharedPost(db, ref, "again"), /already featured/);
+
+	const queued = { ...ref, videoId: "7301234567890123499" };
+	queue(db, queued);
+	publishSharedPost(db, queued, "line");
+	assert.equal(listCreatorPosts(db, "queued").length, 0);
+	assert.equal(listCreatorPosts(db, "published").length, 2);
+
+	const rejected = { ...ref, videoId: "7301234567890123500" };
+	queue(db, rejected);
+	rejectQueuedPost(db, listCreatorPosts(db, "queued")[0].id);
+	assert.throws(
+		() => publishSharedPost(db, rejected, "line"),
+		/rejected earlier/,
+	);
+	assert.equal(listCreatorPosts(db, "published").length, 2);
 });

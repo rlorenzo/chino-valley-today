@@ -418,25 +418,32 @@ admin.chinovalley.today {
 
 ## Phone share shortcut
 
-Sends a TikTok from the iPhone share sheet straight into the dashboard's
-"Waiting for review" queue: re-shares, likes, favorites, anything. TikTok's
-API cannot read any of those, so this is how they reach the queue without
-copying links by hand. It queues only; the dashboard approval still decides.
+Publishes a TikTok from the iPhone share sheet: re-shares, likes, favorites,
+anything. TikTok's API cannot read any of those, so this is how they reach the
+site without copying links by hand. Sharing is the review (EDITORIAL.md,
+"Local creators"), so the post goes live at the next rebuild with the line
+"A video from @handle." A video already waiting for review is approved. A
+rejected or removed video, or a removed creator, is refused and stays a
+dashboard decision.
 
 There is no endpoint. The shortcut SSHes in with its own key, and that key is
 pinned to one script, `src/creators/queue-link.ts`: sshd runs that script
 whatever the phone sends, the shared text arrives in `SSH_ORIGINAL_COMMAND`
 as data, and `restrict` turns off the shell, PTY and every kind of
-forwarding. A lost phone can put junk in the review queue and nothing else.
+forwarding. A lost phone can publish TikTok links to `/creators/` and nothing
+else; revoke the key and remove the posts in the dashboard.
 
 **On the iPhone**, in the Shortcuts app:
 
 1. New shortcut named `Send to CVT`. In its details, turn on **Show in Share
-   Sheet** and set it to receive **URLs** and **Text**.
+   Sheet** and set it to receive **URLs** and **Text**. It may also need
+   **Enable in Share Sheet** before it appears there.
 2. Add **Run Script Over SSH**. Host: the droplet's address (not
    `chinovalley.today`, which is behind Cloudflare). User: `cvtoday`.
    Authentication: **SSH Key**, which generates an ed25519 key on the phone.
-   Tap **Copy Public Key**. Script: the **Shortcut Input** variable.
+   Tap **Copy Public Key**. Script: the **Shortcut Input** variable. Put it
+   in the **Script** box, not the action's **Input** row: Input is sent as
+   stdin, which the script never reads, so it answers "No link found".
 3. Add **Show Notification** with the **Shell Script Result** variable.
 
 **On the droplet**, append one line to
@@ -448,7 +455,7 @@ restrict,command="cd /srv/chino-valley-today && /usr/bin/node src/creators/queue
 ```
 
 Test from TikTok: Share, then **More** (or "Share to") to open the iOS share
-sheet, then `Send to CVT`. Expect "Queued @handle for review." To revoke,
+sheet, then `Send to CVT`. Expect "Published @handle. It reaches the site at the next rebuild." To revoke,
 delete that line.
 
 ## Monitoring
