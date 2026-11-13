@@ -135,6 +135,30 @@ describe("admin: local creators", () => {
 		);
 	});
 
+	test("editing a featured post's line republishes it", async () => {
+		const { db, post, creatorsDir } = setup();
+		await post("/creators", TY);
+		await post("/creators/posts", {
+			url: `https://www.tiktok.com/@itsreallyty1/video/${ID}`,
+			description: "A video from @itsreallyty1.",
+			ack: "1",
+		});
+		const id = listCreatorPosts(db, "published")[0].id;
+		const res = await post(`/creators/posts/${id}/edit`, {
+			description: "Birria tacos on Riverside",
+		});
+		assert.equal(res.status, 303);
+		assert.equal(
+			JSON.parse(readFileSync(join(creatorsDir, "videos.json"), "utf8"))[0]
+				.description,
+			"Birria tacos on Riverside",
+		);
+		assert.equal(
+			(await post(`/creators/posts/${id}/edit`, { description: " " })).status,
+			400,
+		);
+	});
+
 	test("a cross-origin form post cannot feature anything", async () => {
 		const { db, post } = setup();
 		const res = await post("/creators", TY, "https://evil.example");

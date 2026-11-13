@@ -368,6 +368,22 @@ export function approveQueuedPost(
 	}
 }
 
+/** Rewrites a featured post's line, e.g. replacing a phone share's fixed one. */
+export function editPostDescription(
+	db: Db,
+	postId: number,
+	description: string,
+): void {
+	const res = db.raw
+		.prepare(
+			`UPDATE creator_posts SET description = ? WHERE id = ? AND status = 'published'`,
+		)
+		.run(validateDescription(description), postId);
+	if (Number(res.changes) === 0) {
+		throw new CreatorInputError("That post is not published.");
+	}
+}
+
 export function rejectQueuedPost(db: Db, postId: number): void {
 	const res = db.raw
 		.prepare(

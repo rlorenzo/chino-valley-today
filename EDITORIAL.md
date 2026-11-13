@@ -310,7 +310,9 @@ elsewhere, and it does not reopen user-generated platforms as sources.
 - **The words are ours.** Each post carries a one-line description written by
   the operator (200 characters at most), never the creator's caption, and no
   thumbnail or video is copied or hosted. A phone share carries the fixed line
-  "A video from @handle." The caption is not available without scraping.
+  "A video from @handle." The caption is not available without scraping. The
+  operator can rewrite any featured post's line in the dashboard; the site
+  carries the new line from the next rebuild.
 - **Consent.** Linking a public post does not need the creator's permission,
   but a profile on `/creators/` does: only creators who agreed are listed, with
   the date and how. A creator who asks to be removed, or to have a post

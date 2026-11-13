@@ -422,7 +422,8 @@ Publishes a TikTok from the iPhone share sheet: re-shares, likes, favorites,
 anything. TikTok's API cannot read any of those, so this is how they reach the
 site without copying links by hand. Sharing is the review (EDITORIAL.md,
 "Local creators"), so the post goes live at the next rebuild with the line
-"A video from @handle." A video already waiting for review is approved. A
+"A video from @handle." (rewrite it under Featured in the dashboard). A video
+already waiting for review is approved. A
 rejected or removed video, or a removed creator, is refused and stays a
 dashboard decision.
 
