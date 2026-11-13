@@ -295,63 +295,50 @@ export function addManualPost(
 	return getPost(db, input.ref.videoId) as CreatorPostRow;
 }
 
+// Rejected or removed earlier: bringing it back is a dashboard decision, not
+// something a stray share should undo.
+function alreadyThere(existing: CreatorPostRow): CreatorInputError {
+	return new CreatorInputError(
+		{
+			published: "That video is already featured.",
+			queued: "That video is already waiting for review.",
+			rejected:
+				"That video was rejected earlier. Add it in the dashboard if you changed your mind.",
+			removed:
+				"That video was taken down earlier. Add it in the dashboard if you mean to bring it back.",
+		}[existing.status],
+	);
+}
+
 /**
- * Queues a link the operator sent from their phone (src/creators/queue-link.ts)
- * for review in the dashboard. Nothing publishes here: the dashboard approval,
- * with its acknowledgment and the operator's one line, still has to happen.
- * Returns a short message for the phone either way.
+ * Publishes a link the operator shared from their phone with their own line
+ * (src/creators/queue-link.ts). Sending the line is the review, as typing it
+ * in the dashboard is: the operator picked the video while watching it. A
+ * video already waiting for review is approved; a rejected or removed one
+ * stays a dashboard decision.
  */
-export function queueSharedPost(
+export function publishSharedPost(
 	db: Db,
 	ref: TikTokVideoRef,
+	description: string,
 	now: Date = new Date(),
 ): string {
-	// One transaction: a removal committed between the check and the insert
-	// would otherwise leave a queued post for a creator who is off the list.
 	db.raw.exec("BEGIN IMMEDIATE");
 	try {
-		const msg = queueSharedPostTx(db, ref, now);
+		const existing = getPost(db, ref.videoId);
+		if (existing?.status === "queued") {
+			approveQueuedPost(db, existing.id, { description, ack: true }, now);
+		} else if (existing) {
+			throw alreadyThere(existing);
+		} else {
+			addManualPost(db, { ref, description, ack: true }, now);
+		}
 		db.raw.exec("COMMIT");
-		return msg;
 	} catch (err) {
 		db.raw.exec("ROLLBACK");
 		throw err;
 	}
-}
-
-function queueSharedPostTx(db: Db, ref: TikTokVideoRef, now: Date): string {
-	const creator = getCreatorByHandle(db, ref.handle);
-	if (creator?.removed_at) {
-		throw new CreatorInputError(
-			`@${ref.handle} was removed from the creators list. Add them again in the dashboard first if they are back.`,
-		);
-	}
-	const existing = getPost(db, ref.videoId);
-	if (existing) {
-		// Rejected or removed earlier: bringing it back is a dashboard decision,
-		// not something a stray share should undo.
-		throw new CreatorInputError(
-			{
-				published: "That video is already featured.",
-				queued: "That video is already waiting for review.",
-				rejected:
-					"That video was rejected earlier. Add it in the dashboard if you changed your mind.",
-				removed:
-					"That video was taken down earlier. Add it in the dashboard if you mean to bring it back.",
-			}[existing.status],
-		);
-	}
-	const c =
-		creator ??
-		addCreator(db, { handle: ref.handle, displayName: ref.handle }, now);
-	db.raw
-		.prepare(
-			`INSERT INTO creator_posts
-			 (creator_id, platform, video_id, url, description, origin, status, added_at)
-			 VALUES (?, 'tiktok', ?, ?, '', 'manual', 'queued', ?)`,
-		)
-		.run(c.id, ref.videoId, ref.url, now.toISOString());
-	return `Queued @${ref.handle} for review.`;
+	return `Published @${ref.handle}. It reaches the site at the next rebuild.`;
 }
 
 /**
@@ -378,6 +365,22 @@ export function approveQueuedPost(
 		.run(description, CREATOR_POST_ACK, now.toISOString(), postId);
 	if (Number(res.changes) === 0) {
 		throw new CreatorInputError("That post is not waiting for review.");
+	}
+}
+
+/** Rewrites a featured post's line, e.g. replacing a phone share's fixed one. */
+export function editPostDescription(
+	db: Db,
+	postId: number,
+	description: string,
+): void {
+	const res = db.raw
+		.prepare(
+			`UPDATE creator_posts SET description = ? WHERE id = ? AND status = 'published'`,
+		)
+		.run(validateDescription(description), postId);
+	if (Number(res.changes) === 0) {
+		throw new CreatorInputError("That post is not published.");
 	}
 }
 

@@ -3,12 +3,14 @@
 // sheet handed it, and that text arrives in SSH_ORIGINAL_COMMAND as data: sshd
 // runs this script no matter what was sent, and no shell ever reads the text.
 //
-// It can only queue a TikTok video for review. Approving, publishing and
-// removing stay in the dashboard. Every outcome prints one line and exits 0,
-// because the Shortcuts app shows stdout as the notification.
+// Sharing is the review: the operator picked the video while watching it, so
+// it publishes at once (operator decision, 2026-11-13). Rejected or removed
+// videos and removed creators stay dashboard decisions. Every outcome prints
+// one line and exits 0, because the Shortcuts app shows stdout as the
+// notification.
 import { pathToFileURL } from "node:url";
 import { openDb } from "../db/index.ts";
-import { CreatorInputError, queueSharedPost } from "./store.ts";
+import { CreatorInputError, publishSharedPost } from "./store.ts";
 import {
 	type FetchLike,
 	parseTikTokUrl,
@@ -48,7 +50,12 @@ if (
 		console.log(ref);
 	} else {
 		try {
-			console.log(queueSharedPost(openDb(), ref));
+			// ponytail: fixed line. TikTok's oEmbed no longer returns the caption
+			// and scraping the page breaks its terms; add a dashboard edit if a
+			// post needs better words.
+			console.log(
+				publishSharedPost(openDb(), ref, `A video from @${ref.handle}.`),
+			);
 		} catch (err) {
 			if (!(err instanceof CreatorInputError)) throw err;
 			console.log(err.message);

@@ -14,6 +14,7 @@ import {
 	CreatorInputError,
 	DESCRIPTION_MAX,
 	DISPLAY_NAME_MAX,
+	editPostDescription,
 	listCreatorPosts,
 	listCreators,
 	rejectQueuedPost,
@@ -90,7 +91,10 @@ export function renderCreatorsSection(db: Db): string {
 						(p) => `<tr>
         <td>${day(p.published_at)}</td>
         <td>${esc(p.display_name)} <span class="muted">@${esc(p.handle)}</span></td>
-        <td>${esc(p.description)}</td>
+        <td><form method="post" action="/creators/posts/${p.id}/edit" class="actions">
+          <input type="text" name="description" required maxlength="${DESCRIPTION_MAX}" value="${esc(p.description)}" aria-label="One line for @${esc(p.handle)}">
+          <button type="submit">Save</button>
+        </form></td>
         <td><a href="${esc(p.url)}" rel="noopener noreferrer">open</a></td>
         <td><form method="post" action="/creators/posts/${p.id}/remove" class="actions">
           <input type="text" name="reason" placeholder="why (e.g. creator asked)">
@@ -231,6 +235,17 @@ export function registerCreatorRoutes(
 	app.post("/creators/posts/:id/reject", (c) =>
 		change(c, () => rejectQueuedPost(db, idParam(c.req.param("id")))),
 	);
+
+	app.post("/creators/posts/:id/edit", async (c) => {
+		const form = await c.req.parseBody();
+		return change(c, () =>
+			editPostDescription(
+				db,
+				idParam(c.req.param("id")),
+				str(form.description),
+			),
+		);
+	});
 
 	app.post("/creators/posts/:id/remove", async (c) => {
 		const form = await c.req.parseBody();

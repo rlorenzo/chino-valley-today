@@ -293,8 +293,8 @@ elsewhere, and it does not reopen user-generated platforms as sources.
   site. Its URL never joins `sources[]`, it never wears the violet stamp, and
   nothing a creator says is restated as ours.
 - **Nothing is scraped.** The operator pastes a link into the dashboard, or
-  sends it from their phone's share sheet, which only queues it for the same
-  review (deploy/README.md, "Phone share shortcut"). The only contact with
+  sends it from their phone's share sheet (deploy/README.md, "Phone share
+  shortcut"). The only contact with
   TikTok on either path is following a share short link's
   redirect header. TikTok's terms prohibit automated collection, and the same
   rule that rejected KTLA applies here.
@@ -303,10 +303,16 @@ elsewhere, and it does not reopen user-generated platforms as sources.
   video, no child is its focus or identifiable in it, and no private person is
   featured in a way they would object to. The minors rule under "Private
   persons" governs; when in doubt, skip the post. A vision model may later be
-  used to flag a post for a closer look, but never to clear one.
+  used to flag a post for a closer look, but never to clear one. **Sharing
+  from the phone is that acknowledgment** (operator decision, 2026-11-13): the
+  operator shares a video while watching it, so a share publishes at once. A
+  share never brings back a rejected or removed video, or a removed creator.
 - **The words are ours.** Each post carries a one-line description written by
   the operator (200 characters at most), never the creator's caption, and no
-  thumbnail or video is copied or hosted.
+  thumbnail or video is copied or hosted. A phone share carries the fixed line
+  "A video from @handle." The caption is not available without scraping. The
+  operator can rewrite any featured post's line in the dashboard; the site
+  carries the new line from the next rebuild.
 - **Consent.** Linking a public post does not need the creator's permission,
   but a profile on `/creators/` does: only creators who agreed are listed, with
   the date and how. A creator who asks to be removed, or to have a post
