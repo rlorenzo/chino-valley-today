@@ -18,7 +18,13 @@ name: Deploy
 # Actions minutes, unlike the private repos where that budget matters.
 
 on:
-  push:
+  # Deploy only after CI passes on main, never on the push itself. CI runs
+  # typecheck, lint and tests; a push trigger would ship a commit that fails
+  # them. workflow_run fires once CI finishes, whatever the result, so the job
+  # below checks the conclusion.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   # Manual re-deploy, e.g. to publish a post approved on the host without
   # waiting for an unrelated code change.
@@ -38,8 +44,16 @@ jobs:
   deploy:
     name: Rebuild site on the host
     runs-on: ubuntu-latest
-    # Wait for CI on this same commit rather than deploying a commit that has
-    # not been typechecked, linted or tested.
+    # A cancelled CI run, superseded by a newer push, also counts as
+    # "completed". It skips here, and the newer commit's CI run deploys instead.
+    # ponytail: host-update deploys origin/main, not the exact SHA CI tested. If
+    # a second merge lands while the first one's CI is still running, the first
+    # deploy ships both. Pass the SHA through the forced command if that ever
+    # matters.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push')
     steps:
       - name: Deploy over a command-restricted SSH key
         env:
