@@ -296,6 +296,65 @@ export function addManualPost(
 }
 
 /**
+ * Queues a link the operator sent from their phone (src/creators/queue-link.ts)
+ * for review in the dashboard. Nothing publishes here: the dashboard approval,
+ * with its acknowledgment and the operator's one line, still has to happen.
+ * Returns a short message for the phone either way.
+ */
+export function queueSharedPost(
+	db: Db,
+	ref: TikTokVideoRef,
+	now: Date = new Date(),
+): string {
+	// One transaction: a removal committed between the check and the insert
+	// would otherwise leave a queued post for a creator who is off the list.
+	db.raw.exec("BEGIN IMMEDIATE");
+	try {
+		const msg = queueSharedPostTx(db, ref, now);
+		db.raw.exec("COMMIT");
+		return msg;
+	} catch (err) {
+		db.raw.exec("ROLLBACK");
+		throw err;
+	}
+}
+
+function queueSharedPostTx(db: Db, ref: TikTokVideoRef, now: Date): string {
+	const creator = getCreatorByHandle(db, ref.handle);
+	if (creator?.removed_at) {
+		throw new CreatorInputError(
+			`@${ref.handle} was removed from the creators list. Add them again in the dashboard first if they are back.`,
+		);
+	}
+	const existing = getPost(db, ref.videoId);
+	if (existing) {
+		// Rejected or removed earlier: bringing it back is a dashboard decision,
+		// not something a stray share should undo.
+		throw new CreatorInputError(
+			{
+				published: "That video is already featured.",
+				queued: "That video is already waiting for review.",
+				rejected:
+					"That video was rejected earlier. Add it in the dashboard if you changed your mind.",
+				removed:
+					"That video was taken down earlier. Add it in the dashboard if you mean to bring it back.",
+			}[existing.status],
+		);
+	}
+	const c =
+		creator ??
+		addCreator(db, { handle: ref.handle, displayName: ref.handle }, now);
+	db.raw
+		.prepare(
+			`INSERT INTO creator_posts
+			 (creator_id, platform, video_id, url, description, origin, status, added_at)
+			 VALUES (?, 'tiktok', ?, ?, '', 'manual', 'queued', ?)`,
+		)
+		.run(c.id, ref.videoId, ref.url, now.toISOString());
+	return `Queued @${ref.handle} for review.`;
+}
+
+/**
  * Approves a queued post (the future API path). Same acknowledgment as a
  * manual add, and the operator may rewrite the line on the way through.
  */

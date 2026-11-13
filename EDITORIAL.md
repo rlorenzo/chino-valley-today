@@ -292,8 +292,10 @@ elsewhere, and it does not reopen user-generated platforms as sources.
 - **Attribution, never provenance.** A creator post supports no claim on the
   site. Its URL never joins `sources[]`, it never wears the violet stamp, and
   nothing a creator says is restated as ours.
-- **Nothing is scraped.** The operator pastes a link into the dashboard. The
-  only contact with TikTok on that path is following a share short link's
+- **Nothing is scraped.** The operator pastes a link into the dashboard, or
+  sends it from their phone's share sheet, which only queues it for the same
+  review (deploy/README.md, "Phone share shortcut"). The only contact with
+  TikTok on either path is following a share short link's
   redirect header. TikTok's terms prohibit automated collection, and the same
   rule that rejected KTLA applies here.
 - **A person reviews every post before it publishes.** Adding a post requires
