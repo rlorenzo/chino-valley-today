@@ -9,7 +9,7 @@
 import { pathToFileURL } from "node:url";
 import { type Db, openDb } from "../db/index.ts";
 import { addCreator, getCreatorByHandle } from "./store.ts";
-import { canonicalVideoUrl, normalizeHandle } from "./tiktok.ts";
+import { normalizeHandle } from "./tiktok.ts";
 import {
 	configFromEnv,
 	type Fetch,
@@ -229,11 +229,13 @@ export async function pollConnections(
 		.all() as unknown as ConnectionRow[];
 	const insert = db.raw.prepare(
 		// Re-checks removal at insert time: a creator removed in the dashboard
-		// while this poll waited on TikTok gets nothing queued.
+		// while this poll waited on TikTok gets nothing queued. The URL uses the
+		// handle as of insert time, in case the creator renamed meanwhile.
 		`INSERT OR IGNORE INTO creator_posts
 		 (creator_id, platform, video_id, url, description, origin, status, added_at)
-		 SELECT id, 'tiktok', ?, ?, '', 'api', 'queued', ? FROM creators
-		 WHERE id = ? AND removed_at IS NULL`,
+		 SELECT id, 'tiktok', ?1, 'https://www.tiktok.com/@' || handle || '/video/' || ?1,
+		   '', 'api', 'queued', ?2 FROM creators
+		 WHERE id = ?3 AND removed_at IS NULL`,
 	);
 
 	for (const row of rows) {
@@ -292,12 +294,7 @@ export async function pollConnections(
 			const at = now.toISOString();
 			for (const v of videos) {
 				if (!hasHashtag(v.description, hashtags)) continue;
-				const res = insert.run(
-					v.id,
-					canonicalVideoUrl(row.handle, v.id),
-					at,
-					row.creator_id,
-				);
+				const res = insert.run(v.id, at, row.creator_id);
 				result.queued += Number(res.changes);
 			}
 			db.raw
