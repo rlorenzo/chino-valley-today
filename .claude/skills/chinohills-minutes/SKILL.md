@@ -27,9 +27,12 @@ document's text in Chrome:
 
 1. Open `DocView.aspx?id=<doc id>&dbid=0&repo=CoCH&page=<N>`.
 2. Click "View plain text" in the viewer toolbar.
-3. Text mode loads only page 1 and the pages around the current one, so
-   step through `&page=2`, `&page=4`, ... to the last page, keeping each
-   `.textPageInner` element's `innerText` as it loads. Join the pages in
+3. Text mode loads only page 1 and the pages around the current one. Opening
+   the document at its last page (`&page=<M>`, M from the folder's page
+   count) and then switching to text mode has loaded every page (seen up to
+   10). Check every `.textPageInner` has text; if some are empty, step
+   through `&page=2`, `&page=4`, ... keeping each one's `innerText`. Text
+   mode does not survive a navigation, so click it again on each load. Join the pages in
    order, trimmed, each followed by `-- N of M --` (pdf-parse's page marker), and save it as a
    Blob download named with the canonical `.txt` name. Clipboard copy does
    not work without a real click, and Chrome blocks a second automatic
@@ -72,6 +75,38 @@ node --experimental-strip-types scripts/inspect-minutes-pdf.ts <file> [<file> ..
 
 One JSON line per file: `date`, `body`, `suggested`, `confidence`, `firstLines`.
 It reads the document's own text rather than trusting WebLink's filename.
+
+### 2b. Read the text and fix scan artifacts by hand
+
+The City's text layer is OCR, and it breaks the parser in ways the inspector
+does not catch. Before staging, test-parse the files into a throwaway DB and
+read the item titles:
+
+```bash
+T=$(mktemp -d); mkdir $T/drop; cp <files> $T/drop/
+CVT_DB=$T/t.db CVT_RAW_ROOT=$T CVT_MINUTES_DROP_DIR=$T/drop node src/run-one.ts chinohills-minutes
+sqlite3 $T/t.db "select d.title, i.title from items i join documents d on d.id=i.document_id order by d.id, i.id"
+rm -rf $T
+```
+
+Fix what you find in the `.txt` by hand, then re-run the test parse:
+
+- **Letter-spaced dates** such as `J U LY 21, 2026` in the heading. The date
+  check skips them and falls back to other dates in the text, such as the
+  approval of the previous meeting's minutes, then rejects the file as the
+  wrong meeting. Close up the letters (`JULY 21, 2026`).
+- **Junk headings** that become items: repeated page headers
+  (`PUBLIC WORKS COMMISSION FEBRUARY 4,2025 REGULAR MEETING`), stamps
+  (`RECEIVED JUN 15 2026`), `PAGE 4`, a stray `REGULAR MEETING`, names in
+  capitals (`SHERAN VOIGT`, `ROGERS NONE`), and trailing scan marks
+  (`CALL TO ORDER— --- __`). Delete the stray line, or trim the heading.
+
+Only remove scan artifacts. Never change a word of what the minutes say,
+except to undo an obvious OCR split like the date above. Tell the user what you
+changed, file by file.
+
+Do this before step 6. Ingest is content-addressed, so editing a file after it
+is ingested creates a second document instead of correcting the first.
 
 ### 3. Confirm before renaming
 
@@ -123,7 +158,9 @@ why. Do not treat that as success. Common causes:
 
 - `not a PDF` - the download saved an error page or was truncated. Re-download.
 - `refusing to file minutes under the wrong meeting` - the filename's date
-  contradicts the document text. The rename in step 3 was wrong.
+  contradicts the document text. Either the rename in step 3 was wrong, or
+  OCR mangled the heading date (see 2b). Check the page footers
+  (`Meeting of 7/21/2026 Page 2 of 4`) to tell which.
 - `unknown body` - the slug is not one of the eight.
 - `filename does not match` - the rename did not happen or was malformed.
 
@@ -142,10 +179,11 @@ State plainly:
 
 The item splitter keys on ALL-CAPS headings ("CONSENT CALENDAR [18:31]"),
 validated against the real City Council minutes of 2026-08-11 (31 items) and
-2026-01-13 (33 items; its text layer has no blank lines at all). Other
-bodies' minutes have not been seen yet: on the first drop from a new body, spot
-check the item count and titles against the document and say what you find.
-The document is archived and linked correctly regardless of how the split does.
+2026-01-13 (33 items; its text layer has no blank lines at all). The 2026
+minutes of every other body with 2026 minutes were first ingested on
+2026-11-13. Legislative Advocacy splits cleanly. Planning, Parks & Rec, Public
+Works and Tres Hermanos all produced the junk headings listed in 2b. The
+document is archived and linked correctly regardless of how the split does.
 
 ## Notes
 

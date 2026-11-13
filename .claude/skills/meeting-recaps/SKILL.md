@@ -133,10 +133,32 @@ For each held draft, give Rex a short brief, not the raw JSON:
 - **Tier C:** if `tier` is `C`, say so first. It names private individuals
   and needs the EDITORIAL.md acknowledgment to approve.
 
-Then ask for a decision on each: **approve**, **reject**, or **leave held**.
-Offer a clean regenerate if a failure is a real error. That means rejecting
-this draft and noting the target for a manual fix, because a rejected slug
-blocks a re-run.
+Then ask for a decision on each: **approve**, **fix and approve**, **reject**,
+or **leave held**.
+
+**Fix and approve** is the usual answer when the findings are wording or
+citation problems in an otherwise sound draft: a paraphrase that drifts from
+the transcript, a link a few seconds off, "voted on an ordinance" when it was
+only introduced. Edit the held file in place on the droplet, then approve as
+usual:
+
+```bash
+F=$R/content/held/<slug>.md
+ssh $H "cp -p $F /root/<slug>.orig.md && sudo -u cvtoday sed -i -e 's|<old>|<new>|' $F && diff /root/<slug>.orig.md $F"
+```
+
+The `posts` row stores no copy or hash of the body, so editing the file
+in place cannot desync it. The rule against `UPDATE posts` still holds. Keep
+edits small. Every changed claim must still cite a URL from the draft's
+`sources:` list, and quoted words must match the source exactly. Show Rex the
+diff before approving, because the edited text is not re-gated.
+
+Also check the headings. They come from agenda item titles, which the agenda
+scrapers sometimes truncate (`...irrigation on nonfunctional`). Complete them
+from the agenda PDF that the draft cites.
+
+Reject only when the draft is wrong at its core. A rejected slug blocks a
+re-run, so note the target for a manual fix.
 
 For recaps that auto-published this pass, list them with their URLs
 (`https://chinovalley.today/posts/<slug>/`) and suggest a 2-minute skim of
