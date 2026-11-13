@@ -69,20 +69,35 @@ export function hasHashtag(caption: string, wanted: string[]): boolean {
 	return wanted.some((t) => tags.has(t));
 }
 
-function storeTokens(db: Db, key: Buffer, t: Tokens): void {
+/**
+ * Stores refreshed tokens only if the row still holds the refresh token they
+ * replace (`generation`), so a poll can never overwrite or delete a newer
+ * connection the creator made while it was waiting on TikTok. Returns the new
+ * generation.
+ */
+function storeTokens(
+	db: Db,
+	key: Buffer,
+	t: Tokens,
+	generation: string,
+): string {
+	const sealedRefresh = seal(key, t.refreshToken);
 	db.raw
 		.prepare(
 			`UPDATE tiktok_connections SET access_token = ?, access_expires_at = ?,
-			 refresh_token = ?, refresh_expires_at = ?, scope = ? WHERE open_id = ?`,
+			 refresh_token = ?, refresh_expires_at = ?, scope = ?
+			 WHERE open_id = ? AND refresh_token = ?`,
 		)
 		.run(
 			seal(key, t.accessToken),
 			t.accessExpiresAt,
-			seal(key, t.refreshToken),
+			sealedRefresh,
 			t.refreshExpiresAt,
 			t.scope,
 			t.openId,
+			generation,
 		);
+	return sealedRefresh;
 }
 
 /**
@@ -101,6 +116,49 @@ export function saveConnection(
 	const handle = normalizeHandle(user.username);
 	if (!handle)
 		throw new Error(`TikTok returned an unusable username: ${user.username}`);
+	db.raw.exec("BEGIN IMMEDIATE");
+	try {
+		const result = saveConnectionTx(db, key, tokens, user, handle, now);
+		db.raw.exec("COMMIT");
+		return result;
+	} catch (err) {
+		db.raw.exec("ROLLBACK");
+		throw err;
+	}
+}
+
+function saveConnectionTx(
+	db: Db,
+	key: Buffer,
+	tokens: Tokens,
+	user: TikTokUser,
+	handle: string,
+	now: Date,
+): { handle: string; displayName: string } {
+	// The account is the identity, not the username: a creator who renamed
+	// themselves and reconnects keeps their row, consent and posts.
+	const linked = db.raw
+		.prepare(
+			`SELECT c.id, c.handle FROM tiktok_connections t
+			 JOIN creators c ON c.id = t.creator_id WHERE t.open_id = ?`,
+		)
+		.get(tokens.openId) as { id: number; handle: string } | undefined;
+	if (linked && linked.handle !== handle) {
+		if (getCreatorByHandle(db, handle)) {
+			throw new Error(
+				`@${handle} is already a different creator on the list; merge them by hand`,
+			);
+		}
+		db.raw
+			.prepare(`UPDATE creators SET handle = ? WHERE id = ?`)
+			.run(handle, linked.id);
+		db.raw
+			.prepare(
+				`UPDATE creator_posts SET url = 'https://www.tiktok.com/@' || ? || '/video/' || video_id
+				 WHERE creator_id = ?`,
+			)
+			.run(handle, linked.id);
+	}
 	const existing = getCreatorByHandle(db, handle);
 	const creator = addCreator(
 		db,
@@ -137,10 +195,14 @@ export function saveConnection(
 	return { handle, displayName: creator.display_name };
 }
 
-function dropConnection(db: Db, openId: string): void {
-	db.raw
-		.prepare(`DELETE FROM tiktok_connections WHERE open_id = ?`)
-		.run(openId);
+function dropConnection(db: Db, openId: string, generation: string): number {
+	return Number(
+		db.raw
+			.prepare(
+				`DELETE FROM tiktok_connections WHERE open_id = ? AND refresh_token = ?`,
+			)
+			.run(openId, generation).changes,
+	);
 }
 
 export interface PollResult {
@@ -166,52 +228,75 @@ export async function pollConnections(
 		)
 		.all() as unknown as ConnectionRow[];
 	const insert = db.raw.prepare(
+		// Re-checks removal at insert time: a creator removed in the dashboard
+		// while this poll waited on TikTok gets nothing queued.
 		`INSERT OR IGNORE INTO creator_posts
 		 (creator_id, platform, video_id, url, description, origin, status, added_at)
-		 VALUES (?, 'tiktok', ?, ?, '', 'api', 'queued', ?)`,
+		 SELECT id, 'tiktok', ?, ?, '', 'api', 'queued', ? FROM creators
+		 WHERE id = ? AND removed_at IS NULL`,
 	);
 
 	for (const row of rows) {
+		let generation = row.refresh_token;
+		const drop = () => {
+			result.dropped += dropConnection(db, row.open_id, generation);
+		};
+		const refresh = async () => {
+			const t = await refreshTokens(
+				cfg,
+				unseal(key, generation),
+				fetchImpl,
+				now,
+			);
+			generation = storeTokens(
+				db,
+				key,
+				{ ...t, openId: row.open_id },
+				generation,
+			);
+			return t.accessToken;
+		};
 		try {
 			let accessToken = unseal(key, row.access_token);
 			if (row.removed_at) {
 				// Removed in the dashboard: stop reading their account entirely.
 				await revokeToken(cfg, accessToken, fetchImpl).catch(() => {});
-				dropConnection(db, row.open_id);
-				result.dropped++;
+				drop();
 				continue;
 			}
 			if (Date.parse(row.refresh_expires_at) <= now.getTime()) {
-				dropConnection(db, row.open_id);
-				result.dropped++;
+				drop();
 				continue;
 			}
 			if (Date.parse(row.access_expires_at) - now.getTime() < 5 * 60 * 1000) {
-				const t = await refreshTokens(
-					cfg,
-					unseal(key, row.refresh_token),
-					fetchImpl,
-					now,
-				);
-				storeTokens(db, key, { ...t, openId: row.open_id });
-				accessToken = t.accessToken;
+				accessToken = await refresh();
 			}
 			const lastPolled = row.last_polled_at
 				? Date.parse(row.last_polled_at) / 1000 - POLL_OVERLAP_S
 				: Date.parse(row.connected_at) / 1000 - FIRST_POLL_DAYS * 86400;
-			const videos = await listVideosSince(
-				accessToken,
-				Math.floor(lastPolled),
-				fetchImpl,
-			);
+			const since = Math.floor(lastPolled);
+			let videos: Awaited<ReturnType<typeof listVideosSince>>;
+			try {
+				videos = await listVideosSince(accessToken, since, fetchImpl);
+			} catch (err) {
+				// TikTok's documented fix for an invalid access token is a refresh
+				// and one retry; only a failed refresh means the grant is gone.
+				if (
+					!(
+						err instanceof TikTokApiError && err.code === "access_token_invalid"
+					)
+				)
+					throw err;
+				videos = await listVideosSince(await refresh(), since, fetchImpl);
+			}
 			const at = now.toISOString();
 			for (const v of videos) {
 				if (!hasHashtag(v.description, hashtags)) continue;
 				const res = insert.run(
-					row.creator_id,
 					v.id,
 					canonicalVideoUrl(row.handle, v.id),
 					at,
+					row.creator_id,
 				);
 				result.queued += Number(res.changes);
 			}
@@ -229,9 +314,9 @@ export async function pollConnections(
 					"scope_not_authorized",
 				].includes(err.code)
 			) {
-				// The creator disconnected the app in TikTok, or the grant lapsed.
-				dropConnection(db, row.open_id);
-				result.dropped++;
+				// The creator disconnected the app in TikTok, or the grant lapsed
+				// (access_token_invalid lands here only after a refresh and retry).
+				drop();
 				continue;
 			}
 			console.error(`tiktok poll @${row.handle}:`, err);

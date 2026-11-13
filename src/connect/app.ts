@@ -10,7 +10,9 @@ import {
 	authorizeUrl,
 	exchangeCode,
 	type Fetch,
+	hasAllScopes,
 	newState,
+	revokeToken,
 	sameState,
 	type TikTokConfig,
 } from "../creators/tiktok-api.ts";
@@ -108,6 +110,18 @@ export function createConnectApp(db: Db, opts: ConnectOptions): Hono {
 		}
 		try {
 			const tokens = await exchangeCode(opts.cfg, code, fetchImpl);
+			if (!hasAllScopes(tokens.scope)) {
+				await revokeToken(opts.cfg, tokens.accessToken, fetchImpl).catch(
+					() => {},
+				);
+				return c.html(
+					page(
+						"Not connected",
+						`<p>We need all three permissions TikTok asked about: your username and display name, and your list of public videos. Without the video list we cannot find your posts, so nothing was saved. <a href="/connect/tiktok">Try again</a> and leave them all ticked.</p>`,
+					),
+					400,
+				);
+			}
 			const who = await completeConnection(db, opts.key, tokens, fetchImpl);
 			return c.html(
 				page(

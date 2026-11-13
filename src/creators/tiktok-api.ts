@@ -19,6 +19,12 @@ const API = "https://open.tiktokapis.com/v2";
 // scope migration), and share_url's format is undocumented.
 export const SCOPES = "user.info.basic,user.info.profile,video.list";
 
+/** TikTok lets a creator untick scopes; the connection needs every one. */
+export function hasAllScopes(granted: string): boolean {
+	const got = new Set(granted.split(",").map((s) => s.trim()));
+	return SCOPES.split(",").every((s) => got.has(s));
+}
+
 export interface TikTokConfig {
 	clientKey: string;
 	clientSecret: string;
@@ -237,7 +243,9 @@ export async function listVideosSince(
 	accessToken: string,
 	sinceEpoch: number,
 	fetchImpl: Fetch = fetch,
-	maxPages = 5,
+	// A safety stop, not a window: reaching it throws, so the caller does not
+	// advance its checkpoint past posts it never read.
+	maxPages = 50,
 ): Promise<TikTokVideo[]> {
 	const out: TikTokVideo[] = [];
 	let cursor: number | undefined;
@@ -268,10 +276,12 @@ export async function listVideosSince(
 				description: v.video_description ?? "",
 			});
 		}
-		if (!data.has_more) break;
+		if (!data.has_more) return out;
 		cursor = data.cursor;
 	}
-	return out;
+	throw new Error(
+		`video list still had more after ${maxPages} pages; not marking it read`,
+	);
 }
 
 // --- Tokens at rest ---------------------------------------------------------

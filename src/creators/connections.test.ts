@@ -170,10 +170,15 @@ describe("tiktok connections", () => {
 	test("a revoked grant or a removed creator ends the connection", async () => {
 		const db = openDb(":memory:");
 		saveConnection(db, key, tokens(), user, NOW);
+		// An invalid access token gets one refresh; a refused refresh ends it.
 		const revoked = fakeTikTok({
 			"/v2/video/list/": () => [
 				401,
 				{ error: { code: "access_token_invalid", message: "revoked" } },
+			],
+			"/v2/oauth/token/": () => [
+				400,
+				{ error: "invalid_grant", error_description: "revoked" },
 			],
 		});
 		assert.equal(
@@ -202,6 +207,30 @@ describe("tiktok connections", () => {
 		);
 	});
 
+	test("a renamed creator who reconnects keeps their row and posts", async () => {
+		const db = openDb(":memory:");
+		saveConnection(db, key, tokens(), user, NOW);
+		db.raw
+			.prepare(
+				`INSERT INTO creator_posts (creator_id, platform, video_id, url, description, origin, status, added_at)
+				 SELECT id, 'tiktok', '7301234567890123456', 'x', 'd', 'api', 'published', '2026-11-12' FROM creators`,
+			)
+			.run();
+		saveConnection(db, key, tokens(), { ...user, username: "TyEats" }, NOW);
+		const rows = db.raw.prepare("SELECT handle FROM creators").all();
+		assert.deepEqual(
+			rows.map((r) => r.handle),
+			["tyeats"],
+		);
+		const post = db.raw.prepare("SELECT url FROM creator_posts").get() as {
+			url: string;
+		};
+		assert.equal(
+			post.url,
+			"https://www.tiktok.com/@tyeats/video/7301234567890123456",
+		);
+	});
+
 	test("callback refuses a state that does not match the cookie", async () => {
 		const db = openDb(":memory:");
 		const { f, calls } = fakeTikTok({});
@@ -225,4 +254,10 @@ describe("tiktok connections", () => {
 		assert.equal(bad.status, 400);
 		assert.deepEqual(calls, []);
 	});
+});
+
+test("every requested scope must be granted", async () => {
+	const { hasAllScopes } = await import("./tiktok-api.ts");
+	assert.ok(hasAllScopes("video.list,user.info.basic,user.info.profile"));
+	assert.ok(!hasAllScopes("user.info.basic,user.info.profile"));
 });
