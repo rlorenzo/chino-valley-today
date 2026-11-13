@@ -315,12 +315,21 @@ elsewhere, and it does not reopen user-generated platforms as sources.
   TikTok. TikTok's player loads only when a reader presses play, and the card
   says so, because the player sets TikTok's cookies. The site's CSP admits
   `https://www.tiktok.com` in `frame-src` and nothing else.
-- **The automated path is not built yet.** When creators connect their own
-  accounts (TikTok Display API, creator OAuth), their Chino-related posts will
-  arrive queued (`origin = 'api'`) and need the same approval and
-  acknowledgment. Building it needs TikTok's app review, and its Developer
-  Terms limit display to a "personal" basis, so we need TikTok's written
-  agreement to news-site use first, as with the Daily Bulletin.
+- **Creators can connect their own accounts (amended 2026-11-12).** A
+  creator who connects through TikTok Login Kit at `/connect/tiktok` is
+  consenting to be featured: the page says so before they connect, and the
+  dashboard records it as consent dated that day. Once a day we read their
+  public video list through the Display API, and posts carrying an exact
+  `#chino`, `#chinohills` or `#chinovalley` hashtag arrive queued
+  (`origin = 'api'`) for the same approval and acknowledgment as a pasted
+  link. The caption is read only to match the hashtag and is never stored;
+  the description is still ours. Tokens are encrypted at rest, and the
+  connection is deleted when the creator revokes it in TikTok, it lapses, or
+  they are removed in the dashboard. TikTok support (2026-11-11) said this
+  flow "may be possible" and that it gives no written approval; app review
+  is the decision. Only an account's own posts are readable: there is no
+  sanctioned way to read likes or reposts, so the site account's re-shares
+  are still pasted by hand.
 
 ## Corrections
 

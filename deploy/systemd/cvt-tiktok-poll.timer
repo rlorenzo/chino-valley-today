@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily TikTok poll for connected creators (Chino Valley Today)
+
+[Timer]
+# Once a day, as described to TikTok in the support ticket and on the
+# connect page. Queued posts wait for a person, so the hour does not matter;
+# 05:20 puts fresh ones in the dashboard before the morning review.
+OnCalendar=*-*-* 05:20:00 America/Los_Angeles
+Persistent=true
+
+[Install]
+WantedBy=timers.target

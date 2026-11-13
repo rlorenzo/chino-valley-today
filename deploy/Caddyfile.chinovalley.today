@@ -45,8 +45,13 @@ chinovalley.today, www.chinovalley.today {
 	# proxy and burn Let's Encrypt rate limits.
 	tls /etc/caddy/certs/chinovalley.today.pem /etc/caddy/certs/chinovalley.today.key
 
-	# Static only. No application, no upstream, nothing to exploit — the whole
-	# site is files produced by `astro build`.
+	# Static, with one exception: /connect/tiktok* goes to cvt-connect, where a
+	# local creator authorizes us to read their public video list (EDITORIAL.md
+	# "Local creators"). That service can record an authorization and nothing
+	# else; the dashboard stays off the internet. Everything else is files
+	# produced by `astro build`. reverse_proxy runs before file_server in
+	# Caddy's directive order, so no `handle` block is needed.
+	reverse_proxy /connect/tiktok* 127.0.0.1:8789
 	root * /var/www/chinovalley.today/current
 	file_server
 

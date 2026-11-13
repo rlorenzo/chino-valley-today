@@ -164,9 +164,9 @@ Restore:
 rclone --config /srv/chino-valley-today/rclone.conf copy b2:chinovalley.today-backup/cvtoday-<date>.db.gz .
 gunzip cvtoday-<date>.db.gz
 sqlite3 cvtoday-<date>.db "PRAGMA integrity_check;"   # expect: ok
-systemctl stop cvt-admin
+systemctl stop cvt-admin cvt-connect
 mv cvtoday-<date>.db /srv/chino-valley-today/data/cvtoday.db
-systemctl start cvt-admin
+systemctl start cvt-admin cvt-connect
 ```
 
 ### Data migration
@@ -333,6 +333,7 @@ ssh $CVT_DEPLOY_HOST 'ln -sfnT /var/www/chinovalley.today/releases/<ts> /var/www
 | `cvt-brief-watch` | 08:00 | flips `/health` to `pipeline=stale` if today's brief is missing |
 | `cvt-drift-watch` | hourly at :47 | flips `/health` if the checkout is not running `origin/main` |
 | `cvt-backup` | 02:20 | rclone → B2 |
+| `cvt-tiktok-poll` | 05:20 | connected creators' Chino-tagged TikToks into the review queue (skips until `TIKTOK_CLIENT_KEY` is set) |
 
 `cvt-tiera` is the only unit here that publishes rather than ingests. It exists
 because `src/tiera/run.ts` previously had no caller anywhere in `deploy/`,
@@ -353,6 +354,8 @@ systemctl enable --now cvt-scrape-frequent.timer cvt-scrape-daily.timer \
                        cvt-brief-watch.timer cvt-backup.timer cvt-podcast.timer \
                        cvt-podcast-watch.timer
 systemctl enable --now cvt-admin.service
+# Only after the TikTok keys are in .env and the Caddy proxy line is live:
+systemctl enable --now cvt-connect.service
 
 systemctl list-timers 'cvt-*'
 journalctl -u cvt-scrape-daily -n 50

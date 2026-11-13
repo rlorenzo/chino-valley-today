@@ -1,0 +1,38 @@
+[Unit]
+Description=Chino Valley Today — public "connect your TikTok" pages (localhost; Caddy proxies /connect/tiktok*)
+Documentation=https://github.com/rlorenzo/chino-valley-today
+After=network.target
+
+[Service]
+Type=simple
+User=cvtoday
+Group=cvtoday
+WorkingDirectory=/srv/chino-valley-today
+EnvironmentFile=/srv/chino-valley-today/.env
+# 8787 is another site's and 8788 is the dashboard's.
+Environment=CVT_CONNECT_PORT=8789
+ExecStart=/usr/bin/node src/connect/server.ts
+Restart=on-failure
+RestartSec=5s
+
+# Unlike cvt-admin this IS reachable from the internet, through Caddy, on
+# /connect/tiktok* only. It can record a creator's authorization and nothing
+# else, so it needs the database and no other write access. Enabled by hand,
+# like cvt-admin: it refuses to start until the TikTok keys are in .env.
+
+MemoryHigh=120M
+MemoryMax=200M
+Nice=5
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/srv/chino-valley-today/data
+
+[Install]
+WantedBy=multi-user.target
