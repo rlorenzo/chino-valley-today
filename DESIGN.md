@@ -140,6 +140,13 @@ never wear violet. They take a crate-outline treatment that names the outlet.
 If violet ever marks a Champion or Daily Bulletin link, the one rule with teeth
 has lost them.
 
+Brand-mark exception (ruling 2026-11-13, with the app icons): the Grade-A
+placard icon carries a small violet inspection stamp in its corner. The mark
+stands for the sourcing mechanism itself, so the stamp is the one place violet
+appears without a sourced claim beside it. It uses the lighter `#a98ad6` for
+contrast on crate. The exception covers the icon artwork in `site/brand/` and
+nothing on the page.
+
 Contrast, measured against the grounds actually used: violet on zinc 8.46:1,
 white on crate 11.18:1, placard on crate 6.15:1, muted on zinc 5.70:1. All AA.
 Placard on zinc is 1.62:1 and must never be used for text or focus.
@@ -195,6 +202,14 @@ holding `0` so that nothing softens by accident.
 
 The single exception is the stamp's leading dot (`border-radius: 50%` on a
 `0.42em` square), which is the stamp's ink ring, not a rounded container.
+
+Icons (2026-11-13) follow the same rule: the artwork is square, and the
+platform applies its own mask. Two marks, one family. The **Grade-A placard**
+(`site/brand/icon.svg`: yellow plate, CHINO VALLEY / TODAY stencil, violet
+stamp) is the icon at 180px and up, as well as on the podcast cover. The
+**CVT stencil over a placard rule** (`site/public/favicon.svg`) is the icon at
+16–48px, where the plate turns into a yellow blob. The lettering in both is
+outlined Archivo Narrow, so neither depends on a font load.
 
 Borders are `1.5px` on stamps and chips, `2px` on section rules and crate seams,
 `6px` on the placard rule under a crate field. Hairlines below 1px are not used.
