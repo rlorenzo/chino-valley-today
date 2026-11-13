@@ -306,6 +306,20 @@ export function queueSharedPost(
 	ref: TikTokVideoRef,
 	now: Date = new Date(),
 ): string {
+	// One transaction: a removal committed between the check and the insert
+	// would otherwise leave a queued post for a creator who is off the list.
+	db.raw.exec("BEGIN IMMEDIATE");
+	try {
+		const msg = queueSharedPostTx(db, ref, now);
+		db.raw.exec("COMMIT");
+		return msg;
+	} catch (err) {
+		db.raw.exec("ROLLBACK");
+		throw err;
+	}
+}
+
+function queueSharedPostTx(db: Db, ref: TikTokVideoRef, now: Date): string {
 	const creator = getCreatorByHandle(db, ref.handle);
 	if (creator?.removed_at) {
 		throw new CreatorInputError(
