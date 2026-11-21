@@ -24,8 +24,20 @@ Never `UPDATE posts` by hand.
 
 ## 1. Minutes first
 
-Ask whether any new Chino Hills minutes are waiting. If so, run the
-`chinohills-minutes` skill before continuing, so the minutes feed this pass.
+Don't ask Rex whether minutes are waiting. Check:
+
+```bash
+ssh $H "cd $R && sudo -u cvtoday npm run -s recap" | grep chinohills-swagit
+ls -t ~/Downloads | grep -iE '\.(pdf|txt)$' | head -20
+```
+
+Any Chino Hills target from the last 60 days with `minutesItems: 0` that
+is more than 2 weeks old is probably missing minutes. The City approves
+minutes at the next meeting and then posts them. Also look for minutes
+files that were downloaded but not staged yet. If either check finds
+something, list the gaps and offer to run the `chinohills-minutes` skill.
+A capture in Chrome needs Rex watching, so ask him to confirm before
+starting it. If he declines, carry on.
 
 ## 2. Pull transcripts
 
