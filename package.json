@@ -41,12 +41,12 @@
 		"@anthropic-ai/sdk": "0.135.0",
 		"cheerio": "^1.2.0",
 		"fast-xml-parser": "^5.12.0",
-		"hono": "^4.13.16",
+		"hono": "^4.13.18",
 		"imapflow": "^1.6.5",
-		"mailparser": "^3.9.20",
+		"mailparser": "^3.14.3",
 		"pdf-parse": "^2.4.5",
 		"rtf-stream-parser": "4.0.0",
-		"undici": "^8.10.0"
+		"undici": "^8.12.4"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.5.7",
