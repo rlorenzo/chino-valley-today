@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { describe, test } from "node:test";
 import { fakeScraperContext } from "./__fixtures__/fake-context.ts";
 import scraper, {
+	latestSeasonUrl,
 	parsePerformances,
 	parseSeasonYear,
 	performanceToItem,
@@ -11,6 +12,10 @@ import scraper, {
 
 const SEASON_URL =
 	"https://sites.google.com/view/chinocommunitytheatre/2026-season";
+
+const SITE_URL = "https://sites.google.com/view/chinocommunitytheatre/";
+const SITE_NAV =
+	'<a href="/view/chinocommunitytheatre/2026-season">2026 Season</a>';
 
 const FIXTURE = readFileSync(
 	join(import.meta.dirname, "__fixtures__/chinotheatre-season.html"),
@@ -151,7 +156,10 @@ describe("performanceToItem", () => {
 			perfs.find((p) => p.title === "THE GHOST TRAIN" && p.day === 16),
 		);
 		// 7:30 PM PST on 2026-01-16 is 03:30 UTC the next day (UTC-8 in January).
-		assert.equal(performanceToItem(p)?.occurred_at, "2026-01-17T03:30:00.000Z");
+		assert.equal(
+			performanceToItem(p, SEASON_URL)?.occurred_at,
+			"2026-01-17T03:30:00.000Z",
+		);
 	});
 
 	test("converts LA wall-clock time to a correct UTC instant (PDT, September)", () => {
@@ -164,11 +172,14 @@ describe("performanceToItem", () => {
 			),
 		);
 		// 7:30 PM PDT on 2026-09-18 is 02:30 UTC the next day (UTC-7 in September).
-		assert.equal(performanceToItem(p)?.occurred_at, "2026-09-19T02:30:00.000Z");
+		assert.equal(
+			performanceToItem(p, SEASON_URL)?.occurred_at,
+			"2026-09-19T02:30:00.000Z",
+		);
 	});
 
 	test("gives every performance a unique, stable external_id", () => {
-		const ids = perfs.map((p) => performanceToItem(p)?.external_id);
+		const ids = perfs.map((p) => performanceToItem(p, SEASON_URL)?.external_id);
 		assert.equal(new Set(ids).size, ids.length);
 	});
 
@@ -191,8 +202,8 @@ describe("performanceToItem", () => {
 					p.timeText === "2:30 PM",
 			),
 		);
-		const a = performanceToItem(evening)?.external_id;
-		const b = performanceToItem(matinee)?.external_id;
+		const a = performanceToItem(evening, SEASON_URL)?.external_id;
+		const b = performanceToItem(matinee, SEASON_URL)?.external_id;
 		assert.ok(a && b);
 		assert.notEqual(a, b);
 		assert.equal(a, "2026-01-24-1930-the-ghost-train");
@@ -203,7 +214,7 @@ describe("performanceToItem", () => {
 		const p = must(
 			perfs.find((p) => p.title === "THE GHOST TRAIN" && p.day === 16),
 		);
-		const item = performanceToItem(p);
+		const item = performanceToItem(p, SEASON_URL);
 		assert.equal(item?.item_type, "event");
 		assert.equal(item?.title, "THE GHOST TRAIN");
 		assert.deepEqual(item?.meta, {
@@ -217,7 +228,10 @@ describe("performanceToItem", () => {
 
 describe("run", () => {
 	test("stores every performance on the season page", async () => {
-		const { ctx, items, notes } = fakeScraperContext({ [SEASON_URL]: FIXTURE });
+		const { ctx, items, notes } = fakeScraperContext({
+			[SITE_URL]: SITE_NAV,
+			[SEASON_URL]: FIXTURE,
+		});
 		await scraper.run(ctx);
 		assert.equal(items.length, 30);
 		assert.equal(new Set(items.map((i) => i.external_id)).size, 30);
@@ -229,6 +243,7 @@ describe("run", () => {
 		// A wrong year is silent and would misdate a whole season, so the
 		// missing marker has to fail the run outright.
 		const { ctx, items } = fakeScraperContext({
+			[SITE_URL]: SITE_NAV,
 			[SEASON_URL]: FIXTURE.replace(
 				/<title>[^<]*<\/title>/,
 				"<title>Home</title>",
@@ -240,9 +255,104 @@ describe("run", () => {
 
 	test("throws when the page parses but yields no performances", async () => {
 		const { ctx } = fakeScraperContext({
+			[SITE_URL]: SITE_NAV,
 			[SEASON_URL]:
 				"<title>Chino Community Theatre - 2026 Season</title><p>TBA</p>",
 		});
 		await assert.rejects(() => scraper.run(ctx), /No performances parsed/);
+	});
+
+	test("throws when the site nav has no season link", async () => {
+		const { ctx } = fakeScraperContext({
+			[SITE_URL]: "<a href='/home'>Home</a>",
+		});
+		await assert.rejects(() => scraper.run(ctx), /No "<year>-season" link/);
+	});
+});
+
+describe("latestSeasonUrl", () => {
+	test("picks the newest season linked from the nav", () => {
+		assert.equal(
+			latestSeasonUrl(
+				'<a href="/view/chinocommunitytheatre/2026-season"></a><a href="/view/chinocommunitytheatre/2027-season?authuser=0"></a>',
+			),
+			"https://sites.google.com/view/chinocommunitytheatre/2027-season",
+		);
+		assert.equal(
+			latestSeasonUrl("<a href='/view/chinocommunitytheatre/home'></a>"),
+			null,
+		);
+	});
+});
+
+describe("season year assignment", () => {
+	const TITLE = '<span style="font-style: italic; font-weight: 700">';
+	const page = (shows: [string, string][]) =>
+		"<title>Chino Community Theatre - 2027 Season</title>" +
+		shows.map(([t, d]) => `<p>${TITLE}${t}</span></p><p>${d}</p>`).join("");
+	const years = (html: string, now: string) =>
+		parsePerformances(html, 2027, new Date(now)).map(
+			(p) => `${p.month} ${p.year}`,
+		);
+
+	test("a lone December on next season's page is this December", () => {
+		// The live 2027 page on 2026-11-22: only Sherlock Carol, Dec 2026.
+		const html = page([["A SHERLOCK CAROL", "Dec 4, 5 @ 7:30pm"]]);
+		assert.deepEqual(years(html, "2026-11-22"), [
+			"December 2026",
+			"December 2026",
+		]);
+		assert.deepEqual(years(html, "2027-03-01"), [
+			"December 2026",
+			"December 2026",
+		]);
+	});
+
+	test("a Dec -> Jan drop rolls over, ending on the title year", () => {
+		const html = page([
+			["A SHERLOCK CAROL", "Dec 4 @ 7:30pm"],
+			["GHOST TRAIN", "January 16 at 7:30pm"],
+			["FULL MONTY", "Sept 18 @ 7:30pm"],
+		]);
+		assert.deepEqual(years(html, "2026-11-22"), [
+			"December 2026",
+			"January 2027",
+			"September 2027",
+		]);
+	});
+
+	test("evening and matinee lists that both cross New Year roll over once", () => {
+		const html =
+			"<title>Chino Community Theatre - 2027 Season</title>" +
+			`<p>${TITLE}A SHERLOCK CAROL</span></p>` +
+			"<p>December 30, January 2 at 7:30pm</p>" +
+			"<p>December 31, January 3 at 2:30pm</p>";
+		assert.deepEqual(years(html, "2026-11-22"), [
+			"December 2026",
+			"January 2027",
+			"December 2026",
+			"January 2027",
+		]);
+	});
+
+	test("a rollover carries into later shows and survives a December matinee list", () => {
+		const html =
+			"<title>Chino Community Theatre - 2027 Season</title>" +
+			`<p>${TITLE}A SHERLOCK CAROL</span></p>` +
+			"<p>December 30, January 2 at 7:30pm</p>" +
+			"<p>December 31 at 2:30pm</p>" +
+			`<p>${TITLE}FULL MONTY</span></p>` +
+			"<p>Sept 18 @ 7:30pm</p>";
+		assert.deepEqual(years(html, "2026-11-22"), [
+			"December 2026",
+			"January 2027",
+			"December 2026",
+			"September 2027",
+		]);
+	});
+
+	test("a Jan-start season announced early stays in the title year", () => {
+		const html = page([["GHOST TRAIN", "January 16 at 7:30pm"]]);
+		assert.deepEqual(years(html, "2026-08-01"), ["January 2027"]);
 	});
 });
