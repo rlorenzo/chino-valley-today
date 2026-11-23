@@ -335,6 +335,22 @@ describe("season year assignment", () => {
 		]);
 	});
 
+	test("a rollover carries into later shows and survives a December matinee list", () => {
+		const html =
+			"<title>Chino Community Theatre - 2027 Season</title>" +
+			`<p>${TITLE}A SHERLOCK CAROL</span></p>` +
+			"<p>December 30, January 2 at 7:30pm</p>" +
+			"<p>December 31 at 2:30pm</p>" +
+			`<p>${TITLE}FULL MONTY</span></p>` +
+			"<p>Sept 18 @ 7:30pm</p>";
+		assert.deepEqual(years(html, "2026-11-22"), [
+			"December 2026",
+			"January 2027",
+			"December 2026",
+			"September 2027",
+		]);
+	});
+
 	test("a Jan-start season announced early stays in the title year", () => {
 		const html = page([["GHOST TRAIN", "January 16 at 7:30pm"]]);
 		assert.deepEqual(years(html, "2026-08-01"), ["January 2027"]);

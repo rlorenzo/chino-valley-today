@@ -236,25 +236,31 @@ function assignYears(
 	seasonYear: number,
 	now: Date,
 ): void {
-	// Rollovers are counted show to show (each show's first month against the
-	// previous show's), then each date is placed against its own show's first
-	// month. Comparing date to date instead would count New Year twice when a
-	// show's evening list and its matinee list each cross it.
+	// Each show is placed after the latest month any earlier show reached
+	// (rolling over if it starts well before that month), then each of its
+	// dates against the show's own first month. Comparing date to date instead
+	// would count New Year twice when a show's evening and matinee lists each
+	// cross it, and comparing only to the previous date would drop a rollover
+	// when a later list returns to December.
 	// > 6, not > 0: a matinee list can restate an earlier month of the same run.
 	const rolls = (from: number, to: number) => (from - to > 6 ? 1 : 0);
 	let showOffset = 0;
 	let showMonth = -1;
 	let showTitle: string | null = null;
+	let latest = -1; // offset * 12 + month of the latest date placed so far
 	const offsets = perfs.map((p) => {
 		const m = FULL_MONTHS.indexOf(p.month);
 		if (p.title !== showTitle) {
-			if (showTitle !== null) showOffset += rolls(showMonth, m);
+			showOffset =
+				latest < 0 ? 0 : Math.floor(latest / 12) + rolls(latest % 12, m);
 			showTitle = p.title;
 			showMonth = m;
 		}
-		return showOffset + rolls(showMonth, m);
+		const offset = showOffset + rolls(showMonth, m);
+		latest = Math.max(latest, offset * 12 + m);
+		return offset;
 	});
-	const last = offsets.at(-1) ?? 0;
+	const last = latest < 0 ? 0 : Math.floor(latest / 12);
 	let base = seasonYear - last;
 	if (last === 0 && perfs.length > 0) {
 		const m = FULL_MONTHS.indexOf(perfs[0].month);
