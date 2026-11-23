@@ -236,17 +236,27 @@ function assignYears(
 	seasonYear: number,
 	now: Date,
 ): void {
-	let offset = 0;
-	let prevMonth = -1;
+	// Rollovers are counted show to show (each show's first month against the
+	// previous show's), then each date is placed against its own show's first
+	// month. Comparing date to date instead would count New Year twice when a
+	// show's evening list and its matinee list each cross it.
+	// > 6, not > 0: a matinee list can restate an earlier month of the same run.
+	const rolls = (from: number, to: number) => (from - to > 6 ? 1 : 0);
+	let showOffset = 0;
+	let showMonth = -1;
+	let showTitle: string | null = null;
 	const offsets = perfs.map((p) => {
 		const m = FULL_MONTHS.indexOf(p.month);
-		// > 6, not > 0: a matinee list can restate an earlier month of the same run.
-		if (prevMonth - m > 6) offset++;
-		prevMonth = m;
-		return offset;
+		if (p.title !== showTitle) {
+			if (showTitle !== null) showOffset += rolls(showMonth, m);
+			showTitle = p.title;
+			showMonth = m;
+		}
+		return showOffset + rolls(showMonth, m);
 	});
-	let base = seasonYear - offset;
-	if (offset === 0 && perfs.length > 0) {
+	const last = offsets.at(-1) ?? 0;
+	let base = seasonYear - last;
+	if (last === 0 && perfs.length > 0) {
 		const m = FULL_MONTHS.indexOf(perfs[0].month);
 		const distance = (y: number) =>
 			Math.abs(new Date(y, m, perfs[0].day).getTime() - now.getTime());
