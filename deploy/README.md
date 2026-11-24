@@ -105,13 +105,10 @@ sudo -u cvtoday git -C /srv/chino-valley-today config user.email 'cvt-droplet@us
 #    other projects' backups; listed for a clean rebuild.
 apt-get update && apt-get install -y rclone
 
-# 5. yt-dlp, for the YouTube caption scrapers. NOT from apt — Ubuntu ships a
-#    stale build and YouTube changes break old versions regularly. The official
-#    standalone binary self-updates with `yt-dlp -U`. Without it, both YouTube
-#    scrapers fail with ENOENT.
-curl -fsSL -o /usr/local/bin/yt-dlp \\
-  https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux
-chmod 755 /usr/local/bin/yt-dlp
+# 5. No yt-dlp or deno here. YouTube blocks this droplet's IP, so the
+#    YouTube caption scrapers are recorded on a Mac and replayed here (see the
+#    meeting-recaps skill). A replay miss would call yt-dlp and fail with
+#    ENOENT, which is the same failure the IP block gives anyway.
 ```
 
 ### Secrets
