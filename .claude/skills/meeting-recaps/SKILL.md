@@ -28,7 +28,7 @@ Don't ask Rex whether minutes are waiting. Check:
 
 ```bash
 ssh $H "cd $R && sudo -u cvtoday npm run -s recap" | grep chinohills-swagit
-ls -t ~/Downloads | grep -iE '\.(pdf|txt)$' | head -20
+find ~/Downloads -maxdepth 1 \( -iname '*.pdf' -o -iname '*.txt' \) -mtime -60 -print
 ```
 
 Any Chino Hills target from the last 60 days with `minutesItems: 0` that
